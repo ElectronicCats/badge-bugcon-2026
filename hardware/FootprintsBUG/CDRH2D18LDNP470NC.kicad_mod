@@ -1,0 +1,236 @@
+(footprint "CDRH2D18LDNP470NC"
+	(version 20260206)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(descr "CDRH2D18/LDNP-470NC-3")
+	(tags "Inductor")
+	(property "Reference" "L1"
+		(at 2.4 -2.1 270)
+		(layer "F.SilkS")
+		(uuid "e7a3789b-2124-450f-8b12-f8d4998cadd9")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(property "Value" "47uH"
+		(at 0 0 0)
+		(layer "F.SilkS")
+		(hide yes)
+		(uuid "5319e305-8110-43bc-8424-2451765ba4ec")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.254)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "ae8011ef-129e-4e08-b277-aac567e80be8")
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "2fa2c903-7302-4c42-b3b8-8d5b04c642ae")
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "manf#" "CDRH2D18/LDNP-470NC "
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "0e3e7926-a6df-44f8-bdcf-361135be2b7f")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property ki_fp_filters "Choke_* *Coil* Inductor_* L_*")
+	(sheetname "/")
+	(sheetfile "e-ink-keychain.kicad_sch")
+	(attr smd)
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_line
+		(start -1.5 -1.5)
+		(end 1.5 -1.5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "7f1b5f67-9215-47a0-8ea8-f56438a1deec")
+	)
+	(fp_line
+		(start -0.5 1.5)
+		(end 0.5 1.5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "295cb559-f16e-4e9d-97f8-e462b2d4c571")
+	)
+	(fp_line
+		(start -3.15 -2.5)
+		(end 3.15 -2.5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "23dd570e-9d01-46a2-9606-c8fafc7411cf")
+	)
+	(fp_line
+		(start -3.15 2.5)
+		(end -3.15 -2.5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "e065364e-6684-4aa4-8124-58728f2edc3e")
+	)
+	(fp_line
+		(start 3.15 -2.5)
+		(end 3.15 2.5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "da62fedd-e257-4c93-b957-4d660f60d2fb")
+	)
+	(fp_line
+		(start 3.15 2.5)
+		(end -3.15 2.5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+		(uuid "db01c04e-6c59-4cf7-b01e-3ed24ec6cab0")
+	)
+	(fp_line
+		(start -1.5 -1.5)
+		(end -1.5 0.5)
+		(stroke
+			(width 0.2)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "327414ce-517c-47ad-b242-83021255fdc7")
+	)
+	(fp_line
+		(start -1.5 0.5)
+		(end -0.5 1.5)
+		(stroke
+			(width 0.2)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "a7610665-48c1-490e-b6c5-473a453bd0b7")
+	)
+	(fp_line
+		(start -1.5 0.5)
+		(end -0.5 1.5)
+		(stroke
+			(width 0.2)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "ff2383e7-6c72-40f2-ad8d-1a2e9a124227")
+	)
+	(fp_line
+		(start -0.5 1.5)
+		(end 0.5 1.5)
+		(stroke
+			(width 0.2)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "83ac4914-af57-43d3-96f7-2d3cf19a9c07")
+	)
+	(fp_line
+		(start 0.5 1.5)
+		(end 1.5 0.5)
+		(stroke
+			(width 0.2)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "4de60b72-4566-4201-bc28-00246778f3a4")
+	)
+	(fp_line
+		(start 1.5 -1.5)
+		(end -1.5 -1.5)
+		(stroke
+			(width 0.2)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "0d0218e8-23c6-4f89-baaa-631694c90fa2")
+	)
+	(fp_line
+		(start 1.5 0.5)
+		(end 1.5 -1.5)
+		(stroke
+			(width 0.2)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "ae2cfb0f-c523-433b-bb7b-13e495904270")
+	)
+	(fp_text user "${REFERENCE}"
+		(at -0.05 -2.45 0)
+		(layer "F.Fab")
+		(uuid "757280ac-8daf-4946-af4b-afcb1d5a95c4")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" smd rect
+		(at -1.5 0 90)
+		(size 1.3 1.3)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "1734522c-df61-49b7-a3e4-f59a3a93d403")
+	)
+	(pad "2" smd rect
+		(at 1.5 0 90)
+		(size 1.3 1.3)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(uuid "dbdc20fe-a155-4da0-bda3-9592d9fac9a1")
+	)
+	(embedded_fonts no)
+	(model "${KIPRJMOD}/library/3D/User Library-cdrh2d18.step"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 -45)
+		)
+	)
+)
