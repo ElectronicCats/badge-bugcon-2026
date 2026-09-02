@@ -4,7 +4,7 @@
     "format_version": "2.0",
     "plugin_version": "0.1.0",
     "created": "2026-09-01T15:55:33.872602",
-    "updated": "2026-09-01T16:16:38.418895",
+    "updated": "2026-09-02T10:32:24.633824",
     "project": "Badge_Bugcon_2026"
   },
   "metadata": {
@@ -78,7 +78,8 @@
     "U1",
     "U10",
     "U2",
-    "U3"
+    "U3",
+    "U4"
   ],
   "supplier_overrides": {
     "C5290193": "digikey",
