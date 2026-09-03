@@ -9010,12 +9010,6 @@
 		(uuid "d31bc5f3-40f7-41b9-8ed7-fee5985b3482")
 	)
 	(junction
-		(at 179.07 245.11)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "d9f735fe-c40f-4e46-8b92-af61c0b7af7a")
-	)
-	(junction
 		(at 381 53.34)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -9112,6 +9106,10 @@
 		(uuid "a470b011-2a70-4e55-8bcb-2f1993e60a8d")
 	)
 	(no_connect
+		(at 95.25 156.21)
+		(uuid "aa4bf02e-9af5-4c0d-b481-499979263160")
+	)
+	(no_connect
 		(at 125.73 191.77)
 		(uuid "ace11be3-6cf5-4523-a3c5-920384da6872")
 	)
@@ -9134,10 +9132,6 @@
 	(no_connect
 		(at 125.73 184.15)
 		(uuid "d9a73980-70cf-467c-8ddb-409744931a33")
-	)
-	(no_connect
-		(at 95.25 181.61)
-		(uuid "e822b5c5-4bb9-46d0-87d6-5e0c7edf99bd")
 	)
 	(no_connect
 		(at 125.73 146.05)
@@ -9280,16 +9274,6 @@
 			(type default)
 		)
 		(uuid "14df4e30-9735-4943-8588-c1028d6fd650")
-	)
-	(wire
-		(pts
-			(xy 176.53 250.19) (xy 179.07 250.19)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "14f0f5ea-c585-4ebb-a132-a79753d32f2d")
 	)
 	(wire
 		(pts
@@ -9783,16 +9767,6 @@
 	)
 	(wire
 		(pts
-			(xy 179.07 250.19) (xy 179.07 245.11)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "4bb593d1-c661-4a58-bf8f-d96285847abf")
-	)
-	(wire
-		(pts
 			(xy 333.248 53.34) (xy 331.47 53.34)
 		)
 		(stroke
@@ -9923,7 +9897,7 @@
 	)
 	(wire
 		(pts
-			(xy 179.07 245.11) (xy 181.61 245.11)
+			(xy 175.26 245.11) (xy 181.61 245.11)
 		)
 		(stroke
 			(width 0)
@@ -10563,6 +10537,16 @@
 	)
 	(wire
 		(pts
+			(xy 88.9 181.61) (xy 95.25 181.61)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9b41591e-dc3c-45cd-b945-63b4a3ede59e")
+	)
+	(wire
+		(pts
 			(xy 338.963 166.243) (xy 333.375 166.243)
 		)
 		(stroke
@@ -10920,16 +10904,6 @@
 			(type default)
 		)
 		(uuid "bf8e5f18-4a0b-42f5-b64c-1b544ab1c8d7")
-	)
-	(wire
-		(pts
-			(xy 90.17 156.21) (xy 95.25 156.21)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "bfff11e6-bf87-4e60-bce3-1b51e6cef57d")
 	)
 	(wire
 		(pts
@@ -11400,16 +11374,6 @@
 			(type default)
 		)
 		(uuid "e5b80e60-c461-4c73-9d45-db3114386324")
-	)
-	(wire
-		(pts
-			(xy 175.26 245.11) (xy 179.07 245.11)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "e5b8ea53-e523-42b8-a9f0-c5ab51c02eab")
 	)
 	(wire
 		(pts
@@ -12102,12 +12066,12 @@
 		(uuid "a118ac49-b613-4a64-bb75-0276210498f8")
 	)
 	(label "IR_IN"
-		(at 166.37 250.19 0)
+		(at 171.45 250.19 180)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left bottom)
+			(justify right bottom)
 		)
 		(uuid "a538904d-196f-4a03-9482-729e16125ca4")
 	)
@@ -12222,7 +12186,7 @@
 		(uuid "d533dc25-4d02-42da-b443-e79aa216a869")
 	)
 	(label "RES#"
-		(at 90.17 156.21 0)
+		(at 88.9 181.61 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -22630,121 +22594,6 @@
 			(project "Badge_Bugcon_2026"
 				(path "/52627e56-4e9b-489f-ac98-b52c756ef24d"
 					(reference "R9")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R_Small")
-		(at 173.99 250.19 270)
-		(mirror x)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "e67ff1ab-8d73-4334-816b-aee1a5806afd")
-		(property "Reference" "R11"
-			(at 171.958 254 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "10K"
-			(at 171.958 252.476 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 173.99 250.19 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" "https://datasheet.lcsc.com/lcsc/1811151133_Walsin-Tech-Corp-WR06X104JTL_C163843.pdf"
-			(at 173.99 250.19 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" ""
-			(at 173.99 250.19 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "manf#" ""
-			(at 173.99 250.19 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC#" "C2930027"
-			(at 173.99 250.19 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "provedor" "LCSC"
-			(at 173.99 250.19 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "f9a386d8-7845-431f-9296-c0a00e344291")
-		)
-		(pin "2"
-			(uuid "4c7ce551-c79a-4dd7-b786-155cca297539")
-		)
-		(instances
-			(project "Badge_Bugcon_2026"
-				(path "/52627e56-4e9b-489f-ac98-b52c756ef24d"
-					(reference "R11")
 					(unit 1)
 				)
 			)
