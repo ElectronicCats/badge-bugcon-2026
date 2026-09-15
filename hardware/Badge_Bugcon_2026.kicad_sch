@@ -25126,7 +25126,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Connector_FFC-FPC:Hirose_FH12-24S-0.5SH_1x24-1MP_P0.50mm_Horizontal"
+		(property "Footprint" "FootprintsBUG:FPC-Epaper"
 			(at 386.715 168.656 0)
 			(hide yes)
 			(show_name no)
