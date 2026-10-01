@@ -7,17 +7,17 @@ Automáticamente, se generarán todos los archivos necesarios para la compra de 
 
 Así como documentos complementarios para un proyecto completo.
 
-  
+
 
 > Este README.md puede ser utilizado como plantilla para documentación, de esta manera se puede incluir generalidades, recomendaciones y todo lo necesario para entender el proyecto.
 
-  
+
 
 ## ¿Cómo utilizar esta plantilla?
 
 Para comenzar un nuevo proyecto, presiona el botón de "Use this template".
 
-  
+
 
 ### KiCad
 
@@ -25,7 +25,7 @@ Para esta plantilla, el hardware debe de ser diseñado y/o desarrollado en KiCad
 
 Al término del diseño del proyecto, KiCad deberá de generar los siguientes archivos:
 
-  
+
 
 - nombre_del_proyecto.kicad_pro
 
@@ -33,17 +33,17 @@ Al término del diseño del proyecto, KiCad deberá de generar los siguientes ar
 
 - nombre_del_esquematico.kicad_sch
 
-  
+
 
 Además de archivos temporales, los cuales Git ignora al momento de cualquier push.
 
 [Archivos ignorados](.gitignore)
 
-  
+
 
 Estos archivos deberán ser guardados dentro de la carpeta de [hardware](hardware/).
 
-  
+
 
 ### Configuración de automatización
 
@@ -56,7 +56,7 @@ Los workflows buscarán automáticamente:
 
 **Nota**: Asegúrate de que los archivos de KiCAD estén guardados en la carpeta `hardware/` con sus extensiones correctas (`.kicad_pro`, `.kicad_pcb`, `.kicad_sch`).
 
-  
+
 
 ### Activar/desactivar DRC y ERC
 
@@ -109,7 +109,7 @@ Usa hipervínculos o links para redirigir a los usuarios a páginas donde puedan
 
 - [Agregando el link en seguida](https://github.com/ElectronicCats/Template-Project-KiCAD-CI) - Con esta forma deberas de seguir el siguiente formato `[Texto](www.url.com)`. El texto que se mostrará en la página principal del Readme será el que se encuentra dentro de los corchetes y el link de la página deberá de ir de manera inmediata a los corchetes dentro de paréntesis.
 
-- [Agregando el link como referencia] - Al igual que otro tipo de formatos de referencia en este agregas el texto que se mostrará en la página principal del repositorio dentro de corchetes `[Texto]` y al final de tu archivo (de preferencia) agregas la referencia de la siguiente manera: `[Texto]:<www.url.com>`, este no se mostrara en el archivo por lo que es una buena forma de mantener un formato y un orden.  
+- [Agregando el link como referencia] - Al igual que otro tipo de formatos de referencia en este agregas el texto que se mostrará en la página principal del repositorio dentro de corchetes `[Texto]` y al final de tu archivo (de preferencia) agregas la referencia de la siguiente manera: `[Texto]:<www.url.com>`, este no se mostrara en el archivo por lo que es una buena forma de mantener un formato y un orden.
 
 ### Tablas
 
@@ -152,7 +152,7 @@ Usa este formato:
     - [ ] GFM task list 4-1
     - [ ] GFM task list 4-2
   ```
-  Y tendras algo asi: 
+  Y tendras algo asi:
 - [x] GFM task list 1
 - [x] GFM task list 2
 - [ ] GFM task list 3
@@ -168,7 +168,7 @@ Usa este formato:
 ![](https://img.shields.io/github/stars/ElectronicCats/Template-Project-KiCAD-CI?style=for-the-badge)
 ![](https://img.shields.io/github/forks/ElectronicCats/Template-Project-KiCAD-CI?color=green&style=for-the-badge)
 
-Este tipo de indicadores nos pueden ayudar a identificar diferente información relacionada al proyecto, solo los debes de agregar como una imagen y en el URL  pegar el link correspondiente. 
+Este tipo de indicadores nos pueden ayudar a identificar diferente información relacionada al proyecto, solo los debes de agregar como una imagen y en el URL  pegar el link correspondiente.
 Los ejemplos de arriba fueron generados con la pagina: Shields.io , solo debes de asegurarte que son para GitHub y que tienen el formato `MarkDown`
 
 - Badges,
@@ -184,7 +184,7 @@ Utilizando el projecto de este usuario puedes agregar estadísticas del proyecto
 https://github.com/anuraghazra/github-readme-stats
 
 **NOTA**:Son pocas las tarjetas que puedes utilizar con el proyecto de este usuario para repositorios ya que son más dirigidos a perfiles de GitHub.
- 
+
 ## Maintainer
 
 <a

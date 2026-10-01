@@ -3,7 +3,7 @@ name: KiCad CI/CD for ElectronicCats Projects
 on:
   release:
     types: [published]
-  push: 
+  push:
   pull_request:
 
 jobs:
@@ -31,10 +31,10 @@ jobs:
           ls -la
           exit 1
         fi
-        
+
         # Primero encontrar el archivo PCB
         PCB_FILE=$(find hardware -name "*.kicad_pcb" -type f | head -n 1)
-        
+
         if [ -z "$PCB_FILE" ]; then
           echo "❌ Error: No .kicad_pcb file found in hardware/"
           echo "Contents of hardware directory:"
@@ -43,14 +43,14 @@ jobs:
           find . -name "*.kicad_pcb" -type f || echo "No .kicad_pcb files found"
           exit 1
         fi
-        
+
         # Extraer el nombre base del PCB (sin extensión y sin ruta)
         PCB_BASENAME=$(basename "$PCB_FILE" .kicad_pcb)
         echo "🔍 Looking for schematic matching PCB: $PCB_BASENAME"
-        
+
         # Buscar el esquemático que coincida con el nombre del PCB
         MATCHING_SCHEMA=$(find hardware -name "${PCB_BASENAME}.kicad_sch" -type f | head -n 1)
-        
+
         # Si no encuentra uno que coincida, usar el primero disponible como fallback
         if [ -z "$MATCHING_SCHEMA" ]; then
           echo "⚠️ No matching schematic found for $PCB_BASENAME, using first available"
@@ -59,12 +59,12 @@ jobs:
           SCHEMA_FILE="$MATCHING_SCHEMA"
           echo "✅ Found matching schematic: $SCHEMA_FILE"
         fi
-        
+
         if [ -z "$SCHEMA_FILE" ]; then
           echo "❌ Error: No .kicad_sch file found in hardware/"
           exit 1
         fi
-        
+
         echo "schema_file=$SCHEMA_FILE" >> $GITHUB_OUTPUT
         echo "pcb_file=$PCB_FILE" >> $GITHUB_OUTPUT
         echo "✅ Found KiCad files: $SCHEMA_FILE and $PCB_FILE"
@@ -125,10 +125,10 @@ jobs:
           ls -la
           exit 1
         fi
-        
+
         # Primero encontrar el archivo PCB
         PCB_FILE=$(find hardware -name "*.kicad_pcb" -type f | head -n 1)
-        
+
         if [ -z "$PCB_FILE" ]; then
           echo "❌ Error: No .kicad_pcb file found in hardware/"
           echo "Contents of hardware directory:"
@@ -137,14 +137,14 @@ jobs:
           find . -name "*.kicad_pcb" -type f || echo "No .kicad_pcb files found"
           exit 1
         fi
-        
+
         # Extraer el nombre base del PCB (sin extensión y sin ruta)
         PCB_BASENAME=$(basename "$PCB_FILE" .kicad_pcb)
         echo "🔍 Looking for schematic matching PCB: $PCB_BASENAME"
-        
+
         # Buscar el esquemático que coincida con el nombre del PCB
         MATCHING_SCHEMA=$(find hardware -name "${PCB_BASENAME}.kicad_sch" -type f | head -n 1)
-        
+
         # Si no encuentra uno que coincida, usar el primero disponible como fallback
         if [ -z "$MATCHING_SCHEMA" ]; then
           echo "⚠️ No matching schematic found for $PCB_BASENAME, using first available"
@@ -153,12 +153,12 @@ jobs:
           SCHEMA_FILE="$MATCHING_SCHEMA"
           echo "✅ Found matching schematic: $SCHEMA_FILE"
         fi
-        
+
         if [ -z "$SCHEMA_FILE" ]; then
           echo "❌ Error: No .kicad_sch file found in hardware/"
           exit 1
         fi
-        
+
         echo "schema_file=$SCHEMA_FILE" >> $GITHUB_OUTPUT
         echo "board_file=$PCB_FILE" >> $GITHUB_OUTPUT
         echo "✅ Found KiCad files: $SCHEMA_FILE and $PCB_FILE"
