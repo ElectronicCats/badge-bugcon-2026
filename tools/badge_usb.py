@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+"""
+badge_usb.py — Cliente del protocolo USB del badge (F2.9, el mismo contrato
+que el e-ink-Keychain; detalle en firmware/badge_bugcon_2026/src/services/
+usb_protocol.h): sirve para probar el firmware sin el configurador web y como
+base de provision.py (F12.4).
+
+Las imágenes van en el formato del badge: 1 bpp, filas completas, MSB primero,
+1 = blanco, del tamaño `panel` que reporta INFO. Se leen y se escriben como
+PBM binario (P4, 1 = negro: se invierte) o como .bin crudo.
+
+Requiere pyserial. Uso:
+  ./tools/badge_usb.py info
+  ./tools/badge_usb.py upload 0 gafete.pbm      # guarda el slot 0 y lo muestra
+  ./tools/badge_usb.py show 0
+  ./tools/badge_usb.py read 0 -o slot0.pbm
+  ./tools/badge_usb.py clr
+  ./tools/badge_usb.py dbg
+  ./tools/badge_usb.py -p /dev/ttyACM1 raw "INFO"
+"""
+import argparse
+import re
+import sys
+import time
+
+import serial
+
+OPEN_WAIT_S = 0.3  # El badge descarta lo que llega en los primeros 200 ms
+REPLY_TIMEOUT_S = 15  # Como el configurador del keychain
+INFO_RE = re.compile(
+    r"^OK BB26 (?P<fw>\S+) no=(?P<no>\d+) panel=(?P<w>\d+)x(?P<h>\d+) "
+    r"album=(?P<album>\d+)/(?P<total>\d+) slots=(?P<slots>\d+) "
+    r"current=(?P<current>-?\d+) used=(?P<used>[01]+)$"
+)
+
+
+class ProtocolError(Exception):
+    pass
+
+
+class Badge:
+    def __init__(self, port):
+        self.port = serial.Serial(port, 115200, timeout=0.1)
+        time.sleep(OPEN_WAIT_S)
+        self.port.reset_input_buffer()
+
+    def close(self):
+        self.port.close()
+
+    def read_line(self, timeout=REPLY_TIMEOUT_S):
+        deadline = time.time() + timeout
+        line = b""
+        while time.time() < deadline:
+            c = self.port.read(1)
+            if c == b"\n":
+                return line.rstrip(b"\r").decode(errors="replace")
+            line += c
+        raise ProtocolError("timeout")
+
+    def read_reply(self, timeout=REPLY_TIMEOUT_S):
+        """Primera línea OK/ERR; las demás son logs del firmware."""
+        deadline = time.time() + timeout
+        while True:
+            line = self.read_line(max(0.01, deadline - time.time()))
+            if line.startswith("OK") or line.startswith("ERR"):
+                return line
+
+    def command(self, line, payload=None):
+        self.port.reset_input_buffer()
+        self.port.write((line + "\n").encode())
+        if payload is not None:
+            self.port.write(payload)
+        return self.read_reply()
+
+    def expect_ok(self, line, payload=None):
+        reply = self.command(line, payload)
+        if not reply.startswith("OK"):
+            raise ProtocolError(reply)
+        return reply
+
+    def info(self):
+        reply = self.expect_ok("INFO")
+        m = INFO_RE.match(reply)
+        if not m:
+            raise ProtocolError(f"INFO inesperado: {reply}")
+        info = m.groupdict()
+        for key in ("no", "w", "h", "album", "total", "slots", "current"):
+            info[key] = int(info[key])
+        return info
+
+    def upload(self, slot, image):
+        return self.expect_ok(f"UPLD {slot}", image)
+
+    def read(self, slot):
+        reply = self.expect_ok(f"READ {slot}")
+        size = int(reply.split()[1])
+        data = self.port.read(size)
+        deadline = time.time() + 5
+        while len(data) < size and time.time() < deadline:
+            data += self.port.read(size - len(data))
+        if len(data) != size:
+            raise ProtocolError(f"READ: llegaron {len(data)} de {size} B")
+        return data
+
+
+def read_pbm(path):
+    """PBM binario (P4) -> (ancho, alto, bytes con 1 = blanco)."""
+    data = open(path, "rb").read()
+    tokens = []
+    pos = 0
+    while len(tokens) < 3:
+        while data[pos : pos + 1].isspace():
+            pos += 1
+        if data[pos : pos + 1] == b"#":
+            pos = data.index(b"\n", pos)
+            continue
+        start = pos
+        while not data[pos : pos + 1].isspace():
+            pos += 1
+        tokens.append(data[start:pos])
+    if tokens[0] != b"P4":
+        raise ValueError(f"{path}: solo PBM binario (P4)")
+    w, h = int(tokens[1]), int(tokens[2])
+    bits = data[pos + 1 : pos + 1 + (w + 7) // 8 * h]
+    return w, h, bytes(b ^ 0xFF for b in bits)
+
+
+def write_pbm(path, w, h, image):
+    with open(path, "wb") as f:
+        f.write(f"P4\n{w} {h}\n".encode())
+        f.write(bytes(b ^ 0xFF for b in image))
+
+
+def load_image(path, info):
+    if path.endswith(".pbm"):
+        w, h, image = read_pbm(path)
+        if (w, h) != (info["w"], info["h"]):
+            raise ValueError(
+                f"{path} mide {w}x{h}; el badge espera {info['w']}x{info['h']}"
+            )
+        return image
+    return open(path, "rb").read()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
+    parser.add_argument("-p", "--port", default="/dev/ttyACM0")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("info")
+    up = sub.add_parser("upload")
+    up.add_argument("slot", type=int)
+    up.add_argument("file", help=".pbm (P4) o .bin crudo")
+    sub.add_parser("show").add_argument("slot", type=int)
+    rd = sub.add_parser("read")
+    rd.add_argument("slot", type=int)
+    rd.add_argument("-o", "--output", required=True, help=".pbm o .bin")
+    sub.add_parser("clr")
+    sub.add_parser("dbg")
+    sub.add_parser("raw").add_argument("line")
+    args = parser.parse_args()
+
+    badge = Badge(args.port)
+    try:
+        if args.cmd == "info":
+            for key, value in badge.info().items():
+                print(f"{key}={value}")
+        elif args.cmd == "upload":
+            image = load_image(args.file, badge.info())
+            print(badge.upload(args.slot, image))
+        elif args.cmd == "show":
+            print(badge.expect_ok(f"SHOW {args.slot}"))
+        elif args.cmd == "read":
+            info = badge.info()
+            image = badge.read(args.slot)
+            if args.output.endswith(".pbm"):
+                write_pbm(args.output, info["w"], info["h"], image)
+            else:
+                open(args.output, "wb").write(image)
+            print(f"OK {len(image)} B -> {args.output}")
+        elif args.cmd == "clr":
+            print(badge.expect_ok("CLR"))
+        elif args.cmd == "dbg":
+            print(badge.expect_ok("DBG"))
+        elif args.cmd == "raw":
+            print(badge.command(args.line))
+    except (ProtocolError, ValueError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    finally:
+        badge.close()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
