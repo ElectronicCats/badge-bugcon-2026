@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 test_configurator.py — El configurador web (web/configurator/index.html, F6.1)
-usa el mismo catálogo y los mismos límites que el firmware: el índice de la
-selección y de la posición viaja en la estampa, y CARD rechaza lo que no
-cumpla cfg::card. Sin badge ni navegador (biblioteca estándar).
+y el álbum web (web/album/index.html, F6.3) usan el mismo catálogo y los
+mismos límites que el firmware: el índice de la selección y de la posición
+viaja en la estampa, y CARD rechaza lo que no cumpla cfg::card. Sin badge ni
+navegador (biblioteca estándar).
 
 Uso: python3 -m unittest tools/test_configurator.py
 """
@@ -13,7 +14,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "firmware/badge_bugcon_2026/src"
-HTML = (ROOT / "web/configurator/index.html").read_text(encoding="utf-8")
+PAGES = {name: (ROOT / f"web/{name}/index.html").read_text(encoding="utf-8")
+         for name in ("configurator", "album")}
 CARD_CPP = (SRC / "services/card.cpp").read_text(encoding="utf-8")
 CARD_H = (SRC / "services/card.h").read_text(encoding="utf-8")
 CONFIG = (SRC / "config/badge_config.h").read_text(encoding="utf-8")
@@ -36,9 +38,10 @@ def number(source, name):
 
 class CatalogTest(unittest.TestCase):
     def test_catalogs(self):
-        for name in ("TEAMS", "POSITIONS", "RARITIES", "STATS"):
-            with self.subTest(name=name):
-                self.assertEqual(strings(HTML, name), strings(CARD_CPP, name))
+        for page, html in PAGES.items():
+            for name in ("TEAMS", "POSITIONS", "RARITIES", "STATS"):
+                with self.subTest(page=page, name=name):
+                    self.assertEqual(strings(html, name), strings(CARD_CPP, name))
 
     def test_limits(self):
         pairs = [("STAT_MAX", CONFIG, "STAT_MAX"),
@@ -48,9 +51,14 @@ class CatalogTest(unittest.TestCase):
                  ("NICK_BYTES", CARD_H, "NICK_BYTES"),
                  ("HANDLE_BYTES", CARD_H, "HANDLE_BYTES"),
                  ("CARD_VERSION", CARD_H, "VERSION")]
-        for web, source, fw in pairs:
-            with self.subTest(name=web):
-                self.assertEqual(number(HTML, web), number(source, fw))
+        for page, html in PAGES.items():
+            for web, source, fw in pairs:
+                if page == "album" and web in ("STAT_BUDGET", "CARD_VERSION"):
+                    continue  # el álbum no edita estampas
+                with self.subTest(page=page, name=web):
+                    self.assertEqual(number(html, web), number(source, fw))
+        self.assertEqual(number(PAGES["album"], "ATTENDEES"),
+                         number(CONFIG, "ATTENDEES"))
 
 
 if __name__ == "__main__":
