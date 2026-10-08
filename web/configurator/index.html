@@ -1,0 +1,1556 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configurador Copa BugCon 2026</title>
+<!--
+  Configurador del badge BugCon 2026 (F6.1). Un solo HTML sin dependencias:
+  funciona desde file://, hospedado (F6.9) o embebido en el firmware.
+  Portado de e-ink-Keychain/tool/configurator.html: recorte, tono, dithering,
+  texto, vista previa exacta y Web Serial con OK/ERR y timeouts. Agrega el
+  editor de la estampa (NICK/CARD/AVTR), la plantilla "Copa BugCon" y la
+  descarga de ALBM. Protocolo: firmware/badge_bugcon_2026/src/services/
+  usb_protocol.h y §3.5 del plan. Web Serial: solo Chromium de escritorio.
+-->
+<style>
+:root {
+  --bg: #14161a;
+  --card: #1e2128;
+  --card2: #262a33;
+  --text: #e8eaf0;
+  --muted: #9aa1ae;
+  --accent: #4da3ff;
+  --ok: #4ec97a;
+  --err: #ff6b6b;
+  --border: #333845;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 system-ui, sans-serif;
+  padding: 16px;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+h1 { font-size: 18px; font-weight: 600; }
+h2 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+main {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  max-width: 1600px;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+}
+button {
+  background: var(--card2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #10131a; font-weight: 600; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.ctl { display: grid; grid-template-columns: 92px 1fr 44px; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ctl label { color: var(--muted); }
+.ctl output { text-align: right; font-variant-numeric: tabular-nums; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+select, input[type=text], input[type=number] {
+  background: var(--card2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+}
+.field { display: grid; grid-template-columns: 92px 1fr 60px; align-items: center; gap: 8px; margin-bottom: 8px; }
+.field label { color: var(--muted); }
+.field output { text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.field output.bad { color: var(--err); }
+#drop {
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+#drop.over { border-color: var(--accent); color: var(--accent); }
+#srcWrap { position: relative; width: 100%; }
+#srcCanvas { width: 100%; display: block; border-radius: 6px; background: #000; cursor: move; touch-action: none; }
+#video { width: 100%; border-radius: 6px; display: none; margin-bottom: 8px; }
+canvas.px {
+  max-width: 100%;
+  image-rendering: pixelated;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+  display: block;
+  margin: 0 auto 10px;
+}
+.targets { display: flex; gap: 14px; margin-bottom: 10px; color: var(--muted); }
+.targets label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.slots { display: flex; gap: 8px; margin-bottom: 10px; }
+.slots label {
+  flex: 1;
+  text-align: center;
+  padding: 8px 0;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--muted);
+}
+.slots input { display: none; }
+.slots label.used { color: var(--text); }
+.slots label.used::after { content: " *"; color: var(--ok); }
+.slots input:checked + span { color: var(--accent); font-weight: 700; }
+#status {
+  padding: 8px 10px;
+  background: var(--card2);
+  border-radius: 6px;
+  color: var(--muted);
+  min-height: 34px;
+  flex: 1;
+}
+#status.ok { color: var(--ok); }
+#status.err { color: var(--err); }
+#prog { width: 100%; margin-top: 8px; accent-color: var(--accent); }
+.textline { margin-bottom: 10px; }
+.textline input[type=text] { width: 100%; margin-bottom: 4px; }
+.textopts { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+.textopts label { display: flex; align-items: center; gap: 4px; }
+.textopts input[type=number] { width: 54px; padding: 4px; }
+.hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+#nowebserial { color: var(--err); }
+#statusBar { display: flex; gap: 8px; align-items: center; max-width: 1600px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Copa BugCon 2026 · Configurador</h1>
+  <button id="connectBtn" class="primary">Conectar</button>
+  <span id="connState" class="hint">sin conexión</span>
+  <p id="nowebserial" hidden>Este navegador no tiene Web Serial: usa Chrome, Edge
+  u otro Chromium de escritorio. Para ver tu álbum desde el teléfono, escanea el
+  código QR del badge.</p>
+</header>
+
+<div id="statusBar">
+  <div id="status">Listo.</div>
+</div>
+<progress id="prog" max="1" value="0" hidden></progress>
+
+<main>
+  <section class="card">
+    <h2>Mi estampa</h2>
+    <div class="field">
+      <label for="nick">Nickname</label>
+      <input type="text" id="nick" value="" autocomplete="off">
+      <output id="nickV">0/16 B</output>
+    </div>
+    <div class="field">
+      <label for="team">Selección</label>
+      <select id="team"></select><span></span>
+    </div>
+    <div class="field">
+      <label for="pos">Posición</label>
+      <select id="pos"></select><span></span>
+    </div>
+    <h2 style="margin-top:14px">Estadísticas <span id="freeV" style="text-transform:none"></span></h2>
+    <div id="statRows"></div>
+    <h2 style="margin-top:14px">Contacto (opcional)</h2>
+    <div class="row">
+      <label><input type="checkbox" id="handleOn"> Compartir mi handle en la estampa</label>
+    </div>
+    <div class="field">
+      <label for="handle">Handle</label>
+      <input type="text" id="handle" placeholder="@usuario" autocomplete="off" disabled>
+      <output id="handleV">0/20 B</output>
+    </div>
+    <p class="hint">El handle viaja por infrarrojo dentro de tu estampa a cada badge con el
+    que intercambies, y aparece en su álbum. Solo se envía si marcas la casilla.
+    El avatar se queda en tu badge (no viaja por IR).</p>
+    <div class="row" style="margin-top:10px">
+      <button id="readCardBtn" disabled>Leer del badge</button>
+      <button id="saveCardBtn" class="primary" disabled>Guardar estampa</button>
+    </div>
+
+    <h2 style="margin-top:14px">Plantilla Copa BugCon</h2>
+    <canvas id="tpl" class="px" width="200" height="200"></canvas>
+    <p class="hint">Así se ve tu estampa en 1 bit. Puedes ponerla de gafete en un slot.</p>
+    <div class="row">
+      <button id="tplSendBtn" disabled>Enviar plantilla al slot</button>
+      <button id="albumBtn" disabled>Descargar álbum (.bin)</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Imagen</h2>
+    <div id="drop">Arrastra una imagen, pégala del portapapeles<br>o usa los botones.</div>
+    <div class="row">
+      <button id="fileBtn">Abrir archivo</button>
+      <input type="file" id="file" accept="image/*" hidden>
+      <button id="camBtn">Cámara</button>
+      <button id="capBtn" hidden>Capturar</button>
+      <button id="camOffBtn" hidden>Cancelar</button>
+    </div>
+    <video id="video" autoplay playsinline></video>
+    <div id="srcWrap"><canvas id="srcCanvas" width="320" height="320"></canvas></div>
+    <div class="ctl">
+      <label for="cropSize">Recorte</label>
+      <input type="range" id="cropSize" min="10" max="100" value="100">
+      <output id="cropSizeV">100</output>
+    </div>
+    <div class="row">
+      <button id="rotBtn">Girar 90°</button>
+      <button id="flipHBtn">Espejo H</button>
+      <button id="flipVBtn">Espejo V</button>
+    </div>
+    <p class="hint">Arrastra el recuadro para encuadrar; cambia su tamaño con el control o la rueda del ratón.</p>
+  </section>
+
+  <section class="card">
+    <h2>Ajustes</h2>
+    <div class="ctl"><label for="br">Brillo</label><input type="range" id="br" min="-100" max="100" value="0"><output id="brV">0</output></div>
+    <div class="ctl"><label for="ct">Contraste</label><input type="range" id="ct" min="-100" max="100" value="0"><output id="ctV">0</output></div>
+    <div class="ctl"><label for="gm">Gamma</label><input type="range" id="gm" min="20" max="300" value="100"><output id="gmV">1.00</output></div>
+    <div class="ctl"><label for="bp">Punto negro</label><input type="range" id="bp" min="0" max="254" value="0"><output id="bpV">0</output></div>
+    <div class="ctl"><label for="wp">Punto blanco</label><input type="range" id="wp" min="1" max="255" value="255"><output id="wpV">255</output></div>
+    <div class="ctl"><label for="sh">Nitidez</label><input type="range" id="sh" min="0" max="200" value="0"><output id="shV">0</output></div>
+    <div class="row">
+      <button id="autoBtn">Niveles auto</button>
+      <label><input type="checkbox" id="invert"> Invertir</label>
+      <button id="resetBtn">Restablecer</button>
+    </div>
+
+    <h2 style="margin-top:14px">Tramado</h2>
+    <div class="row">
+      <select id="mode">
+        <option value="fs" selected>Floyd-Steinberg</option>
+        <option value="bayer4">Bayer 4x4</option>
+        <option value="bayer8">Bayer 8x8</option>
+        <option value="threshold">Umbral</option>
+      </select>
+    </div>
+    <div class="ctl" id="thrRow" style="display:none">
+      <label for="thr">Nivel</label><input type="range" id="thr" min="1" max="254" value="128"><output id="thrV">128</output>
+    </div>
+
+    <h2 style="margin-top:14px">Texto encima</h2>
+    <div id="textRows"></div>
+    <p class="hint">Arrastra el texto sobre la vista previa para moverlo.</p>
+  </section>
+
+  <section class="card">
+    <h2 id="pvTitle">Vista previa</h2>
+    <div class="targets">
+      <label><input type="radio" name="target" value="avatar" checked> Avatar de la estampa</label>
+      <label><input type="radio" name="target" value="slot"> Gafete (slot)</label>
+    </div>
+    <canvas id="preview" class="px" width="96" height="96"></canvas>
+    <p class="hint">Lo que ves es exactamente lo que recibe el badge.</p>
+
+    <div id="avatarCtl">
+      <div class="row"><button id="avatarBtn" class="primary" disabled>Enviar avatar</button></div>
+    </div>
+    <div id="slotCtl" hidden>
+      <div class="slots" id="slots"></div>
+      <p class="hint">Al elegir un slot se carga su imagen en el editor.</p>
+      <div class="row">
+        <button id="sendBtn" class="primary" disabled>Enviar</button>
+        <button id="showBtn" disabled>Mostrar slot</button>
+        <button id="clrBtn" disabled>Limpiar pantalla</button>
+        <button id="testBtn" disabled>Patrón de prueba</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+/* ================================================================
+   Capas: estado y UI, pipeline de imagen (funciones puras), estampa,
+   transporte (Web Serial).
+   Formato de imagen: 1 bpp, filas completas (ancho redondeado a bytes),
+   MSB primero, 1 = blanco. El mismo para slots y avatar.
+   ================================================================ */
+
+// Igual que el firmware: services/card.cpp (TEAMS, POSITIONS, RARITIES) y
+// cfg::card de badge_config.h. El índice viaja en la estampa: no reordenar,
+// solo agregar al final. tools/test_configurator.py revisa que coincidan.
+const TEAMS = ["Red Team", "Blue Team", "Purple Team", "Hardware",
+               "AppSec", "OSINT", "Forense", "Cripto"];
+const POSITIONS = ["Portero", "Defensa", "Medio", "Delantero", "Pentester"];
+const RARITIES = ["Común", "Plata", "Oro"];
+const STATS = ["ATK", "DEF", "HAX", "SUE"];
+const STAT_MAX = 99, STAT_BUDGET = 200;
+const AVATAR_W = 96, AVATAR_H = 96;
+const NICK_BYTES = 16, HANDLE_BYTES = 20, NONE = 0xFF;
+const CARD_VERSION = 1, CARD_FIELDS_BYTES = 48, CARD_BYTES = 64;
+const ALBUM_HEADER_BYTES = 80;
+const OPEN_WAIT_MS = 300;   // el badge descarta lo que llega en los primeros 200 ms
+
+const $ = id => document.getElementById(id);
+
+/* ---------------- estado ---------------- */
+
+let panel = { w: 200, h: 200 };   // de INFO (panel=WxH); 200x200 = D-03
+let numSlots = 4;
+let target = "avatar";            // "avatar" | "slot"
+let W = AVATAR_W, H = AVATAR_H;   // tamaño del destino actual
+
+let baseImage = null;      // original como canvas
+let oriented = null;       // baseImage con giro y espejo aplicados
+let rot = 0, flipH = false, flipV = false;
+let crop = { cx: 0, cy: 0, size: 0 };   // centro + alto, en coordenadas de `oriented`
+let lastBits = null;       // Uint8Array(W*H), 1 = blanco, resultado de render()
+let avatarBits = null;     // último render del avatar, para la plantilla
+
+let myCard = null;         // 64 B de la estampa leída del badge (ALBM)
+let info = null;           // último INFO
+
+/* ---------------- pipeline: funciones puras ---------------- */
+
+// Luminancia Rec. 709
+function toGray(imgData) {
+  const d = imgData.data, n = W * H, g = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    g[i] = 0.2126 * d[i*4] + 0.7152 * d[i*4+1] + 0.0722 * d[i*4+2];
+  }
+  return g;
+}
+
+function applyTone(g, p) {
+  const n = g.length;
+  const range = Math.max(1, p.wp - p.bp);
+  const cf = (259 * (p.contrast * 2.55 + 255)) / (255 * (259 - p.contrast * 2.55));
+  const invGamma = 1 / p.gamma;
+  for (let i = 0; i < n; i++) {
+    let v = (g[i] - p.bp) / range * 255;
+    v = Math.min(255, Math.max(0, v));
+    v = 255 * Math.pow(v / 255, invGamma);
+    v = v + p.brightness;
+    v = cf * (v - 128) + 128;
+    if (p.invert) v = 255 - v;
+    g[i] = Math.min(255, Math.max(0, v));
+  }
+  return g;
+}
+
+// Máscara de enfoque: g + amount * (g - boxblur3x3(g))
+function applySharpen(g, amount) {
+  if (amount <= 0) return g;
+  const blur = new Float32Array(W * H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      let sum = 0, cnt = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= H) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= W) continue;
+          sum += g[yy * W + xx];
+          cnt++;
+        }
+      }
+      blur[y * W + x] = sum / cnt;
+    }
+  }
+  for (let i = 0; i < W * H; i++) {
+    g[i] = Math.min(255, Math.max(0, g[i] + amount * (g[i] - blur[i])));
+  }
+  return g;
+}
+
+// Recorte del 1 % del histograma; devuelve [negro, blanco]
+function autoLevels(g) {
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < g.length; i++) hist[Math.round(g[i])]++;
+  const clip = g.length * 0.01;
+  let lo = 0, hi = 255, acc = 0;
+  for (; lo < 255; lo++) { acc += hist[lo]; if (acc > clip) break; }
+  acc = 0;
+  for (; hi > 0; hi--) { acc += hist[hi]; if (acc > clip) break; }
+  if (hi <= lo) { lo = 0; hi = 255; }
+  return [lo, hi];
+}
+
+// Matrices de Bayer canónicas (Bayer 1973)
+const BAYER4 = [
+  [ 0,  8,  2, 10],
+  [12,  4, 14,  6],
+  [ 3, 11,  1,  9],
+  [15,  7, 13,  5]];
+const BAYER8 = [
+  [ 0, 32,  8, 40,  2, 34, 10, 42],
+  [48, 16, 56, 24, 50, 18, 58, 26],
+  [12, 44,  4, 36, 14, 46,  6, 38],
+  [60, 28, 52, 20, 62, 30, 54, 22],
+  [ 3, 35, 11, 43,  1, 33,  9, 41],
+  [51, 19, 59, 27, 49, 17, 57, 25],
+  [15, 47,  7, 39, 13, 45,  5, 37],
+  [63, 31, 55, 23, 61, 29, 53, 21]];
+
+// gris -> bits, 1 = blanco
+function dither(g, mode, threshold) {
+  const bits = new Uint8Array(W * H);
+  if (mode === "threshold") {
+    for (let i = 0; i < W * H; i++) bits[i] = g[i] >= threshold ? 1 : 0;
+  } else if (mode === "bayer4" || mode === "bayer8") {
+    const m = mode === "bayer4" ? BAYER4 : BAYER8;
+    const n = m.length, lv = n * n;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const t = (m[y % n][x % n] + 0.5) / lv * 255;
+        bits[y * W + x] = g[y * W + x] >= t ? 1 : 0;
+      }
+    }
+  } else {   // Floyd-Steinberg, 7/16 3/16 5/16 1/16
+    const e = Float32Array.from(g);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        const on = e[i] >= 128 ? 1 : 0;
+        bits[i] = on;
+        const err = e[i] - (on ? 255 : 0);
+        if (x + 1 < W)              e[i + 1]     += err * 7 / 16;
+        if (y + 1 < H) {
+          if (x > 0)                e[i + W - 1] += err * 3 / 16;
+                                    e[i + W]     += err * 5 / 16;
+          if (x + 1 < W)            e[i + W + 1] += err * 1 / 16;
+        }
+      }
+    }
+  }
+  return bits;
+}
+
+// Texto después del tramado, con umbral duro para que los bordes queden nítidos
+function overlayText(bits, lines) {
+  const cnv = document.createElement("canvas");
+  cnv.width = W; cnv.height = H;
+  const ctx = cnv.getContext("2d");
+  for (const ln of lines) {
+    if (!ln.text) continue;
+    ctx.clearRect(0, 0, W, H);
+    ctx.font = "bold " + ln.size + "px sans-serif";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "#fff";
+    ctx.fillText(ln.text, ln.x, ln.y);
+    const a = ctx.getImageData(0, 0, W, H).data;
+    const v = ln.white ? 1 : 0;
+    for (let i = 0; i < W * H; i++) {
+      if (a[i * 4 + 3] >= 128) bits[i] = v;
+    }
+  }
+  return bits;
+}
+
+// bits (w*h) -> bytes con filas completas, MSB primero, 1 = blanco
+function packBits(bits, w, h) {
+  const row = (w + 7) >> 3, out = new Uint8Array(row * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (bits[y * w + x]) out[y * row + (x >> 3)] |= 0x80 >> (x & 7);
+    }
+  }
+  return out;
+}
+
+function unpackBytes(bytes, w, h) {
+  const row = (w + 7) >> 3, bits = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      bits[y * w + x] = (bytes[y * row + (x >> 3)] >> (7 - (x & 7))) & 1;
+    }
+  }
+  return bits;
+}
+
+function testPatternBits(w, h) {
+  const bits = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let v = ((x >> 3) + (y >> 3)) & 1;                 // tablero de 8 px
+      if (x === 0 || y === 0 || x === w-1 || y === h-1) v = 0;  // borde
+      if (x < 24 && y < 24) v = 0;                       // marca arriba a la izquierda
+      bits[y * w + x] = v;
+    }
+  }
+  return bits;
+}
+
+/* ---------------- estampa: campos y validación ---------------- */
+
+const utf8 = new TextEncoder();
+
+// Igual que cleanText() del firmware: sin espacios en los extremos.
+const cleanText = s => s.replace(/^ +| +$/g, "");
+
+// Error en español o null. La fuente del badge es Latin-1 (gfx/font).
+function textError(s, maxBytes, name) {
+  const n = utf8.encode(s).length;
+  if (n > maxBytes) return `el ${name} mide ${n} B de UTF-8; caben ${maxBytes}`;
+  if (/[\x00-\x1f\x7f-\x9f]/.test(s)) return `el ${name} tiene caracteres de control`;
+  const bad = s.match(/[^\x20-\x7e\xa0-\xff]/u);
+  if (bad) return `el badge no puede dibujar «${bad[0]}» (solo Latin-1: letras, acentos y ñ)`;
+  return null;
+}
+
+// 64 B de la estampa v1 (§3.2) -> objeto
+function parseCard(b) {
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const text = (off, len) => {
+    const s = b.subarray(off, off + len), end = s.indexOf(0);
+    return new TextDecoder().decode(end < 0 ? s : s.subarray(0, end));
+  };
+  return {
+    version: b[0], type: b[1], badgeNo: dv.getUint16(2, true),
+    nickname: text(4, NICK_BYTES), team: b[20], position: b[21],
+    stats: Array.from(b.subarray(22, 26)), rarity: b[26], flags: b[27],
+    handle: text(28, HANDLE_BYTES),
+  };
+}
+
+// Payload de CARD: bytes 0..47 de la estampa. type, badge_no, rarity y flags
+// los pone el badge; se copian de la actual para no mandar basura.
+function packCardFields(c) {
+  const out = new Uint8Array(CARD_FIELDS_BYTES);
+  const dv = new DataView(out.buffer);
+  out[0] = CARD_VERSION;
+  out[1] = c.type || 0;
+  dv.setUint16(2, c.badgeNo || 0, true);
+  out.set(utf8.encode(c.nickname), 4);
+  out[20] = c.team;
+  out[21] = c.position;
+  out.set(c.stats, 22);
+  out[26] = c.rarity || 0;
+  out[27] = c.flags || 0;
+  out.set(utf8.encode(c.handle), 28);
+  return out;
+}
+
+/* ---------------- UI: controles de imagen ---------------- */
+
+const params = () => ({
+  brightness: +$("br").value,
+  contrast:   +$("ct").value,
+  gamma:      +$("gm").value / 100,
+  bp:         +$("bp").value,
+  wp:         +$("wp").value,
+  sharpen:    +$("sh").value / 100,
+  invert:     $("invert").checked,
+  mode:       $("mode").value,
+  threshold:  +$("thr").value,
+});
+
+const SLIDERS = [["br","brV",v=>v],["ct","ctV",v=>v],["gm","gmV",v=>(v/100).toFixed(2)],
+  ["bp","bpV",v=>v],["wp","wpV",v=>v],["sh","shV",v=>v],["thr","thrV",v=>v],
+  ["cropSize","cropSizeV",v=>v]];
+for (const [id, out, fmt] of SLIDERS) {
+  $(id).addEventListener("input", () => { $(out).textContent = fmt(+$(id).value); onControl(id); });
+}
+$("invert").addEventListener("change", render);
+$("mode").addEventListener("change", () => {
+  $("thrRow").style.display = $("mode").value === "threshold" ? "" : "none";
+  render();
+});
+
+function onControl(id) {
+  if (id === "cropSize") {
+    updateCropFromSlider();
+    drawSource();
+  } else if (id === "bp" && +$("bp").value >= +$("wp").value) {
+    $("wp").value = +$("bp").value + 1; $("wpV").textContent = $("wp").value;
+  } else if (id === "wp" && +$("wp").value <= +$("bp").value) {
+    $("bp").value = +$("wp").value - 1; $("bpV").textContent = $("bp").value;
+  }
+  render();
+}
+
+$("autoBtn").addEventListener("click", () => {
+  if (!oriented) return;
+  const g = toGray(cropToTarget().getImageData(0, 0, W, H));
+  const [lo, hi] = autoLevels(g);
+  $("bp").value = lo; $("bpV").textContent = lo;
+  $("wp").value = hi; $("wpV").textContent = hi;
+  render();
+});
+
+$("resetBtn").addEventListener("click", () => {
+  for (const [id, out, fmt] of SLIDERS) {
+    if (id === "cropSize") continue;
+    $(id).value = $(id).defaultValue;
+    $(out).textContent = fmt(+$(id).value);
+  }
+  $("invert").checked = false;
+  render();
+});
+
+// Renglones de texto encima de la imagen
+const textRows = [];
+for (let i = 0; i < 3; i++) {
+  const div = document.createElement("div");
+  div.className = "textline";
+  div.innerHTML =
+    '<input type="text" placeholder="Renglón ' + (i+1) + '">' +
+    '<div class="textopts">' +
+      '<label>Tamaño <input type="number" min="6" max="80" value="20"></label>' +
+      '<label>X <input type="number" min="0" max="399" value="10"></label>' +
+      '<label>Y <input type="number" min="0" max="399" value="' + (10 + i * 30) + '"></label>' +
+      '<select><option value="black">Negro</option><option value="white">Blanco</option></select>' +
+    '</div>';
+  $("textRows").appendChild(div);
+  const text = div.children[0];
+  const [size, x, y] = div.children[1].querySelectorAll("input");
+  const color = div.children[1].querySelector("select");
+  for (const el of [text, size, x, y, color]) el.addEventListener("input", render);
+  textRows.push({ text, size, x, y, color });
+}
+
+function textLines() {
+  return textRows.map(r => ({
+    text: r.text.value,
+    size: Math.max(6, +r.size.value || 20),
+    x: +r.x.value || 0,
+    y: +r.y.value || 0,
+    white: r.color.value === "white",
+  }));
+}
+
+/* ---------------- UI: destino (avatar o slot) ---------------- */
+
+const preview = $("preview"), pvCtx = preview.getContext("2d");
+
+// Escala entera para que los píxeles se vean nítidos
+function fitCanvas(cnv, w, h) {
+  cnv.width = w; cnv.height = h;
+  const s = Math.max(1, Math.floor(400 / Math.max(w, h)));
+  cnv.style.width = w * s + "px";
+}
+
+function setTarget(t) {
+  target = t;
+  [W, H] = t === "avatar" ? [AVATAR_W, AVATAR_H] : [panel.w, panel.h];
+  $("avatarCtl").hidden = t !== "avatar";
+  $("slotCtl").hidden = t === "avatar";
+  $("pvTitle").textContent = "Vista previa (" + W + " x " + H + ")";
+  fitCanvas(preview, W, H);
+  work.width = W; work.height = H;
+  lastBits = null;
+  pvCtx.fillStyle = "#fff";
+  pvCtx.fillRect(0, 0, W, H);
+  rebuildOriented(false);
+}
+
+for (const r of document.querySelectorAll("input[name=target]")) {
+  r.addEventListener("change", () => setTarget(r.value));
+}
+
+/* ---------------- UI: fuente, recorte y orientación ---------------- */
+
+function setSource(canvas) {
+  baseImage = canvas;
+  rot = 0; flipH = false; flipV = false;
+  rebuildOriented(true);
+}
+
+const aspect = () => W / H;   // ancho/alto del recorte = el del destino
+const maxCropH = () => Math.min(oriented.height, oriented.width / aspect());
+
+function rebuildOriented(resetCrop) {
+  if (!baseImage) return;
+  const swap = rot % 2 === 1;
+  const w = swap ? baseImage.height : baseImage.width;
+  const h = swap ? baseImage.width : baseImage.height;
+  const cnv = document.createElement("canvas");
+  cnv.width = w; cnv.height = h;
+  const ctx = cnv.getContext("2d");
+  ctx.translate(w / 2, h / 2);
+  ctx.rotate(rot * Math.PI / 2);
+  ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+  ctx.drawImage(baseImage, -baseImage.width / 2, -baseImage.height / 2);
+  oriented = cnv;
+  if (resetCrop) {
+    crop = { cx: w / 2, cy: h / 2, size: maxCropH() };
+    $("cropSize").value = 100; $("cropSizeV").textContent = "100";
+  } else {
+    crop.size = Math.min(crop.size || Infinity, maxCropH());
+    clampCrop();
+  }
+  drawSource();
+  render();
+}
+
+$("rotBtn").addEventListener("click", () => { rot = (rot + 1) % 4; rebuildOriented(false); });
+$("flipHBtn").addEventListener("click", () => { flipH = !flipH; rebuildOriented(false); });
+$("flipVBtn").addEventListener("click", () => { flipV = !flipV; rebuildOriented(false); });
+
+function clampCrop() {
+  if (!oriented) return;
+  const hw = crop.size * aspect() / 2, hh = crop.size / 2;
+  crop.cx = Math.min(oriented.width - hw, Math.max(hw, crop.cx));
+  crop.cy = Math.min(oriented.height - hh, Math.max(hh, crop.cy));
+}
+
+function updateCropFromSlider() {
+  if (!oriented) return;
+  crop.size = Math.max(10, maxCropH() * (+$("cropSize").value / 100));
+  clampCrop();
+}
+
+// Vista de la fuente: imagen ajustada al canvas y el recuadro del recorte
+const srcCanvas = $("srcCanvas"), srcCtx = srcCanvas.getContext("2d");
+function srcScale() {
+  return Math.min(srcCanvas.width / oriented.width, srcCanvas.height / oriented.height);
+}
+function drawSource() {
+  srcCtx.fillStyle = "#000";
+  srcCtx.fillRect(0, 0, srcCanvas.width, srcCanvas.height);
+  if (!oriented) {
+    srcCtx.fillStyle = "#555";
+    srcCtx.font = "16px sans-serif";
+    srcCtx.textAlign = "center";
+    srcCtx.fillText("sin imagen", srcCanvas.width / 2, srcCanvas.height / 2);
+    srcCtx.textAlign = "start";
+    return;
+  }
+  const s = srcScale();
+  const dw = oriented.width * s, dh = oriented.height * s;
+  const ox = (srcCanvas.width - dw) / 2, oy = (srcCanvas.height - dh) / 2;
+  // tablero de fondo para que se vea lo transparente y lo negro
+  // (el pipeline pinta lo transparente de blanco)
+  for (let y = 0; y < dh; y += 12) {
+    for (let x = 0; x < dw; x += 12) {
+      srcCtx.fillStyle = ((x + y) / 12) % 2 ? "#3a3f4a" : "#5a6170";
+      srcCtx.fillRect(ox + x, oy + y, Math.min(12, dw - x), Math.min(12, dh - y));
+    }
+  }
+  srcCtx.drawImage(oriented, ox, oy, dw, dh);
+  // oscurecer fuera del recorte
+  const cw = crop.size * aspect();
+  const rx = ox + (crop.cx - cw / 2) * s;
+  const ry = oy + (crop.cy - crop.size / 2) * s;
+  const rw = cw * s, rh = crop.size * s;
+  srcCtx.fillStyle = "rgba(0,0,0,0.55)";
+  srcCtx.fillRect(0, 0, srcCanvas.width, ry);
+  srcCtx.fillRect(0, ry + rh, srcCanvas.width, srcCanvas.height - ry - rh);
+  srcCtx.fillRect(0, ry, rx, rh);
+  srcCtx.fillRect(rx + rw, ry, srcCanvas.width - rx - rw, rh);
+  srcCtx.strokeStyle = "#fff";
+  srcCtx.lineWidth = 2;
+  srcCtx.strokeRect(rx, ry, rw, rh);
+}
+
+// arrastrar mueve el recorte, la rueda lo cambia de tamaño
+let dragging = false, dragOff = { x: 0, y: 0 };
+srcCanvas.addEventListener("pointerdown", e => {
+  if (!oriented) return;
+  dragging = true;
+  srcCanvas.setPointerCapture(e.pointerId);
+  const p = srcToImage(e);
+  dragOff.x = p.x - crop.cx;
+  dragOff.y = p.y - crop.cy;
+});
+srcCanvas.addEventListener("pointermove", e => {
+  if (!dragging || !oriented) return;
+  const p = srcToImage(e);
+  crop.cx = p.x - dragOff.x;
+  crop.cy = p.y - dragOff.y;
+  clampCrop();
+  drawSource();
+  render();
+});
+srcCanvas.addEventListener("pointerup", () => { dragging = false; });
+srcCanvas.addEventListener("wheel", e => {
+  if (!oriented) return;
+  e.preventDefault();
+  const max = maxCropH();
+  crop.size = Math.min(max, Math.max(10, crop.size * (e.deltaY > 0 ? 0.95 : 1.05)));
+  $("cropSize").value = Math.round(crop.size / max * 100);
+  $("cropSizeV").textContent = $("cropSize").value;
+  clampCrop();
+  drawSource();
+  render();
+}, { passive: false });
+
+function srcToImage(e) {
+  const r = srcCanvas.getBoundingClientRect();
+  const s = srcScale();
+  const dw = oriented.width * s, dh = oriented.height * s;
+  const ox = (srcCanvas.width - dw) / 2, oy = (srcCanvas.height - dh) / 2;
+  const x = (e.clientX - r.left) * (srcCanvas.width / r.width);
+  const y = (e.clientY - r.top) * (srcCanvas.height / r.height);
+  return { x: (x - ox) / s, y: (y - oy) / s };
+}
+
+/* ---------------- render ---------------- */
+
+const work = document.createElement("canvas");
+const workCtx = work.getContext("2d", { willReadFrequently: true });
+
+function cropToTarget() {
+  workCtx.imageSmoothingEnabled = true;
+  workCtx.imageSmoothingQuality = "high";
+  workCtx.fillStyle = "#fff";
+  workCtx.fillRect(0, 0, W, H);
+  const cw = crop.size * aspect();
+  workCtx.drawImage(oriented,
+    crop.cx - cw / 2, crop.cy - crop.size / 2, cw, crop.size,
+    0, 0, W, H);
+  return workCtx;
+}
+
+function drawBits(ctx, bits, w, h) {
+  const img = ctx.createImageData(w, h);
+  for (let i = 0; i < w * h; i++) {
+    const v = bits[i] ? 255 : 0;
+    img.data[i*4] = img.data[i*4+1] = img.data[i*4+2] = v;
+    img.data[i*4+3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function render() {
+  if (!oriented) return;
+  const p = params();
+  let g = toGray(cropToTarget().getImageData(0, 0, W, H));
+  g = applyTone(g, p);
+  g = applySharpen(g, p.sharpen);
+  let bits = dither(g, p.mode, p.threshold);
+  bits = overlayText(bits, textLines());
+  lastBits = bits;
+  drawBits(pvCtx, bits, W, H);
+  if (target === "avatar") {
+    avatarBits = bits;
+    renderTemplate();
+  }
+}
+
+/* arrastrar los renglones de texto sobre la vista previa */
+
+const measureCtx = document.createElement("canvas").getContext("2d");
+
+function textBoxes() {
+  const boxes = [];
+  textLines().forEach((ln, i) => {
+    if (!ln.text) return;
+    measureCtx.font = "bold " + ln.size + "px sans-serif";
+    boxes.push({ i, x: ln.x, y: ln.y,
+                 w: measureCtx.measureText(ln.text).width,
+                 h: ln.size * 1.2 });
+  });
+  return boxes;
+}
+
+function previewPos(e) {
+  const r = preview.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * (W / r.width),
+           y: (e.clientY - r.top) * (H / r.height) };
+}
+
+function boxAt(p) {
+  const boxes = textBoxes(), pad = 4;
+  for (let k = boxes.length - 1; k >= 0; k--) {
+    const b = boxes[k];
+    if (p.x >= b.x - pad && p.x <= b.x + b.w + pad &&
+        p.y >= b.y - pad && p.y <= b.y + b.h + pad) return b;
+  }
+  return null;
+}
+
+let dragText = null;   // { row, dx, dy }
+preview.addEventListener("pointerdown", e => {
+  const b = boxAt(previewPos(e));
+  if (!b) return;
+  const p = previewPos(e);
+  dragText = { row: textRows[b.i], dx: p.x - b.x, dy: p.y - b.y };
+  preview.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+preview.addEventListener("pointermove", e => {
+  const p = previewPos(e);
+  if (dragText) {
+    dragText.row.x.value = Math.round(Math.min(W - 1, Math.max(0, p.x - dragText.dx)));
+    dragText.row.y.value = Math.round(Math.min(H - 1, Math.max(0, p.y - dragText.dy)));
+    render();
+  } else {
+    preview.style.cursor = boxAt(p) ? "move" : "default";
+  }
+});
+preview.addEventListener("pointerup", () => { dragText = null; });
+
+/* ---------------- fuentes de imagen ---------------- */
+
+function loadBlob(blob) {
+  createImageBitmap(blob).then(bmp => {
+    const cnv = document.createElement("canvas");
+    cnv.width = bmp.width; cnv.height = bmp.height;
+    cnv.getContext("2d").drawImage(bmp, 0, 0);
+    setSource(cnv);
+    setStatus("Imagen cargada (" + bmp.width + " x " + bmp.height + ").", "");
+  }).catch(() => setStatus("No se pudo leer esa imagen.", "err"));
+}
+
+$("fileBtn").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", () => {
+  if ($("file").files[0]) loadBlob($("file").files[0]);
+  $("file").value = "";   // elegir el mismo archivo otra vez también lo carga
+});
+
+const drop = $("drop");
+for (const ev of ["dragover", "dragenter"]) {
+  document.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); });
+}
+for (const ev of ["dragleave", "drop"]) {
+  document.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); });
+}
+document.addEventListener("drop", e => {
+  const f = e.dataTransfer && e.dataTransfer.files[0];
+  if (f && f.type.startsWith("image/")) loadBlob(f);
+});
+document.addEventListener("paste", e => {
+  for (const item of e.clipboardData.items) {
+    if (item.type.startsWith("image/")) { loadBlob(item.getAsFile()); return; }
+  }
+});
+
+// cámara
+let camStream = null;
+const video = $("video");
+if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+  $("camBtn").hidden = true;
+}
+$("camBtn").addEventListener("click", async () => {
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640 } });
+  } catch (err) {
+    setStatus("Cámara no disponible: " + err.message, "err");
+    return;
+  }
+  video.srcObject = camStream;
+  video.style.display = "block";
+  $("capBtn").hidden = false;
+  $("camOffBtn").hidden = false;
+});
+function camStop() {
+  if (camStream) for (const t of camStream.getTracks()) t.stop();
+  camStream = null;
+  video.style.display = "none";
+  $("capBtn").hidden = true;
+  $("camOffBtn").hidden = true;
+}
+$("capBtn").addEventListener("click", () => {
+  const cnv = document.createElement("canvas");
+  cnv.width = video.videoWidth; cnv.height = video.videoHeight;
+  cnv.getContext("2d").drawImage(video, 0, 0);
+  camStop();
+  setSource(cnv);
+  setStatus("Capturada de la cámara.", "");
+});
+$("camOffBtn").addEventListener("click", camStop);
+
+/* ---------------- editor de la estampa ---------------- */
+
+function fillSelect(sel, names) {
+  sel.innerHTML = "";
+  sel.add(new Option("Ninguna", NONE));
+  names.forEach((n, i) => sel.add(new Option(n, i)));
+}
+fillSelect($("team"), TEAMS);
+fillSelect($("pos"), POSITIONS);
+
+const statInputs = STATS.map((name, i) => {
+  const div = document.createElement("div");
+  div.className = "ctl";
+  div.innerHTML = '<label for="st' + i + '">' + name + '</label>' +
+    '<input type="range" id="st' + i + '" min="0" max="' + STAT_MAX + '" value="0">' +
+    '<output id="st' + i + 'V">0</output>';
+  $("statRows").appendChild(div);
+  const input = div.querySelector("input");
+  // el presupuesto se respeta al mover: no deja pasar de STAT_BUDGET
+  input.addEventListener("input", () => {
+    const others = statValues().reduce((a, v) => a + v, 0) - +input.value;
+    if (+input.value + others > STAT_BUDGET) input.value = STAT_BUDGET - others;
+    onCardEdit();
+  });
+  return input;
+});
+const statValues = () => statInputs.map(s => +s.value);
+
+function editedCard() {
+  const base = myCard ? parseCard(myCard) : { type: 0, badgeNo: info ? info.no : 0, rarity: 0, flags: 0 };
+  return Object.assign(base, {
+    nickname: cleanText($("nick").value),
+    team: +$("team").value,
+    position: +$("pos").value,
+    stats: statValues(),
+    handle: $("handleOn").checked ? cleanText($("handle").value) : "",
+  });
+}
+
+function cardErrors(c) {
+  const errs = [];
+  if (!c.nickname) errs.push("escribe un nickname");
+  const e1 = textError(c.nickname, NICK_BYTES, "nickname");
+  if (e1) errs.push(e1);
+  const e2 = textError(c.handle, HANDLE_BYTES, "handle");
+  if (e2) errs.push(e2);
+  return errs;
+}
+
+function onCardEdit() {
+  statInputs.forEach((s, i) => { $("st" + i + "V").textContent = s.value; });
+  const used = statValues().reduce((a, v) => a + v, 0);
+  $("freeV").textContent = "· puntos libres: " + (STAT_BUDGET - used);
+  const c = editedCard();
+  const nb = utf8.encode(c.nickname).length, hb = utf8.encode(c.handle).length;
+  $("nickV").textContent = nb + "/" + NICK_BYTES + " B";
+  $("nickV").classList.toggle("bad", !!textError(c.nickname, NICK_BYTES, "nickname") || !nb);
+  $("handleV").textContent = hb + "/" + HANDLE_BYTES + " B";
+  $("handleV").classList.toggle("bad", !!textError(c.handle, HANDLE_BYTES, "handle"));
+  $("handle").disabled = !$("handleOn").checked;
+  renderTemplate();
+}
+for (const id of ["nick", "team", "pos", "handle", "handleOn"]) {
+  $(id).addEventListener("input", onCardEdit);
+}
+
+function showCard(c) {
+  $("nick").value = c.nickname;
+  $("team").value = c.team < TEAMS.length ? c.team : NONE;
+  $("pos").value = c.position < POSITIONS.length ? c.position : NONE;
+  statInputs.forEach((s, i) => { s.value = c.stats[i]; });
+  $("handleOn").checked = c.handle !== "";
+  $("handle").value = c.handle;
+  onCardEdit();
+}
+
+/* plantilla visual "Copa BugCon": la estampa en 1 bit, al tamaño del panel */
+
+const tpl = $("tpl"), tplCtx = tpl.getContext("2d", { willReadFrequently: true });
+let tplBits = null;
+
+function fitFont(ctx, text, weight, maxSize, maxW) {
+  let size = maxSize;
+  for (; size > 8; size--) {
+    ctx.font = weight + " " + size + "px sans-serif";
+    if (ctx.measureText(text).width <= maxW) break;
+  }
+  return size;
+}
+
+function renderTemplate() {
+  const w = panel.w, h = panel.h, c = editedCard();
+  if (tpl.width !== w || tpl.height !== h) fitCanvas(tpl, w, h);
+  const ctx = tplCtx;
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = ctx.strokeStyle = "#000";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+  ctx.strokeRect(2.5, 2.5, w - 5, h - 5);
+  ctx.textBaseline = "middle";
+
+  // banda: COPA BUGCON 2026 y el dorsal
+  const band = Math.max(16, Math.round(h * 0.1));
+  ctx.fillRect(4, 4, w - 8, band);
+  ctx.fillStyle = "#fff";
+  const no = "#" + String(c.badgeNo || 0).padStart(3, "0");
+  fitFont(ctx, no, "bold", band - 4, w / 3);
+  const noW = ctx.measureText(no).width;
+  ctx.textAlign = "right";
+  ctx.fillText(no, w - 8, 4 + band / 2);
+  // el título largo si cabe; en un panel angosto, el corto
+  const titleW = w - 20 - noW;
+  const title = ["COPA BUGCON 2026", "BUGCON 26"].find(t =>
+    (fitFont(ctx, t, "bold", band - 4, titleW), ctx.measureText(t).width <= titleW)) || "BC26";
+  fitFont(ctx, title, "bold", band - 4, titleW);
+  ctx.textAlign = "left";
+  ctx.fillText(title, 8, 4 + band / 2);
+  ctx.fillStyle = "#000";
+
+  // pie: estadísticas en barras y la sede
+  const foot = Math.max(9, Math.round(h * 0.05));
+  const statH = Math.max(8, Math.round(h * 0.055));
+  const statsTop = h - 6 - foot - STATS.length * statH;
+  ctx.font = "bold " + (statH - 1) + "px sans-serif";
+  const labelW = ctx.measureText("ATK 99").width + 4;
+  STATS.forEach((name, i) => {
+    const y = statsTop + i * statH;
+    ctx.textAlign = "left";
+    ctx.fillText(name, 8, y + statH / 2);
+    ctx.textAlign = "right";
+    ctx.fillText(String(c.stats[i]), 8 + labelW, y + statH / 2);
+    const bx = 12 + labelW, bw = w - 10 - bx;
+    ctx.strokeRect(bx + 0.5, y + 1.5, bw - 1, statH - 3);
+    ctx.fillRect(bx + 2, y + 3, Math.round((bw - 4) * c.stats[i] / STAT_MAX), statH - 6);
+  });
+  ctx.textAlign = "center";
+  fitFont(ctx, "CDMX · 20-21 NOV 2026", "", foot, w - 12);
+  ctx.fillText("CDMX · 20-21 NOV 2026", w / 2, h - 5 - foot / 2);
+
+  // cuerpo: avatar y, a su derecha o debajo, nickname, selección y posición
+  const top = 6 + band, bottom = statsTop - 3, bodyH = bottom - top;
+  const team = TEAMS[c.team] || "", pos = POSITIONS[c.position] || "";
+  const sub = [team, [pos, RARITIES[c.rarity] || ""].filter(Boolean).join(" · ")];
+  const nick = c.nickname || "Jugador";
+  // como ui/card_face: junto al nickname, el avatar cede espacio para que
+  // el nickname quepa al menos a 10 px
+  ctx.font = "bold 10px sans-serif";
+  const nickMinW = Math.ceil(ctx.measureText(nick).width);
+  const side = w >= h ? Math.max(24, Math.min(AVATAR_W, bodyH, Math.floor(w / 2), w - 16 - nickMinW))
+                      : Math.min(AVATAR_W, w - 12, Math.floor(bodyH / 2));
+  let tx = 6, ty = top, tw = w - 12, th = bodyH;
+  const ax = w >= h ? 6 : (w - side) >> 1, ay = w >= h ? top + ((bodyH - side) >> 1) : top;
+  if (w >= h) { tx = ax + side + 4; tw = w - 6 - tx; } else { ty = top + side + 2; th = bodyH - side - 2; }
+  ctx.strokeRect(ax + 0.5, ay + 0.5, side - 1, side - 1);
+  if (!avatarBits) {
+    ctx.textAlign = "center";
+    fitFont(ctx, "?", "bold", side >> 1, side);
+    ctx.fillText("?", ax + side / 2, ay + side / 2);
+  }
+  const subSize = Math.max(9, Math.min(14, Math.round(th / 6)));
+  const lineH = subSize + 2;
+  const nickSize = fitFont(ctx, nick, "bold", Math.min(40, Math.round(th - 2 * lineH - 6)), tw);
+  ctx.textAlign = "center";
+  const cx = tx + tw / 2;
+  const nickY = ty + (th - nickSize - 2 * lineH - 6) / 2 + nickSize / 2;
+  ctx.fillText(nick, cx, nickY);
+  sub.forEach((s, i) => {
+    fitFont(ctx, s, "", subSize, tw);
+    ctx.fillText(s, cx, nickY + nickSize / 2 + 4 + lineH * (i + 0.5));
+  });
+
+  // a 1 bit con umbral duro, y el avatar 1:1 (o reducido) en su cuadro
+  const img = ctx.getImageData(0, 0, w, h).data;
+  const bits = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) bits[i] = img[i * 4] >= 128 ? 1 : 0;
+  if (avatarBits) {
+    const s = side - 2;
+    for (let y = 0; y < s; y++) {
+      for (let x = 0; x < s; x++) {
+        const sx = Math.floor(x * AVATAR_W / s), sy = Math.floor(y * AVATAR_H / s);
+        bits[(ay + 1 + y) * w + ax + 1 + x] = avatarBits[sy * AVATAR_W + sx];
+      }
+    }
+  }
+  tplBits = bits;
+  drawBits(tplCtx, bits, w, h);
+}
+
+/* ---------------- transporte: Web Serial ---------------- */
+
+const hasSerial = "serial" in navigator;
+if (!hasSerial) {
+  $("nowebserial").hidden = false;
+  $("connectBtn").disabled = true;
+}
+
+let port = null, writer = null, reader = null, readerLoopDone = null;
+let rxChunks = [], rxNotify = null;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function setStatus(msg, cls) {
+  $("status").textContent = msg;
+  $("status").className = cls || "";
+}
+
+const DEVICE_BUTTONS = ["sendBtn", "showBtn", "clrBtn", "testBtn", "avatarBtn",
+                        "readCardBtn", "saveCardBtn", "tplSendBtn", "albumBtn"];
+function deviceButtons(enabled) {
+  for (const id of DEVICE_BUTTONS) $(id).disabled = !enabled;
+}
+
+async function readerLoop(reader) {
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value && value.length) {
+        rxChunks.push(value);
+        if (rxNotify) { rxNotify(); rxNotify = null; }
+      }
+    }
+  } catch (e) { /* badge desconectado */ }
+  reader.releaseLock();
+}
+
+function rxAvailable() {
+  return rxChunks.reduce((a, c) => a + c.length, 0);
+}
+
+async function rxWait(deadline) {
+  const remain = deadline - Date.now();
+  if (remain <= 0) throw new Error("timeout");
+  let timer;
+  await new Promise((res, rej) => {
+    rxNotify = res;
+    timer = setTimeout(() => rej(new Error("timeout")), remain);
+  }).finally(() => clearTimeout(timer));
+}
+
+async function readBytesExact(n, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (rxAvailable() < n) await rxWait(deadline);
+  const out = new Uint8Array(n);
+  let got = 0;
+  while (got < n) {
+    const c = rxChunks[0], take = Math.min(c.length, n - got);
+    out.set(c.subarray(0, take), got);
+    if (take === c.length) rxChunks.shift();
+    else rxChunks[0] = c.subarray(take);
+    got += take;
+  }
+  return out;
+}
+
+async function readLine(timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  const bytes = [];
+  for (;;) {
+    while (rxAvailable() === 0) await rxWait(deadline);
+    const c = rxChunks[0];
+    const i = c.indexOf(0x0a);
+    if (i >= 0) {
+      bytes.push(...c.subarray(0, i));
+      if (i + 1 === c.length) rxChunks.shift();
+      else rxChunks[0] = c.subarray(i + 1);
+      return new TextDecoder().decode(new Uint8Array(bytes)).replace(/\r$/, "");
+    }
+    if (bytes.length + c.length > 512) throw new Error("respuesta demasiado larga");
+    bytes.push(...c);
+    rxChunks.shift();
+  }
+}
+
+$("connectBtn").addEventListener("click", async () => {
+  if (port) { await disconnect(); return; }
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+  } catch (err) {
+    port = null;
+    setStatus("No se pudo conectar: " + err.message, "err");
+    return;
+  }
+  // Sin setSignals(): DTR bajo con RTS alto reinicia el ESP32-S3.
+  writer = port.writable.getWriter();
+  rxChunks = [];
+  reader = port.readable.getReader();
+  readerLoopDone = readerLoop(reader);
+  port.addEventListener("disconnect", disconnect);
+  $("connectBtn").textContent = "Desconectar";
+  $("connState").textContent = "conectado";
+  setStatus("Conectado.", "ok");
+  await sleep(OPEN_WAIT_MS);
+  deviceButtons(true);
+  if (await refreshInfo()) await readCard(true);
+});
+
+async function disconnect() {
+  const p = port;
+  port = null;
+  info = null;
+  $("connectBtn").textContent = "Conectar";
+  $("connState").textContent = "sin conexión";
+  deviceButtons(false);
+  setStatus("Desconectado.", "");
+  if (!p) return;
+  try { if (writer) { writer.releaseLock(); } } catch (e) {}
+  // readable.cancel() rechaza con el reader puesto: se cancela el reader
+  try { await reader.cancel(); } catch (e) {}
+  try { await readerLoopDone; } catch (e) {}
+  try { await p.close(); } catch (e) {}
+  writer = null;
+}
+
+const FRIENDLY = {
+  "ERR empty":     "ese slot está vacío: envía una imagen primero.",
+  "ERR badslot":   "número de slot inválido.",
+  "ERR timeout":   "el badge no recibió todos los datos; intenta de nuevo.",
+  "ERR flash":     "el badge no pudo escribir en su memoria.",
+  "ERR badcmd":    "el badge no entendió el comando (¿firmware viejo?).",
+  "ERR badver":    "el badge no reconoce esta versión de estampa (¿firmware viejo?).",
+  "ERR badnick":   "el badge rechazó el nickname (vacío o con caracteres no válidos).",
+  "ERR badteam":   "la selección no está en el catálogo del badge.",
+  "ERR badpos":    "la posición no está en el catálogo del badge.",
+  "ERR badstats":  "cada estadística va de 0 a " + STAT_MAX + " y entre todas suman a lo más " + STAT_BUDGET + ".",
+  "ERR badhandle": "el badge rechazó el handle (caracteres no válidos).",
+  "timeout":       "el badge no contestó; revisa la conexión.",
+};
+
+let busy = false;
+async function command(line, payload, fn, label) {
+  if (!port) return null;
+  if (busy) {
+    setStatus("El badge está ocupado: espera a que termine la operación.", "err");
+    return null;
+  }
+  busy = true;
+  deviceButtons(false);
+  try {
+    rxChunks = [];   // descarta bytes viejos
+    await writer.write(utf8.encode(line + "\n"));
+    if (payload) await sendPayload(payload);
+    return await fn();
+  } catch (err) {
+    setStatus((label || line.split(" ")[0]) + " falló: " + (FRIENDLY[err.message] || err.message), "err");
+    return null;
+  } finally {
+    busy = false;
+    deviceButtons(!!port);
+    $("prog").hidden = true;
+  }
+}
+
+async function sendPayload(payload) {
+  const prog = $("prog");
+  prog.max = payload.length;
+  prog.value = 0;
+  prog.hidden = false;
+  const CHUNK = 250;
+  for (let off = 0; off < payload.length; off += CHUNK) {
+    await writer.write(payload.subarray(off, Math.min(payload.length, off + CHUNK)));
+    prog.value = Math.min(payload.length, off + CHUNK);
+  }
+}
+
+// Las respuestas empiezan con OK o ERR; las demás líneas son logs del
+// firmware y se saltan.
+async function readReply(timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const line = await readLine(Math.max(1, deadline - Date.now()));
+    if (line.startsWith("OK") || line.startsWith("ERR")) return line;
+  }
+}
+
+// Un refresco completo de la e-paper tarda unos segundos: timeout holgado
+// para que un OK tardío nunca desincronice el siguiente comando.
+async function expectOk(action) {
+  const reply = await readReply(45000);
+  if (reply === "OK") {
+    setStatus(action + ": OK", "ok");
+    return true;
+  }
+  const slow = reply.match(/^OK slow=(\d+)/);
+  if (slow) {
+    setStatus(action + ": se mostró, pero el panel tardó " +
+      (slow[1] / 1000).toFixed(1) + " s en lugar de ~1.6 s; puede no haberse actualizado.", "err");
+    return true;
+  }
+  throw new Error(reply || "sin respuesta");
+}
+
+// "OK <n>" seguido de n bytes (READ, ALBM)
+async function readPayloadReply(expected) {
+  const reply = await readReply(15000);
+  const m = reply.match(/^OK (\d+)$/);
+  if (!m) throw new Error(reply || "sin respuesta");
+  if (expected !== undefined && +m[1] !== expected) {
+    throw new Error("el badge mandó " + m[1] + " B y se esperaban " + expected);
+  }
+  return readBytesExact(+m[1], 5000);
+}
+
+const INFO_RE = /^OK BB26 (\S+) no=(\d+) panel=(\d+)x(\d+) album=(\d+)\/(\d+) slots=(\d+) current=(-?\d+) used=([01]+)$/;
+
+async function refreshInfo(keepStatus) {
+  if (!port) return false;
+  // holgado: recién arrancado, el badge dibuja antes de contestar
+  const reply = await command("INFO", null, () => readReply(15000));
+  if (reply === null) return false;
+  const m = reply.match(INFO_RE);
+  if (!m) {
+    setStatus("Esto no parece un badge BugCon 2026: " + reply, "err");
+    return false;
+  }
+  info = { fw: m[1], no: +m[2], w: +m[3], h: +m[4], album: +m[5], total: +m[6],
+           slots: +m[7], current: +m[8], used: m[9] };
+  $("connState").textContent = "fw " + info.fw + " · #" + info.no + " · panel " +
+    info.w + "x" + info.h + " · álbum " + info.album + "/" + info.total;
+  if (info.w !== panel.w || info.h !== panel.h || info.slots !== numSlots) {
+    panel = { w: info.w, h: info.h };
+    numSlots = info.slots;
+    buildSlots();
+    if (target === "slot") setTarget("slot");
+  }
+  updateSlotUi(info.used, info.current);
+  renderTemplate();
+  if (!keepStatus) setStatus("Badge #" + info.no + ", firmware " + info.fw + ".", "ok");
+  return true;
+}
+
+/* selector de slot: al elegirlo también se lee al editor */
+let slotLabels = [];
+function buildSlots() {
+  $("slots").innerHTML = "";
+  slotLabels = [];
+  for (let i = 0; i < numSlots; i++) {
+    const label = document.createElement("label");
+    label.innerHTML = '<input type="radio" name="slot" value="' + i + '"' +
+      (i === 0 ? " checked" : "") + '><span>Slot ' + i + '</span>';
+    $("slots").appendChild(label);
+    label.querySelector("input").addEventListener("click", () => readSlot(i));
+    slotLabels.push(label);
+  }
+}
+buildSlots();
+
+function updateSlotUi(used, current) {
+  for (let i = 0; i < slotLabels.length; i++) {
+    slotLabels[i].classList.toggle("used", used[i] === "1");
+    slotLabels[i].title = (used[i] === "1" ? "ocupado" : "vacío") +
+      (i === current ? ", en pantalla" : "");
+  }
+}
+
+function selectedSlot() {
+  return +document.querySelector("#slots input:checked").value;
+}
+
+const panelBytes = () => ((panel.w + 7) >> 3) * panel.h;
+
+async function uploadSlot(n, bits, what) {
+  setStatus("Enviando " + what + " al slot " + n + "…", "");
+  const ok = await command("UPLD " + n, packBits(bits, panel.w, panel.h),
+    () => expectOk(what + " al slot " + n));
+  if (ok) await refreshInfo(true);
+}
+
+$("sendBtn").addEventListener("click", () => {
+  if (!lastBits) { setStatus("Carga una imagen primero.", "err"); return; }
+  uploadSlot(selectedSlot(), lastBits, "Imagen");
+});
+
+$("testBtn").addEventListener("click", () =>
+  uploadSlot(selectedSlot(), testPatternBits(panel.w, panel.h), "Patrón de prueba"));
+
+$("tplSendBtn").addEventListener("click", () => {
+  const errs = cardErrors(editedCard());
+  if (errs.length) { setStatus("Revisa la estampa: " + errs.join("; ") + ".", "err"); return; }
+  uploadSlot(selectedSlot(), tplBits, "Plantilla");
+});
+
+$("showBtn").addEventListener("click", async () => {
+  const n = selectedSlot();
+  setStatus("Mostrando el slot " + n + "…", "");
+  const ok = await command("SHOW " + n, null, () => expectOk("Mostrar slot " + n));
+  if (ok) await refreshInfo(true);
+});
+
+async function readSlot(n) {
+  if (!port || busy) return;
+  const bytes = await command("READ " + n, null, async () => {
+    try {
+      return await readPayloadReply(panelBytes());
+    } catch (e) {
+      if (e.message === "ERR empty") return "empty";
+      throw e;
+    }
+  });
+  if (!bytes) return;
+  if (bytes === "empty") {
+    setStatus("El slot " + n + " está vacío.", "");
+    return;
+  }
+  const cnv = document.createElement("canvas");
+  cnv.width = panel.w; cnv.height = panel.h;
+  drawBits(cnv.getContext("2d"), unpackBytes(bytes, panel.w, panel.h), panel.w, panel.h);
+  if (target !== "slot") {
+    document.querySelector("input[name=target][value=slot]").checked = true;
+    setTarget("slot");
+  }
+  setSource(cnv);
+  setStatus("Slot " + n + " cargado en el editor.", "ok");
+}
+
+$("clrBtn").addEventListener("click", () => {
+  setStatus("Limpiando…", "");
+  command("CLR", null, () => expectOk("Limpiar"));
+});
+
+$("avatarBtn").addEventListener("click", async () => {
+  if (!avatarBits) { setStatus("Carga una imagen para el avatar primero.", "err"); return; }
+  setStatus("Enviando el avatar…", "");
+  await command("AVTR", packBits(avatarBits, AVATAR_W, AVATAR_H),
+    () => expectOk("Avatar"));
+});
+
+// Mi estampa firmada: bytes 16..80 de la cabecera de ALBM
+async function fetchAlbum() {
+  return command("ALBM", null, async () => {
+    const data = await readPayloadReply();
+    if (data.length < ALBUM_HEADER_BYTES ||
+        String.fromCharCode(...data.subarray(0, 4)) !== "ALBM") {
+      throw new Error("exportación de ALBM inválida");
+    }
+    return data;
+  }, "Leer el álbum");
+}
+
+async function readCard(quiet) {
+  const data = await fetchAlbum();
+  if (!data) return;
+  myCard = data.slice(16, 16 + CARD_BYTES);
+  showCard(parseCard(myCard));
+  if (!quiet) setStatus("Estampa leída del badge.", "ok");
+}
+$("readCardBtn").addEventListener("click", () => readCard(false));
+
+$("saveCardBtn").addEventListener("click", async () => {
+  const c = editedCard(), errs = cardErrors(c);
+  if (errs.length) { setStatus("Revisa la estampa: " + errs.join("; ") + ".", "err"); return; }
+  setStatus("Guardando la estampa…", "");
+  const ok = await command("CARD", packCardFields(c), () => expectOk("Estampa"), "Guardar la estampa");
+  if (!ok) return;
+  await readCard(true);   // lo que quedó en el badge (normalizado y firmado)
+  setStatus("Estampa guardada y firmada por el badge.", "ok");
+});
+
+$("albumBtn").addEventListener("click", async () => {
+  const data = await fetchAlbum();
+  if (!data) return;
+  const no = new DataView(data.buffer, data.byteOffset).getUint16(18, true);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([data], { type: "application/octet-stream" }));
+  a.download = "album_" + no + ".bin";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  setStatus("Álbum descargado (" + data.length + " B, " +
+    (data.length - ALBUM_HEADER_BYTES) / 80 + " estampas). Verifícalo con tools/verify_album.py.", "ok");
+});
+
+drawSource();
+setTarget("avatar");
+onCardEdit();
+</script>
+</body>
+</html>
