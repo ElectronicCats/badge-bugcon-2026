@@ -1,0 +1,242 @@
+#!/usr/bin/env python3
+"""
+test_verify_album.py — Pruebas de tools/verify_album.py sin badge (F5.8):
+arma exportaciones ALBM con tools/identity.py y comprueba que se acepten las
+buenas y se rechacen las alteradas, como lo hará el backend (F6.4): firma
+inválida, estampa firmada con la clave de otro badge, token falsificado o de
+otro receptor, nonce cambiado, repetidas, la propia, otra K_master y
+exportaciones truncadas. Incluye el álbum lleno (400 + especiales).
+
+Uso (biblioteca estándar):
+  python3 -m unittest tools/test_verify_album.py -v
+  ./tools/test_verify_album.py
+"""
+import os
+import struct
+import subprocess
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import identity  # noqa: E402
+import verify_album as va  # noqa: E402
+
+MASTER = bytes(range(32))
+MY_NO = 42
+MY_MAC = bytes.fromhex("F412FA5203F8")
+CAPACITY = 480  # cfg::album::CAPACITY
+ATTENDEE, SPECIAL = 0, 2
+GOLD = 2
+
+
+def mac_of(no):
+    return bytes([0x02, 0, 0, 0]) + struct.pack(">H", no)
+
+
+def card(no, key=None, type_=ATTENDEE, rarity=0, nick=None):
+    """Estampa v1 de 64 B; firmada con `key` (sin key, sig en ceros)."""
+    nick = (nick or f"Prueba {no}").encode()[:16].ljust(16, b"\0")
+    body = struct.pack("<BBH16sBB4sBB20s", 1, type_, no, nick, no % 8, 0,
+                       bytes([10, 20, 30, 40]), rarity, 0, b"\0" * 20)
+    assert len(body) == identity.SIGNED_BYTES
+    sig = identity.card_sig(key, body) if key else b"\0" * 16
+    return body + sig
+
+
+def key_of(no, master=MASTER, mac=None):
+    return identity.derive_key(master, mac or mac_of(no), no)
+
+
+def entry(no, order, nonce=None, master=MASTER):
+    """Entrada de un intercambio legítimo de `no` hacia mí."""
+    key = key_of(no, master)
+    nonce = no * 0x9E3779B9 & 0xFFFFFFFF if nonce is None else nonce
+    return {"card": card(no, key), "token": identity.token(key, no, MY_NO, nonce),
+            "order": order, "nonce": nonce}
+
+
+def export(entries, provisioned=True, master=MASTER, mine=None):
+    mine = mine or card(MY_NO, identity.derive_key(master, MY_MAC, MY_NO))
+    out = va.HEADER.pack(b"ALBM", va.FORMAT, provisioned, MY_MAC,
+                         len(entries), b"\0\0", mine)
+    for e in entries:
+        out += va.ENTRY.pack(e["card"], e["token"], e["order"], e["nonce"],
+                             b"\0\0")
+    return out
+
+
+def check(data, master=MASTER, macs=None):
+    """-> (estado de mi estampa, [status de cada entrada], [ok])."""
+    header, entries = va.parse_album(data)
+    if macs is None:
+        macs = {e["no"]: mac_of(e["no"]) for e in entries}
+    mine = va.verify(header, entries, master, macs)
+    return mine, [e["status"] for e in entries], [e["ok"] for e in entries]
+
+
+class VerifyAlbum(unittest.TestCase):
+    def test_valid_album(self):
+        mine, status, ok = check(export([entry(7, 1), entry(8, 2)]))
+        self.assertEqual(mine, "OK")
+        self.assertEqual(ok, [True, True])
+
+    def test_tampered_field_invalidates_signature(self):
+        e = entry(7, 1)
+        c = bytearray(e["card"])
+        c[26] = GOLD  # rarity: "me subí a oro" tras firmar
+        e["card"] = bytes(c)
+        _, status, ok = check(export([e]))
+        self.assertEqual(status, ["firma INVÁLIDA, token OK"])
+        self.assertFalse(ok[0])
+
+    def test_tampered_signature_byte(self):
+        e = entry(7, 1)
+        c = bytearray(e["card"])
+        c[63] ^= 0x01
+        e["card"] = bytes(c)
+        self.assertEqual(check(export([e]))[1], ["firma INVÁLIDA, token OK"])
+
+    def test_unsigned_card(self):
+        e = entry(7, 1)
+        e["card"] = card(7)  # sig en ceros
+        self.assertFalse(check(export([e]))[2][0])
+
+    def test_card_signed_by_another_badge(self):
+        # #9 se hace pasar por #7: firma y token con su propia clave.
+        e = entry(7, 1)
+        k9 = key_of(9)
+        e["card"] = card(7, k9)
+        e["token"] = identity.token(k9, 7, MY_NO, e["nonce"])
+        self.assertEqual(check(export([e]))[1],
+                         ["firma INVÁLIDA, token INVÁLIDO"])
+
+    def test_forged_token(self):
+        e = entry(7, 1)
+        e["token"] = bytes(8 * [0x5A])
+        self.assertEqual(check(export([e]))[1], ["firma OK, token INVÁLIDO"])
+
+    def test_token_for_another_receiver(self):
+        # Token legítimo de #7 hacia #43, pegado en la exportación de #42.
+        e = entry(7, 1)
+        e["token"] = identity.token(key_of(7), 7, 43, e["nonce"])
+        self.assertEqual(check(export([e]))[1], ["firma OK, token INVÁLIDO"])
+
+    def test_changed_nonce(self):
+        e = entry(7, 1)
+        e["nonce"] ^= 1
+        self.assertEqual(check(export([e]))[1], ["firma OK, token INVÁLIDO"])
+
+    def test_missing_token(self):
+        e = entry(7, 1)
+        e["token"] = b"\0" * 8
+        self.assertEqual(check(export([e]))[1], ["firma OK, sin token"])
+
+    def test_duplicate_counts_once(self):
+        a = entry(7, 1)
+        b = entry(7, 2, nonce=123)  # Otro intercambio legítimo con #7
+        _, status, ok = check(export([a, b, entry(8, 3)]))
+        self.assertEqual(ok, [True, False, True])
+        self.assertEqual(status[1], "repetida (ya contada)")
+
+    def test_special_and_attendee_with_same_number(self):
+        special = {"card": card(7, type_=SPECIAL, rarity=GOLD),
+                   "token": b"\0" * 8, "order": 2, "nonce": 0}
+        _, status, ok = check(export([entry(7, 1), special]))
+        self.assertEqual(ok, [True, False])
+        self.assertIn("especial", status[1])
+
+    def test_own_card_does_not_count(self):
+        # Con su K_dev cualquiera fabrica una "estampa suya hacia sí mismo".
+        e = entry(MY_NO, 1)
+        e["card"] = card(MY_NO, identity.derive_key(MASTER, MY_MAC, MY_NO))
+        _, status, ok = check(export([e]), macs={MY_NO: MY_MAC})
+        self.assertFalse(ok[0])
+        self.assertIn("del que exporta", status[0])
+
+    def test_without_mac(self):
+        _, status, ok = check(export([entry(7, 1)]), macs={})
+        self.assertFalse(ok[0])
+        self.assertIn("sin MAC", status[0])
+
+    def test_self_mac_for_devkit_test_cards(self):
+        # Las estampas de prueba del DevKit firman con la MAC del propio badge.
+        key = identity.derive_key(MASTER, MY_MAC, 7)
+        e = {"card": card(7, key), "token": identity.token(key, 7, MY_NO, 5),
+             "order": 1, "nonce": 5}
+        header, entries = va.parse_album(export([e]))
+        va.verify(header, entries, MASTER, {}, default_mac=header["mac"])
+        self.assertTrue(entries[0]["ok"])
+        header, entries = va.parse_album(export([e]))
+        va.verify(header, entries, MASTER, {})
+        self.assertIn("sin MAC", entries[0]["status"])
+
+    def test_wrong_master(self):
+        data = export([entry(7, 1)])
+        mine, status, ok = check(data, master=identity.DEV_MASTER)
+        self.assertEqual(mine, "INVÁLIDA")
+        self.assertEqual(status, ["firma INVÁLIDA, token INVÁLIDO"])
+
+    def test_my_card_tampered(self):
+        mine = bytearray(card(MY_NO, identity.derive_key(MASTER, MY_MAC,
+                                                         MY_NO)))
+        mine[4] ^= 0x20
+        self.assertEqual(check(export([], mine=bytes(mine)))[0], "INVÁLIDA")
+
+    def test_malformed_exports(self):
+        good = export([entry(7, 1), entry(8, 2)])
+        for data in (good[:-1], good + b"\0", good[:79], b"ALBX" + good[4:],
+                     good[:4] + b"\x02" + good[5:]):
+            with self.assertRaises(ValueError):
+                va.parse_album(data)
+
+    def test_full_album(self):
+        # 399 asistentes (sin mi dorsal) + 81 especiales = CAPACITY.
+        entries = [entry(no, i + 1) for i, no in
+                   enumerate(n for n in range(1, 401) if n != MY_NO)]
+        for sid in range(1, CAPACITY - len(entries) + 1):
+            entries.append({"card": card(sid, type_=SPECIAL, rarity=GOLD),
+                            "token": b"\0" * 8, "order": len(entries) + 1,
+                            "nonce": 0})
+        data = export(entries)
+        self.assertEqual(len(data), 80 + CAPACITY * 80)
+        mine, status, ok = check(data)
+        self.assertEqual(mine, "OK")
+        self.assertEqual(sum(ok), 399)
+        self.assertTrue(all("especial" in s for s, o in zip(status, ok)
+                            if not o))
+
+    def test_cli_exit_codes(self):
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "verify_album.py")
+        bad = entry(8, 2)
+        bad["card"] = bad["card"][:26] + bytes([GOLD]) + bad["card"][27:]
+        with tempfile.TemporaryDirectory() as tmp:
+            def run(entries, *extra):
+                path = os.path.join(tmp, "album.bin")
+                with open(path, "wb") as f:
+                    f.write(export(entries))
+                macs = [f"--mac={e['card'][2] | e['card'][3] << 8}="
+                        f"{mac_of(e['card'][2] | e['card'][3] << 8).hex()}"
+                        for e in entries]
+                return subprocess.run(
+                    [sys.executable, script, path, "--master", MASTER.hex(),
+                     *macs, *extra], capture_output=True, text=True)
+
+            ok = run([entry(7, 1)])
+            self.assertEqual(ok.returncode, 0, ok.stdout + ok.stderr)
+            self.assertIn("verificadas 1/1", ok.stdout)
+            rejected = run([entry(7, 1), bad])
+            self.assertEqual(rejected.returncode, 1)
+            self.assertIn("firma INVÁLIDA", rejected.stdout)
+            self.assertIn("verificadas 1/2", rejected.stdout)
+            # Provisionado sin --master: no adivina la maestra.
+            path = os.path.join(tmp, "album.bin")
+            no_master = subprocess.run([sys.executable, script, path],
+                                       capture_output=True, text=True)
+            self.assertNotEqual(no_master.returncode, 0)
+            self.assertIn("--master", no_master.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()
