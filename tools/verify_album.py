@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""
+verify_album.py — Verifica la exportación ALBM de un badge (F5.7, §3.3 del
+plan) como lo hará el backend (F6.4): la firma de mi estampa y, por cada
+estampa del álbum, su firma y el token del intercambio.
+
+  K_A = HMAC-SHA256(K_master, MAC_A || A.no)   (tools/identity.py)
+  sig de la estampa de A con K_A; token de A hacia B (el que exporta) con el
+  nonce que B guardó.
+
+Formato (services/usb_protocol.h): cabecera de 80 B ("ALBM", formato 1,
+provisioned, MAC del que exporta, count, reservado, su estampa firmada) y
+count entradas de 80 B (estampa 64, token 8, orden u16, nonce u32, reservado
+2), little endian.
+
+Para derivar K_A hace falta la MAC de cada badge: la tiene la tabla de la
+provisión (F12.4). Aquí se pasa con --mac NO=MAC (repetible) o --macs CSV
+(no,mac por renglón). Sin --master se usa DEV_MASTER si el badge no está
+provisionado. El par virtual Eco del DevKit (#999) firma con la MAC del propio
+badge: --mac 999=<MAC del DevKit>.
+
+Uso:
+  ./tools/verify_album.py album.bin --mac 999=F4:12:FA:52:03:F8
+  ./tools/verify_album.py -p /dev/ttyACM0 --macs provision.csv --master HEX -v
+
+Sale con 0 solo si todo se verificó; con 1 si algo no es válido o no se
+pudo verificar (sin MAC, sin token, especiales de F5.5).
+"""
+import argparse
+import csv
+import struct
+import sys
+
+import identity
+
+HEADER = struct.Struct("<4sBB6sH2s64s")
+ENTRY = struct.Struct("<64s8sHI2s")
+FORMAT = 1
+ATTENDEE = 0  # card::ATTENDEE
+
+
+def parse_album(data):
+    """-> (cabecera como dict, lista de entradas como dict)."""
+    if len(data) < HEADER.size:
+        raise ValueError("exportación incompleta")
+    magic, fmt, prov, mac, count, _, mine = HEADER.unpack_from(data)
+    if magic != b"ALBM" or fmt != FORMAT:
+        raise ValueError(f"no es una exportación ALBM de formato {FORMAT}")
+    if len(data) != HEADER.size + count * ENTRY.size:
+        raise ValueError(f"mide {len(data)} B; con {count} estampas serían "
+                         f"{HEADER.size + count * ENTRY.size}")
+    header = {"provisioned": bool(prov), "mac": mac, "count": count,
+              "card": mine, "no": identity.card_badge_no(mine)}
+    entries = []
+    for i in range(count):
+        card, tok, order, nonce, _ = ENTRY.unpack_from(
+            data, HEADER.size + i * ENTRY.size)
+        entries.append({"card": card, "token": tok, "order": order,
+                        "nonce": nonce, "type": card[1],
+                        "no": identity.card_badge_no(card),
+                        "nick": card[4:20].split(b"\0")[0].decode(
+                            errors="replace")})
+    return header, entries
+
+
+def verify(header, entries, master, macs):
+    """Agrega a cada entrada `status`; devuelve el estado de mi estampa."""
+    me = header["no"]
+    my_key = identity.derive_key(master, header["mac"], me)
+    mine = "OK" if identity.verify_card(my_key, header["card"]) else "INVÁLIDA"
+    for e in entries:
+        mac = macs.get(e["no"])
+        if e["type"] != ATTENDEE:
+            e["status"] = "especial (sin verificar, F5.5)"
+        elif mac is None:
+            e["status"] = "sin MAC: no se puede derivar su clave"
+        else:
+            key = identity.derive_key(master, mac, e["no"])
+            sig = identity.verify_card(key, e["card"])
+            if not any(e["token"]):
+                tok = "sin token"
+            elif identity.verify_token(key, e["no"], me, e["nonce"],
+                                       e["token"]):
+                tok = "token OK"
+            else:
+                tok = "token INVÁLIDO"
+            e["status"] = f"{'firma OK' if sig else 'firma INVÁLIDA'}, {tok}"
+        e["ok"] = e["status"] == "firma OK, token OK"
+    return mine
+
+
+def read_macs(args):
+    macs = {}
+    if args.macs:
+        with open(args.macs, newline="") as f:
+            for row in csv.reader(f):
+                if row and row[0].strip().isdigit():
+                    macs[int(row[0])] = identity.parse_mac(row[1].strip())
+    for item in args.mac:
+        no, _, mac = item.partition("=")
+        macs[int(no)] = identity.parse_mac(mac)
+    return macs
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
+    parser.add_argument("file", nargs="?", help="exportación ALBM (.bin)")
+    parser.add_argument("-p", "--port", help="leer ALBM del badge")
+    parser.add_argument("--master", type=bytes.fromhex,
+                        help="K_master en hex (por omisión DEV_MASTER)")
+    parser.add_argument("--mac", action="append", default=[],
+                        metavar="NO=MAC")
+    parser.add_argument("--macs", help="CSV no,mac de la provisión")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="una línea por estampa, también las válidas")
+    args = parser.parse_args()
+    if (args.file is None) == (args.port is None):
+        parser.error("indica un archivo o --port")
+
+    if args.port:
+        import badge_usb
+
+        badge = badge_usb.Badge(args.port)
+        try:
+            data = badge.album()
+        finally:
+            badge.close()
+    else:
+        data = open(args.file, "rb").read()
+
+    try:
+        header, entries = parse_album(data)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    if header["provisioned"] and args.master is None:
+        parser.error("el badge está provisionado: falta --master")
+    master = args.master or identity.DEV_MASTER
+    macs = read_macs(args)
+    macs.setdefault(header["no"], header["mac"])
+
+    mine = verify(header, entries, master, macs)
+    mac_text = header["mac"].hex(":").upper()
+    print(f"#{header['no']} ({mac_text}, "
+          f"{'provisionado' if header['provisioned'] else 'desarrollo'}): "
+          f"mi estampa {mine}, {header['count']} estampas")
+    for e in entries:
+        if args.verbose or not e["ok"]:
+            print(f"  [{e['order']:3}] tipo {e['type']} #{e['no']:<5} "
+                  f"{e['nick']!r:20} {e['status']}")
+    valid = sum(e["ok"] for e in entries)
+    print(f"verificadas {valid}/{len(entries)}")
+    return 0 if mine == "OK" and valid == len(entries) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
