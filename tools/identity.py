@@ -7,6 +7,7 @@ usan (o la usarán) provision.py (F12.4), verify_album.py (F5) y el backend.
   K_dev = HMAC-SHA256(K_master, MAC(6) || badge_no(u16 LE))
   sig   = HMAC-SHA256(K_dev, estampa[0:48])[:16]
   tok   = HMAC-SHA256(K_A, "XCHG" || A.no || B.no || nonce_B (u32 LE))[:8]
+  tag   = HMAC-SHA256(K_dev, "ALBQ" || badge_no || bitmap(50))[:8]  (QR, F5.6)
 
 Sin provisionar, el badge usa DEV_MASTER (pública) como K_master: el backend,
 con la K_master real, rechaza lo que salga de un DevKit.
@@ -46,6 +47,11 @@ def card_sig(key, card):
 
 def token(key, sender, receiver, nonce):
     return _hmac(key, b"XCHG" + struct.pack("<HHI", sender, receiver, nonce))[:8]
+
+
+def album_tag(key, badge_no, bitmap):
+    """Tag del QR del álbum (identity::albumTag)."""
+    return _hmac(key, b"ALBQ" + struct.pack("<H", badge_no) + bitmap)[:8]
 
 
 def verify_card(key, card):

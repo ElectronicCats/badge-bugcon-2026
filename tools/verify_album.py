@@ -24,8 +24,16 @@ Una estampa repetida en la exportación (mismo tipo y número que una anterior)
 no cuenta: el badge las deduplica, así que una repetida es una exportación
 alterada (el ranking cuenta tokens únicos, §3.3).
 
+QR del álbum (F5.6, vista rápida web): con --qr verifica el texto que
+codifica la pantalla QR del badge (lo que leerá web/album, F6.3):
+  <cfg::album::QR_URL><dorsal>/<bitmap>/<tag>
+bitmap = 50 B (dorsal n en el bit n-1, MSB primero) y tag =
+identity.album_tag() en base32 de RFC 4648 sin relleno. Solo prueba que el
+bitmap salió de ese badge; no cuenta para el ranking (no lleva tokens).
+
 Uso:
   ./tools/verify_album.py album.bin --mac 999=F4:12:FA:52:03:F8
+  ./tools/verify_album.py --qr HTTPS://BUGCON.MX/A/42/... --mac 42=F4:12:FA:52:03:F8
   ./tools/verify_album.py -p /dev/ttyACM0 --self-mac -v
   ./tools/verify_album.py -p /dev/ttyACM0 --macs provision.csv --master HEX -v
 
@@ -34,7 +42,9 @@ pudo verificar (sin MAC, sin token, repetida, la propia, especiales de
 F5.5).
 """
 import argparse
+import base64
 import csv
+import hmac
 import struct
 import sys
 
@@ -44,6 +54,38 @@ HEADER = struct.Struct("<4sBB6sH2s64s")
 ENTRY = struct.Struct("<64s8sHI2s")
 FORMAT = 1
 ATTENDEE = 0  # card::ATTENDEE
+ATTENDEES = 400  # cfg::album::ATTENDEES
+BITMAP_BYTES = (ATTENDEES + 7) // 8
+
+
+def _b32(text, length):
+    data = base64.b32decode(text + "=" * (-len(text) % 8))
+    if len(data) != length:
+        raise ValueError(f"se esperaban {length} B y llegaron {len(data)}")
+    return data
+
+
+def parse_qr(text):
+    """Texto del QR del álbum -> (dorsal, bitmap, tag, dorsales del bitmap)."""
+    try:
+        no, bits, tag = text.strip().rstrip("/").split("/")[-3:]
+        if not no.isdigit():
+            raise ValueError("dorsal no numérico")
+        bitmap = _b32(bits, BITMAP_BYTES)
+        tag = _b32(tag, 8)
+    except ValueError as e:  # binascii.Error también
+        raise ValueError(f"no es un QR del álbum: {e}") from None
+    numbers = [n for n in range(1, ATTENDEES + 1)
+               if bitmap[(n - 1) // 8] & (0x80 >> ((n - 1) % 8))]
+    return int(no), bitmap, tag, numbers
+
+
+def verify_qr(text, master, mac):
+    """-> (dorsal, dorsales, tag válido)."""
+    no, bitmap, tag, numbers = parse_qr(text)
+    key = identity.derive_key(master, mac, no)
+    ok = hmac.compare_digest(identity.album_tag(key, no, bitmap), tag)
+    return no, numbers, ok
 
 
 def parse_album(data):
@@ -121,6 +163,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     parser.add_argument("file", nargs="?", help="exportación ALBM (.bin)")
     parser.add_argument("-p", "--port", help="leer ALBM del badge")
+    parser.add_argument("--qr", help="texto del QR del álbum (F5.6)")
     parser.add_argument("--master", type=bytes.fromhex,
                         help="K_master en hex (por omisión DEV_MASTER)")
     parser.add_argument("--mac", action="append", default=[],
@@ -132,8 +175,10 @@ def main():
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="una línea por estampa, también las válidas")
     args = parser.parse_args()
-    if (args.file is None) == (args.port is None):
-        parser.error("indica un archivo o --port")
+    if [args.file, args.port, args.qr].count(None) != 2:
+        parser.error("indica un archivo, --port o --qr")
+    if args.qr:
+        return main_qr(parser, args)
 
     if args.port:
         import badge_usb
@@ -170,6 +215,24 @@ def main():
     valid = sum(e["ok"] for e in entries)
     print(f"verificadas {valid}/{len(entries)}")
     return 0 if mine == "OK" and valid == len(entries) else 1
+
+
+def main_qr(parser, args):
+    try:
+        no = parse_qr(args.qr)[0]
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    mac = read_macs(args).get(no)
+    if mac is None:
+        parser.error(f"falta la MAC de #{no} (--mac {no}=MAC o --macs)")
+    no, numbers, ok = verify_qr(args.qr, args.master or identity.DEV_MASTER,
+                                mac)
+    print(f"#{no}: {len(numbers)}/{ATTENDEES} estampas, tag "
+          f"{'OK' if ok else 'INVÁLIDO'}")
+    if args.verbose:
+        print("  " + " ".join(map(str, numbers)))
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
