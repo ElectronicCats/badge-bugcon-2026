@@ -16,15 +16,22 @@ count entradas de 80 B (estampa 64, token 8, orden u16, nonce u32, reservado
 Para derivar K_A hace falta la MAC de cada badge: la tiene la tabla de la
 provisión (F12.4). Aquí se pasa con --mac NO=MAC (repetible) o --macs CSV
 (no,mac por renglón). Sin --master se usa DEV_MASTER si el badge no está
-provisionado. El par virtual Eco del DevKit (#999) firma con la MAC del propio
-badge: --mac 999=<MAC del DevKit>.
+provisionado. El par virtual Eco del DevKit (#999) y las estampas de prueba
+de la consola (`album add|fill|stress`) firman con la MAC del propio badge:
+--self-mac la usa para todo dorsal sin MAC.
+
+Una estampa repetida en la exportación (mismo tipo y número que una anterior)
+no cuenta: el badge las deduplica, así que una repetida es una exportación
+alterada (el ranking cuenta tokens únicos, §3.3).
 
 Uso:
   ./tools/verify_album.py album.bin --mac 999=F4:12:FA:52:03:F8
+  ./tools/verify_album.py -p /dev/ttyACM0 --self-mac -v
   ./tools/verify_album.py -p /dev/ttyACM0 --macs provision.csv --master HEX -v
 
 Sale con 0 solo si todo se verificó; con 1 si algo no es válido o no se
-pudo verificar (sin MAC, sin token, especiales de F5.5).
+pudo verificar (sin MAC, sin token, repetida, la propia, especiales de
+F5.5).
 """
 import argparse
 import csv
@@ -63,14 +70,21 @@ def parse_album(data):
     return header, entries
 
 
-def verify(header, entries, master, macs):
+def verify(header, entries, master, macs, default_mac=None):
     """Agrega a cada entrada `status`; devuelve el estado de mi estampa."""
     me = header["no"]
     my_key = identity.derive_key(master, header["mac"], me)
     mine = "OK" if identity.verify_card(my_key, header["card"]) else "INVÁLIDA"
+    seen = set()
     for e in entries:
-        mac = macs.get(e["no"])
-        if e["type"] != ATTENDEE:
+        mac = macs.get(e["no"], default_mac)
+        ident = (e["type"], e["no"])
+        if ident in seen:
+            e["status"] = "repetida (ya contada)"
+        elif e["type"] == ATTENDEE and e["no"] == me:
+            # El badge no pega la suya; con su K_dev cualquiera fabrica una.
+            e["status"] = "es la del que exporta (no cuenta)"
+        elif e["type"] != ATTENDEE:
             e["status"] = "especial (sin verificar, F5.5)"
         elif mac is None:
             e["status"] = "sin MAC: no se puede derivar su clave"
@@ -85,6 +99,7 @@ def verify(header, entries, master, macs):
             else:
                 tok = "token INVÁLIDO"
             e["status"] = f"{'firma OK' if sig else 'firma INVÁLIDA'}, {tok}"
+        seen.add(ident)
         e["ok"] = e["status"] == "firma OK, token OK"
     return mine
 
@@ -111,6 +126,9 @@ def main():
     parser.add_argument("--mac", action="append", default=[],
                         metavar="NO=MAC")
     parser.add_argument("--macs", help="CSV no,mac de la provisión")
+    parser.add_argument("--self-mac", action="store_true",
+                        help="la MAC del que exporta para los dorsales sin "
+                        "MAC (Eco y estampas de prueba del DevKit)")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="una línea por estampa, también las válidas")
     args = parser.parse_args()
@@ -139,7 +157,8 @@ def main():
     macs = read_macs(args)
     macs.setdefault(header["no"], header["mac"])
 
-    mine = verify(header, entries, master, macs)
+    mine = verify(header, entries, master, macs,
+                  header["mac"] if args.self_mac else None)
     mac_text = header["mac"].hex(":").upper()
     print(f"#{header['no']} ({mac_text}, "
           f"{'provisionado' if header['provisioned'] else 'desarrollo'}): "
