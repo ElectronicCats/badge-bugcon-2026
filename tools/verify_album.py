@@ -24,6 +24,14 @@ Una estampa repetida en la exportación (mismo tipo y número que una anterior)
 no cuenta: el badge las deduplica, así que una repetida es una exportación
 alterada (el ranking cuenta tokens únicos, §3.3).
 
+Sincronización (F6.2): el configurador sube (o guarda para subir después) la
+exportación como .json; acepta el .bin y el .json. El .json lleva la
+exportación completa en base64 ("albm") y un resumen legible; lo único que
+cuenta es "albm" y un resumen que no coincide con ella se rechaza:
+  {"format": "bb26-album", "version": 1, "badge_no": 42,
+   "mac": "F4:12:FA:52:03:F8", "provisioned": false, "count": 1,
+   "fw": "0.1.0", "exported_at": "2026-10-08T19:00:00Z", "albm": "<base64>"}
+
 QR del álbum (F5.6, vista rápida web): con --qr verifica el texto que
 codifica la pantalla QR del badge (lo que leerá web/album, F6.3):
   <cfg::album::QR_URL><dorsal>/<bitmap>/<tag>
@@ -33,6 +41,7 @@ bitmap salió de ese badge; no cuenta para el ranking (no lleva tokens).
 
 Uso:
   ./tools/verify_album.py album.bin --mac 999=F4:12:FA:52:03:F8
+  ./tools/verify_album.py album_42.json --self-mac -v
   ./tools/verify_album.py --qr HTTPS://BUGCON.MX/A/42/... --mac 42=F4:12:FA:52:03:F8
   ./tools/verify_album.py -p /dev/ttyACM0 --self-mac -v
   ./tools/verify_album.py -p /dev/ttyACM0 --macs provision.csv --master HEX -v
@@ -43,8 +52,10 @@ F5.5).
 """
 import argparse
 import base64
+import binascii
 import csv
 import hmac
+import json
 import struct
 import sys
 
@@ -53,6 +64,7 @@ import identity
 HEADER = struct.Struct("<4sBB6sH2s64s")
 ENTRY = struct.Struct("<64s8sHI2s")
 FORMAT = 1
+JSON_FORMAT = "bb26-album"  # .json de la sincronización (F6.2)
 ATTENDEE = 0  # card::ATTENDEE
 ATTENDEES = 400  # cfg::album::ATTENDEES
 BITMAP_BYTES = (ATTENDEES + 7) // 8
@@ -112,6 +124,37 @@ def parse_album(data):
     return header, entries
 
 
+def to_json(data, fw=None, exported_at=None):
+    """Exportación ALBM -> .json de la sincronización (F6.2)."""
+    header, _ = parse_album(data)
+    return json.dumps({
+        "format": JSON_FORMAT, "version": FORMAT, "badge_no": header["no"],
+        "mac": header["mac"].hex(":").upper(),
+        "provisioned": header["provisioned"], "count": header["count"],
+        "fw": fw, "exported_at": exported_at,
+        "albm": base64.b64encode(data).decode()}, indent=1)
+
+
+def load_export(data):
+    """Contenido de un .bin o un .json (F6.2) -> exportación ALBM cruda."""
+    if not data.lstrip().startswith(b"{"):
+        return data
+    try:
+        doc = json.loads(data)
+        if doc.get("format") != JSON_FORMAT or doc.get("version") != FORMAT:
+            raise ValueError(f"no es un .json {JSON_FORMAT} versión {FORMAT}")
+        raw = base64.b64decode(doc["albm"], validate=True)
+        header, _ = parse_album(raw)
+        summary = (doc["badge_no"], doc["mac"].upper(), doc["provisioned"],
+                   doc["count"])
+    except (KeyError, TypeError, AttributeError, binascii.Error) as e:
+        raise ValueError(f".json de sincronización inválido: {e!r}") from None
+    if summary != (header["no"], header["mac"].hex(":").upper(),
+                   header["provisioned"], header["count"]):
+        raise ValueError("el resumen del .json no coincide con su exportación")
+    return raw
+
+
 def verify(header, entries, master, macs, default_mac=None):
     """Agrega a cada entrada `status`; devuelve el estado de mi estampa."""
     me = header["no"]
@@ -161,7 +204,8 @@ def read_macs(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
-    parser.add_argument("file", nargs="?", help="exportación ALBM (.bin)")
+    parser.add_argument("file", nargs="?",
+                        help="exportación ALBM (.bin o .json de F6.2)")
     parser.add_argument("-p", "--port", help="leer ALBM del badge")
     parser.add_argument("--qr", help="texto del QR del álbum (F5.6)")
     parser.add_argument("--master", type=bytes.fromhex,
@@ -192,7 +236,7 @@ def main():
         data = open(args.file, "rb").read()
 
     try:
-        header, entries = parse_album(data)
+        header, entries = parse_album(load_export(data))
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

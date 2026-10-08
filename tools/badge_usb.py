@@ -22,6 +22,7 @@ Requiere pyserial. Uso:
   ./tools/badge_usb.py card --team 2 --pos 4 --stats 60,40,70,30 --handle @yo
   ./tools/badge_usb.py avatar cara.pbm           # 96x96
   ./tools/badge_usb.py album -o album.bin        # luego tools/verify_album.py
+  ./tools/badge_usb.py album -o album_42.json    # el .json de la sync (F6.2)
   ./tools/badge_usb.py -p /dev/ttyACM1 raw "INFO"
 """
 import argparse
@@ -261,7 +262,17 @@ def main():
             print(badge.expect_ok("AVTR", image))
         elif args.cmd == "album":
             data = badge.album()
-            open(args.output, "wb").write(data)
+            if args.output.endswith(".json"):  # el de la sincronización (F6.2)
+                import datetime
+
+                import verify_album
+
+                now = datetime.datetime.now(datetime.timezone.utc)
+                open(args.output, "w").write(verify_album.to_json(
+                    data, badge.info()["fw"],
+                    now.isoformat(timespec="seconds").replace("+00:00", "Z")))
+            else:
+                open(args.output, "wb").write(data)
             count = (len(data) - ALBUM_HEADER_BYTES) // 80
             print(f"OK {len(data)} B, {count} estampas -> {args.output}")
     except (ProtocolError, ValueError) as e:
