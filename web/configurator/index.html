@@ -214,7 +214,13 @@ canvas.px {
       <button id="uploadBtn">Subir .json guardado</button>
       <input type="file" id="uploadFile" accept=".json,application/json" hidden>
     </div>
+    <div class="row">
+      <label><input type="checkbox" id="avatarPub" disabled> Publicar mi avatar en el álbum web</label>
+    </div>
     <p class="hint" id="syncHint"></p>
+    <p class="hint">Si marcas la casilla, la sync y el .json llevan el avatar del editor y lo
+    verán quienes tengan tu estampa en su álbum web. Sin marcarla se queda el que ya
+    publicaste; para quitarlo, pídelo al staff.</p>
     <p class="hint"><a href="../album/index.html" target="_blank" style="color:var(--accent)">Ver el álbum</a>:
     abre ahí el .json guardado para ver tus estampas por selección y descargar los contactos.</p>
   </section>
@@ -860,6 +866,7 @@ function render() {
   drawBits(pvCtx, bits, W, H);
   if (target === "avatar") {
     avatarBits = bits;
+    $("avatarPub").disabled = false;
     renderTemplate();
   }
 }
@@ -1580,14 +1587,17 @@ function albumSummary(data) {
   };
 }
 
+const base64 = bytes => btoa(Array.from(bytes, b => String.fromCharCode(b)).join(""));
+
+// "avatar" (opt-in): lo registra el backend (F6.4) para el álbum web
 function albumJson(data) {
-  let bin = "";
-  for (const b of data) bin += String.fromCharCode(b);
+  const pub = $("avatarPub").checked && avatarBits;
   return JSON.stringify({
     format: SYNC_FORMAT, version: SYNC_VERSION, ...albumSummary(data),
     fw: info ? info.fw : null,
     exported_at: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
-    albm: btoa(bin),
+    albm: base64(data),
+    ...(pub ? { avatar: base64(packBits(avatarBits, AVATAR_W, AVATAR_H)) } : {}),
   }, null, 1);
 }
 
