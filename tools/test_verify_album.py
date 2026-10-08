@@ -5,12 +5,14 @@ arma exportaciones ALBM con tools/identity.py y comprueba que se acepten las
 buenas y se rechacen las alteradas, como lo hará el backend (F6.4): firma
 inválida, estampa firmada con la clave de otro badge, token falsificado o de
 otro receptor, nonce cambiado, repetidas, la propia, otra K_master y
-exportaciones truncadas. Incluye el álbum lleno (400 + especiales).
+exportaciones truncadas. Incluye el álbum lleno (400 + especiales) y el
+texto del QR del álbum (F5.6).
 
 Uso (biblioteca estándar):
   python3 -m unittest tools/test_verify_album.py -v
   ./tools/test_verify_album.py
 """
+import base64
 import os
 import struct
 import subprocess
@@ -236,6 +238,66 @@ class VerifyAlbum(unittest.TestCase):
                                        capture_output=True, text=True)
             self.assertNotEqual(no_master.returncode, 0)
             self.assertIn("--master", no_master.stderr)
+
+
+def qr_text(no, numbers, key):
+    """Lo que arma album::qrText() en el badge."""
+    bitmap = bytearray(va.BITMAP_BYTES)
+    for n in numbers:
+        bitmap[(n - 1) // 8] |= 0x80 >> ((n - 1) % 8)
+    b32 = lambda b: base64.b32encode(bytes(b)).decode().rstrip("=")
+    tag = identity.album_tag(key, no, bytes(bitmap))
+    return f"HTTPS://BUGCON.MX/A/{no}/{b32(bitmap)}/{b32(tag)}"
+
+
+class AlbumQr(unittest.TestCase):
+    KEY = identity.derive_key(MASTER, MY_MAC, MY_NO)
+
+    def test_valid(self):
+        text = qr_text(MY_NO, [1, 7, MY_NO, 400], self.KEY)
+        self.assertEqual(len(text), 20 + 2 + 1 + 80 + 1 + 13)
+        self.assertTrue(set(text) <= set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                         " $%*+-./:"))  # Alfanumérico del QR
+        self.assertEqual(va.verify_qr(text, MASTER, MY_MAC),
+                         (MY_NO, [1, 7, MY_NO, 400], True))
+
+    def test_tampered_bitmap_or_number(self):
+        text = qr_text(MY_NO, [7], self.KEY)
+        forged = qr_text(MY_NO, [7, 8], self.KEY).rsplit("/", 1)[0]
+        forged += "/" + text.rsplit("/", 1)[1]  # Tag del bitmap original
+        self.assertFalse(va.verify_qr(forged, MASTER, MY_MAC)[2])
+        other_no = text.replace(f"/{MY_NO}/", "/43/")
+        self.assertFalse(va.verify_qr(other_no, MASTER, MY_MAC)[2])
+
+    def test_wrong_master_or_mac(self):
+        text = qr_text(MY_NO, [7], self.KEY)
+        self.assertFalse(va.verify_qr(text, identity.DEV_MASTER, MY_MAC)[2])
+        self.assertFalse(va.verify_qr(text, MASTER, mac_of(MY_NO))[2])
+
+    def test_malformed(self):
+        text = qr_text(MY_NO, [7], self.KEY)
+        head, bits, tag = text.rsplit("/", 2)
+        for bad in ("", "HTTPS://BUGCON.MX/A/", f"{head}/{bits}",
+                    f"{head}/{bits[:-1]}/{tag}", f"{head}/{bits}/{tag}AA",
+                    f"{head}/{bits}/{tag[:-1]}1",
+                    text.replace(f"/{MY_NO}/", "/X/")):
+            with self.assertRaises(ValueError, msg=bad):
+                va.parse_qr(bad)
+
+    def test_cli(self):
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "verify_album.py")
+        text = qr_text(MY_NO, [3, MY_NO], self.KEY)
+        run = lambda *a: subprocess.run(
+            [sys.executable, script, "--qr", *a, "--master", MASTER.hex()],
+            capture_output=True, text=True)
+        ok = run(text, "--mac", f"{MY_NO}={MY_MAC.hex(':')}")
+        self.assertEqual(ok.returncode, 0, ok.stdout + ok.stderr)
+        self.assertIn(f"#{MY_NO}: 2/400 estampas, tag OK", ok.stdout)
+        bad = run(text, "--mac", f"{MY_NO}=02:00:00:00:00:01")
+        self.assertEqual(bad.returncode, 1)
+        self.assertIn("tag INVÁLIDO", bad.stdout)
+        self.assertNotEqual(run(text).returncode, 0)  # Sin MAC
 
 
 if __name__ == "__main__":
