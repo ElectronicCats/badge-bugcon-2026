@@ -13,6 +13,7 @@ Uso (biblioteca estándar):
   ./tools/test_verify_album.py
 """
 import base64
+import json
 import os
 import struct
 import subprocess
@@ -238,6 +239,52 @@ class VerifyAlbum(unittest.TestCase):
                                        capture_output=True, text=True)
             self.assertNotEqual(no_master.returncode, 0)
             self.assertIn("--master", no_master.stderr)
+
+
+class SyncJson(unittest.TestCase):
+    """El .json de la sincronización (F6.2) que sube o guarda el configurador."""
+
+    def test_roundtrip(self):
+        data = export([entry(7, 1), entry(8, 2)])
+        doc = va.to_json(data, "0.1.0", "2026-11-20T18:00:00Z")
+        self.assertEqual(va.load_export(doc.encode()), data)
+        self.assertEqual(va.load_export(data), data)  # el .bin sigue igual
+        d = json.loads(doc)
+        self.assertEqual((d["badge_no"], d["count"], d["mac"]),
+                         (MY_NO, 2, "F4:12:FA:52:03:F8"))
+
+    def test_summary_must_match(self):
+        doc = json.loads(va.to_json(export([entry(7, 1)])))
+        for key, value in (("badge_no", 43), ("count", 2), ("provisioned",
+                           False), ("mac", "02:00:00:00:00:07")):
+            bad = dict(doc, **{key: value})
+            with self.assertRaises(ValueError, msg=key):
+                va.load_export(json.dumps(bad).encode())
+
+    def test_malformed(self):
+        doc = json.loads(va.to_json(export([entry(7, 1)])))
+        raw = base64.b64decode(doc["albm"])
+        for bad in (dict(doc, format="otro"), dict(doc, version=2),
+                    dict(doc, albm=doc["albm"] + "!"),
+                    dict(doc, albm=base64.b64encode(raw[:-1]).decode()),
+                    {k: v for k, v in doc.items() if k != "albm"}, [], "x"):
+            with self.assertRaises(ValueError, msg=repr(bad)[:60]):
+                va.parse_album(va.load_export(json.dumps(bad).encode()))
+        with self.assertRaises(ValueError):
+            va.load_export(b"{no es json")
+
+    def test_cli_accepts_json(self):
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "verify_album.py")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "album_42.json")
+            with open(path, "w") as f:
+                f.write(va.to_json(export([entry(7, 1)])))
+            r = subprocess.run([sys.executable, script, path, "--master",
+                                MASTER.hex(), f"--mac=7={mac_of(7).hex()}"],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("verificadas 1/1", r.stdout)
 
 
 def qr_text(no, numbers, key):
