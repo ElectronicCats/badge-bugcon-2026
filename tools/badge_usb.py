@@ -9,6 +9,8 @@ Las imágenes van en el formato del badge: 1 bpp, filas completas, MSB primero,
 1 = blanco, del tamaño `panel` que reporta INFO. Se leen y se escriben como
 PBM binario (P4, 1 = negro: se invierte) o como .bin crudo.
 
+El avatar (AVTR, F5.7) va en el mismo formato, de AVATAR_W x AVATAR_H.
+
 Requiere pyserial. Uso:
   ./tools/badge_usb.py info
   ./tools/badge_usb.py upload 0 gafete.pbm      # guarda el slot 0 y lo muestra
@@ -16,10 +18,15 @@ Requiere pyserial. Uso:
   ./tools/badge_usb.py read 0 -o slot0.pbm
   ./tools/badge_usb.py clr
   ./tools/badge_usb.py dbg
+  ./tools/badge_usb.py nick "Ñandú 10"
+  ./tools/badge_usb.py card --team 2 --pos 4 --stats 60,40,70,30 --handle @yo
+  ./tools/badge_usb.py avatar cara.pbm           # 96x96
+  ./tools/badge_usb.py album -o album.bin        # luego tools/verify_album.py
   ./tools/badge_usb.py -p /dev/ttyACM1 raw "INFO"
 """
 import argparse
 import re
+import struct
 import sys
 import time
 
@@ -27,6 +34,12 @@ import serial
 
 OPEN_WAIT_S = 0.3  # El badge descarta lo que llega en los primeros 200 ms
 REPLY_TIMEOUT_S = 15  # Como el configurador del keychain
+AVATAR_W = AVATAR_H = 96  # cfg::card::AVATAR_WIDTH/HEIGHT
+AVATAR_BYTES = (AVATAR_W + 7) // 8 * AVATAR_H
+# Bytes 0..47 de la estampa v1 (card::Card, §3.2): version, type, badge_no,
+# nickname, team, position, stats, rarity, flags, handle. Lo que lleva CARD.
+CARD_FIELDS = struct.Struct("<BBH16sBB4sBB20s")
+ALBUM_HEADER_BYTES = 80  # Cabecera de ALBM; mi estampa va en 16..80
 INFO_RE = re.compile(
     r"^OK BB26 (?P<fw>\S+) no=(?P<no>\d+) panel=(?P<w>\d+)x(?P<h>\d+) "
     r"album=(?P<album>\d+)/(?P<total>\d+) slots=(?P<slots>\d+) "
@@ -102,6 +115,48 @@ class Badge:
             raise ProtocolError(f"READ: llegaron {len(data)} de {size} B")
         return data
 
+    def album(self):
+        """Exportación de ALBM: cabecera + entradas (tools/verify_album.py)."""
+        reply = self.expect_ok("ALBM")
+        size = int(reply.split()[1])
+        data = b""
+        deadline = time.time() + 5
+        while len(data) < size and time.time() < deadline:
+            data += self.port.read(size - len(data))
+        if len(data) != size:
+            raise ProtocolError(f"ALBM: llegaron {len(data)} de {size} B")
+        return data
+
+    def my_card(self):
+        """Mi estampa firmada (64 B), de la cabecera de ALBM."""
+        return self.album()[16:ALBUM_HEADER_BYTES]
+
+
+def text_field(text, size, name):
+    """Texto UTF-8 de la estampa; struct lo cortaría a media letra."""
+    data = text.encode()
+    if len(data) > size:
+        raise ValueError(f"el {name} mide {len(data)} B de UTF-8; caben {size}")
+    return data
+
+
+def card_fields(card,nick=None, team=None, pos=None, stats=None, handle=None):
+    """Payload de CARD: los 48 B de `card` con los campos que se cambian."""
+    f = list(CARD_FIELDS.unpack(card[: CARD_FIELDS.size]))
+    if nick is not None:
+        f[3] = text_field(nick, 16, "nickname")
+    if team is not None:
+        f[4] = team & 0xFF  # -1 = ninguna (0xFF)
+    if pos is not None:
+        f[5] = pos & 0xFF
+    if stats is not None:
+        if len(stats) != 4 or not all(0 <= v <= 255 for v in stats):
+            raise ValueError("las stats son 4 valores (ATK,DEF,HAX,SUERTE)")
+        f[6] = bytes(stats)
+    if handle is not None:
+        f[9] = text_field(handle, 20, "handle")
+    return CARD_FIELDS.pack(*f)  # struct rellena los textos con NUL
+
 
 def read_pbm(path):
     """PBM binario (P4) -> (ancho, alto, bytes con 1 = blanco)."""
@@ -157,6 +212,16 @@ def main():
     sub.add_parser("clr")
     sub.add_parser("dbg")
     sub.add_parser("raw").add_argument("line")
+    sub.add_parser("nick").add_argument("text")
+    cd = sub.add_parser("card", help="cambia solo los campos indicados")
+    cd.add_argument("--nick")
+    cd.add_argument("--team", type=int, help="-1 = ninguna")
+    cd.add_argument("--pos", type=int, help="-1 = ninguna")
+    cd.add_argument("--stats", type=lambda s: [int(v) for v in s.split(",")],
+                    help="ATK,DEF,HAX,SUERTE")
+    cd.add_argument("--handle")
+    sub.add_parser("avatar").add_argument("file", help=".pbm (P4) o .bin")
+    sub.add_parser("album").add_argument("-o", "--output", required=True)
     args = parser.parse_args()
 
     badge = Badge(args.port)
@@ -183,6 +248,22 @@ def main():
             print(badge.expect_ok("DBG"))
         elif args.cmd == "raw":
             print(badge.command(args.line))
+        elif args.cmd == "nick":
+            print(badge.expect_ok(f"NICK {args.text}"))
+        elif args.cmd == "card":
+            fields = card_fields(badge.my_card(), args.nick, args.team,
+                                 args.pos, args.stats, args.handle)
+            print(badge.expect_ok("CARD", fields))
+        elif args.cmd == "avatar":
+            image = load_image(args.file, {"w": AVATAR_W, "h": AVATAR_H})
+            if len(image) != AVATAR_BYTES:
+                raise ValueError(f"el avatar mide {AVATAR_BYTES} B")
+            print(badge.expect_ok("AVTR", image))
+        elif args.cmd == "album":
+            data = badge.album()
+            open(args.output, "wb").write(data)
+            count = (len(data) - ALBUM_HEADER_BYTES) // 80
+            print(f"OK {len(data)} B, {count} estampas -> {args.output}")
     except (ProtocolError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
