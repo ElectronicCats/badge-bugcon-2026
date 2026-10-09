@@ -31,3 +31,6 @@ hardware/**/*.csv
 
 # KiCAD backup directories (any project name)
 **/*-backups/
+
+# Configurador empaquetado (tools/package_web.py, F6.15)
+dist/

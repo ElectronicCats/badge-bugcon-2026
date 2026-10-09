@@ -1,0 +1,46 @@
+Configurador del Badge BugCon 2026
+Versión: {version}
+
+Dos páginas que se abren directo desde tu computadora, sin instalar nada,
+sin servidor y sin Internet. Nada de lo que hagas se envía a ningún lado.
+
+  configurator/index.html  Configurador: estampa, avatar, imágenes del
+                           gafete y "Guardar .json" (tu álbum) por USB.
+  album/index.html         Álbum: abre el .json guardado para ver tus
+                           estampas y descargar los contactos (.vcf).
+
+
+1. Descomprime todo el .zip
+---------------------------
+Extrae la carpeta completa antes de abrir nada (en Windows: clic derecho >
+"Extraer todo"). Si abres el HTML desde dentro del .zip, el enlace
+"Ver el álbum" no funciona.
+
+
+2. Abre el configurador
+-----------------------
+Abre configurator/index.html con Chrome, Edge o Brave de escritorio
+(clic derecho > "Abrir con"). Firefox, Safari y los teléfonos no tienen
+Web Serial: la página te lo dirá. Desde el teléfono, configura tu estampa
+con el Wi-Fi del badge: Mi Estampa > Editar > "Desde el teléfono".
+
+
+3. Conecta el badge
+-------------------
+Conecta el badge con un cable USB de datos (no solo de carga), pulsa
+"Conectar" y elige "USB JTAG/serial debug unit". Si la lista sale vacía,
+prueba otro cable o revisa el permiso "Puertos serie" del navegador.
+
+  Windows 10+ y macOS: no hace falta instalar controladores.
+  Linux: si no puedes abrir el puerto, entra al grupo dialout:
+           sudo usermod -aG dialout $USER     (y vuelve a iniciar sesión)
+         si conecta pero "el badge no contestó":
+           stty -F /dev/ttyACM0 min 1
+
+
+4. Tu álbum
+-----------
+"Guardar .json" guarda tu estampa y las de tu álbum en tu computadora.
+El archivo incluye el nickname y el handle que cada quien compartió en su
+estampa: no lo publiques. Para verlo, abre album/index.html (o "Ver el
+álbum" en el configurador) y arrastra el .json.
