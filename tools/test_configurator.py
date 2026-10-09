@@ -5,19 +5,24 @@ el álbum web (web/album/index.html, F6.3) y la página del teléfono
 (web/phone/index.html, F6.12) usan el mismo catálogo y los mismos límites que
 el firmware: el índice de la selección y de la posición viaja en la estampa, y
 CARD rechaza lo que no cumpla cfg::card. La página del teléfono embebida en el
-firmware (wifi_page.h) es la del repo. Sin badge ni navegador (biblioteca
+firmware (wifi_page.h) es la del repo, y el .zip del configurador
+(tools/package_web.py, F6.15) abre sin servidor. Sin badge ni navegador (biblioteca
 estándar).
 
 Uso: python3 -m unittest tools/test_configurator.py
 """
 import gzip
+import io
+import posixpath
 import re
 import sys
 import unittest
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
+import package_web  # noqa: E402
 from embed_page import from_header  # noqa: E402
 
 SRC = ROOT / "firmware/badge_bugcon_2026/src"
@@ -84,6 +89,28 @@ class PhonePageTest(unittest.TestCase):
         # Sin Internet en el AP: todo va en el HTML o se pide al badge.
         self.assertIsNone(re.search(r"https?:|//[\w.-]+\.\w|src=|href=",
                                     PAGES["phone"]))
+
+
+class PackageTest(unittest.TestCase):
+    """El .zip de F6.15 abre desde file:// sin servidor ni red."""
+
+    def test_package(self):
+        data = package_web.build("v9.9.9")
+        self.assertEqual(data, package_web.build("v9.9.9"))  # reproducible
+        z = zipfile.ZipFile(io.BytesIO(data))
+        names = set(z.namelist())
+        folder = package_web.FOLDER
+        self.assertEqual(names, {f"{folder}/{n}" for n in package_web.FILES})
+        self.assertIn("Versión: v9.9.9", z.read(f"{folder}/LEEME.txt").decode())
+        for name in names - {f"{folder}/LEEME.txt"}:
+            html = z.read(name).decode("utf-8")
+            with self.subTest(page=name):
+                self.assertEqual(html, PAGES[name.split("/")[1]])
+                self.assertIsNone(re.search(r"https?:|//[\w.-]+\.\w", html))
+                for href in re.findall(r'(?:href|src)="([^"]+)"', html):
+                    target = posixpath.normpath(posixpath.join(
+                        posixpath.dirname(name), href))
+                    self.assertIn(target, names, href)
 
 
 if __name__ == "__main__":
