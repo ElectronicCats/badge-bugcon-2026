@@ -28,6 +28,7 @@ import verify_album as va  # noqa: E402
 MASTER = bytes(range(32))
 MY_NO = 42
 MY_MAC = bytes.fromhex("F412FA5203F8")
+MY_KEY = identity.derive_key(MASTER, MY_MAC, MY_NO)
 CAPACITY = 480  # cfg::album::CAPACITY
 ATTENDEE, SPECIAL = 0, 2
 GOLD = 2
@@ -143,11 +144,23 @@ class VerifyAlbum(unittest.TestCase):
         self.assertEqual(status[1], "repetida (ya contada)")
 
     def test_special_and_attendee_with_same_number(self):
-        special = {"card": card(7, type_=SPECIAL, rarity=GOLD),
+        special = {"card": card(7, MY_KEY, type_=SPECIAL, rarity=GOLD),
                    "token": b"\0" * 8, "order": 2, "nonce": 0}
         _, status, ok = check(export([entry(7, 1), special]))
-        self.assertEqual(ok, [True, False])
-        self.assertIn("especial", status[1])
+        self.assertEqual(ok, [True, True])
+        self.assertEqual(status[1], "especial, firma OK")
+
+    def test_special_signed_by_another_badge(self):
+        # F5.5: la firma el badge que la ganó; copiada a otro álbum no sirve.
+        # Sin firma (antes de F5.5) o alterada, tampoco.
+        tampered = bytearray(card(1, MY_KEY, type_=SPECIAL))
+        tampered[26] = GOLD
+        for c in (card(1, key_of(7), type_=SPECIAL), card(1, type_=SPECIAL),
+                  bytes(tampered)):
+            special = {"card": c, "token": b"\0" * 8, "order": 1, "nonce": 0}
+            _, status, ok = check(export([special]))
+            self.assertEqual((status, ok), (["especial, firma INVÁLIDA"],
+                                            [False]))
 
     def test_own_card_does_not_count(self):
         # Con su K_dev cualquiera fabrica una "estampa suya hacia sí mismo".
@@ -198,16 +211,16 @@ class VerifyAlbum(unittest.TestCase):
         entries = [entry(no, i + 1) for i, no in
                    enumerate(n for n in range(1, 401) if n != MY_NO)]
         for sid in range(1, CAPACITY - len(entries) + 1):
-            entries.append({"card": card(sid, type_=SPECIAL, rarity=GOLD),
+            entries.append({"card": card(sid, MY_KEY, type_=SPECIAL,
+                                         rarity=GOLD),
                             "token": b"\0" * 8, "order": len(entries) + 1,
                             "nonce": 0})
         data = export(entries)
         self.assertEqual(len(data), 80 + CAPACITY * 80)
         mine, status, ok = check(data)
         self.assertEqual(mine, "OK")
-        self.assertEqual(sum(ok), 399)
-        self.assertTrue(all("especial" in s for s, o in zip(status, ok)
-                            if not o))
+        self.assertEqual(sum(ok), CAPACITY)
+        self.assertEqual(sum(s == "especial, firma OK" for s in status), 81)
 
     def test_cli_exit_codes(self):
         script = os.path.join(os.path.dirname(os.path.abspath(__file__)),

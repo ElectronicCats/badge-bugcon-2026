@@ -20,6 +20,10 @@ provisionado. El par virtual Eco del DevKit (#999) y las estampas de prueba
 de la consola (`album add|fill|stress`) firman con la MAC del propio badge:
 --self-mac la usa para todo dorsal sin MAC.
 
+Especiales (F5.5): las de tipo reto o especial las genera el propio badge
+(services/specials) y las firma con su clave, sin token (no hay intercambio):
+se verifican con la clave del que exporta. Solo cuentan en su álbum.
+
 Una estampa repetida en la exportación (mismo tipo y número que una anterior)
 no cuenta: el badge las deduplica, así que una repetida es una exportación
 alterada (el ranking cuenta tokens únicos, §3.3).
@@ -47,8 +51,8 @@ Uso:
   ./tools/verify_album.py -p /dev/ttyACM0 --macs provision.csv --master HEX -v
 
 Sale con 0 solo si todo se verificó; con 1 si algo no es válido o no se
-pudo verificar (sin MAC, sin token, repetida, la propia, especiales de
-F5.5).
+pudo verificar (sin MAC, sin token, repetida, la propia, especial con
+firma inválida).
 """
 import argparse
 import base64
@@ -170,7 +174,9 @@ def verify(header, entries, master, macs, default_mac=None):
             # El badge no pega la suya; con su K_dev cualquiera fabrica una.
             e["status"] = "es la del que exporta (no cuenta)"
         elif e["type"] != ATTENDEE:
-            e["status"] = "especial (sin verificar, F5.5)"
+            # La generó y la firmó el badge que exporta (F5.5).
+            sig = identity.verify_card(my_key, e["card"])
+            e["status"] = f"especial, {'firma OK' if sig else 'firma INVÁLIDA'}"
         elif mac is None:
             e["status"] = "sin MAC: no se puede derivar su clave"
         else:
@@ -185,7 +191,7 @@ def verify(header, entries, master, macs, default_mac=None):
                 tok = "token INVÁLIDO"
             e["status"] = f"{'firma OK' if sig else 'firma INVÁLIDA'}, {tok}"
         seen.add(ident)
-        e["ok"] = e["status"] == "firma OK, token OK"
+        e["ok"] = e["status"] in ("firma OK, token OK", "especial, firma OK")
     return mine
 
 
