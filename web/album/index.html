@@ -453,10 +453,12 @@ function showDetail(c, order) {
   if (avatar) drawAvatar($("dFace"), avatar);
   else $("dNoFace").textContent = ([...c.nickname][0] || "?").toUpperCase();
   $("dNick").textContent = c.nickname || "—";
-  $("dMeta").textContent = [kindName(c), TEAMS[c.team] || "Sin selección", POSITIONS[c.position],
+  $("dMeta").textContent = [kindName(c),
+    TEAMS[c.team] || (c.type === ATTENDEE ? "Sin selección" : ""), POSITIONS[c.position],
     RARITIES[c.rarity], order !== undefined ? "recibida " + (order + 1) + "ª" : ""]
     .filter(Boolean).join(" · ");
-  $("dStats").replaceChildren(...STATS.map((name, i) => {
+  // Las especiales (F5.5) no tienen stats: su descripción va en el handle.
+  $("dStats").replaceChildren(...(c.type !== ATTENDEE ? [] : STATS).map((name, i) => {
     const row = el("div", "stat"), bar = el("i");
     bar.style.width = Math.min(100, c.stats[i] * 100 / STAT_MAX) + "%";
     row.append(el("span", "", name), el("span", "", String(c.stats[i])), el("span"));
@@ -464,7 +466,8 @@ function showDetail(c, order) {
     return row;
   }));
   const shared = hasHandle(c);
-  $("dHandle").textContent = shared ? "Contacto: " + c.handle : "";
+  $("dHandle").textContent = shared ? "Contacto: " + c.handle :
+    c.type !== ATTENDEE ? c.handle : "";
   $("dVcf").hidden = !shared || c.badgeNo === album.no;
   $("dVcf").onclick = () => download(vcard([c]), "bugcon_" + c.badgeNo + ".vcf");
   $("detail").showModal();
