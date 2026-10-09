@@ -53,8 +53,9 @@ class CatalogTest(unittest.TestCase):
                  ("CARD_VERSION", CARD_H, "VERSION")]
         for page, html in PAGES.items():
             for web, source, fw in pairs:
-                if page == "album" and web in ("STAT_BUDGET", "CARD_VERSION"):
-                    continue  # el álbum no edita estampas
+                if page == "album" and web in ("STAT_BUDGET", "CARD_VERSION",
+                                               "AVATAR_W", "AVATAR_H"):
+                    continue  # el álbum no edita estampas ni recibe avatares
                 with self.subTest(page=page, name=web):
                     self.assertEqual(number(html, web), number(source, fw))
         self.assertEqual(number(PAGES["album"], "ATTENDEES"),

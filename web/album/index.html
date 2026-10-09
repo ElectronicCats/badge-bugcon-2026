@@ -5,21 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Álbum Copa BugCon 2026</title>
 <!--
-  Álbum web del badge BugCon 2026 (F6.3). Un solo HTML sin dependencias:
-  funciona desde file://, hospedado (F6.9) y en el teléfono.
+  Álbum web del badge BugCon 2026 (F6.3). Un solo HTML sin dependencias,
+  abierto desde file:// en la computadora o el teléfono (D-16: sin servidor;
+  no hace peticiones de red).
 
-  Dos fuentes (§3.6 del plan):
-  - QR del badge (F5.6): HTTPS://BUGCON.MX/A/<dorsal>/<bitmap>/<tag>. El
-    hosting sirve esta página en /A/* (en file://, index.html#/A/...). El
-    bitmap dice qué dorsales tiene (vista rápida); los detalles los pide a
-    GET /api/album/<dorsal>/<bitmap>/<tag>, que verifica el tag (solo quien
-    tiene el QR ve nicknames y handles).
-  - El .json de la sincronización (F6.2, "bb26-album" v1) o el .bin de ALBM.
-  Respuesta del backend (F6.4): 200 con el último .json sincronizado de ese
-  badge y, opcional, "avatars": {"<dorsal>": "<base64 de 1152 B>"} (96x96,
-  1 bpp, formato de AVTR); 403 = tag inválido; 404 = nunca sincronizó.
-  Nada aquí verifica firmas ni tokens (necesitan K_master): eso es del
-  backend, y el ranking solo cuenta lo que él verificó.
+  Fuentes (§3.6 del plan):
+  - El .json que guarda el configurador ("bb26-album" v1) o el .bin de ALBM.
+    ALBM no trae avatares: el detalle muestra la inicial.
+  - Ruta del QR del badge (F5.6) en el fragmento: index.html#/A/<dorsal>/
+    <bitmap>/<tag>. Solo dice qué dorsales tiene (vista rápida); el destino
+    del QR está pendiente (D-18).
+  Nada aquí verifica firmas ni tokens (necesitan K_master): eso lo hace
+  tools/verify_album.py fuera de línea.
   Los textos de las estampas vienen de otros badges: siempre como texto.
 -->
 <style>
@@ -92,7 +89,6 @@ button.st:hover { border-color: var(--accent); }
 .st.got { justify-content: center; aspect-ratio: 3 / 4; color: var(--ok); }
 .st .no { font-variant-numeric: tabular-nums; font-weight: 600; }
 .st .face { width: 100%; aspect-ratio: 1; border-radius: 4px; margin-bottom: 3px; }
-.st canvas.face { image-rendering: pixelated; background: #fff; }
 .st div.face { display: flex; align-items: center; justify-content: center; background: var(--card2); font-size: 28px; font-weight: 700; color: var(--muted); }
 .st .nick { width: 100%; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st .sub { width: 100%; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -103,7 +99,6 @@ dialog {
   width: min(360px, calc(100vw - 32px));
 }
 dialog::backdrop { background: #000a; }
-#dFace { width: 192px; height: 192px; display: block; margin: 0 auto 10px; image-rendering: pixelated; background: #fff; border-radius: 6px; }
 #dNoFace { width: 192px; height: 192px; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; background: var(--card2); border-radius: 6px; font-size: 72px; font-weight: 700; color: var(--muted); }
 #dMeta { color: var(--muted); margin: 2px 0 10px; }
 .stat { display: grid; grid-template-columns: 36px 26px 1fr; gap: 6px; align-items: center; font-size: 12px; margin-bottom: 4px; }
@@ -121,7 +116,7 @@ dialog::backdrop { background: #000a; }
   <input type="file" id="file" accept=".json,.bin,application/json" hidden>
 </header>
 <div id="status" role="status">Escanea el código QR de tu badge (Álbum › Código QR) o abre
-el .json que guarda el configurador al sincronizar.</div>
+el .json que guarda el configurador con «Guardar .json».</div>
 
 <section id="view" hidden>
   <div id="summary">
@@ -143,7 +138,6 @@ el .json que guarda el configurador al sincronizar.</div>
 </section>
 
 <dialog id="detail">
-  <canvas id="dFace" width="96" height="96"></canvas>
   <div id="dNoFace"></div>
   <h2 id="dNick"></h2>
   <p id="dMeta"></p>
@@ -167,29 +161,20 @@ const POSITIONS = ["Portero", "Defensa", "Medio", "Delantero", "Pentester"];
 const RARITIES = ["Común", "Plata", "Oro"];
 const STATS = ["ATK", "DEF", "HAX", "SUE"];
 const STAT_MAX = 99;
-const AVATAR_W = 96, AVATAR_H = 96;
 const NICK_BYTES = 16, HANDLE_BYTES = 20;
 const CARD_BYTES = 64, ALBUM_HEADER_BYTES = 80, ENTRY_BYTES = 80;
 const ATTENDEE = 0, CHALLENGE = 1, FLAG_HANDLE = 0x02;
 const ATTENDEES = 400;   // cfg::album::ATTENDEES
-const SYNC_FORMAT = "bb26-album", SYNC_VERSION = 1;
+const EXPORT_FORMAT = "bb26-album", EXPORT_VERSION = 1;
 const MAX_FILE_BYTES = 256 * 1024;   // el álbum lleno mide ≈ 52 KB en .json
-const API_TIMEOUT_MS = 15000;
 // Ruta del QR (album::qrText): bitmap de 50 B y tag de 8 B en base32.
 const QR_RE = /\/A\/(\d{1,5})\/([A-Z2-7]{80})\/([A-Z2-7]{13})\/?$/i;
-// El servidor que hospeda la página (F6.9); en file:// no hay.
-// ?api= solo acepta localhost (pruebas).
-const API = (() => {
-  const api = new URLSearchParams(location.search).get("api");
-  if (api && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(api)) return api.replace(/\/?$/, "/");
-  return location.protocol === "https:" ? new URL("/api/album/", location).href : null;
-})();
 
 const $ = id => document.getElementById(id);
 const utf8 = new TextEncoder();
 const inRange = n => n >= 1 && n <= ATTENDEES;
 
-let album = null;   // { no, mine, entries, numbers, avatars, source }
+let album = null;   // { no, mine, entries, numbers, source }
 let tab = 0;
 
 function setStatus(msg, cls) {
@@ -234,12 +219,12 @@ function albumSummary(data) {
 
 const fromB64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
-// .json de la sync (o la respuesta del backend) -> exportación ALBM cruda,
+// .json del configurador -> exportación ALBM cruda,
 // revisada como load_export() de tools/verify_album.py.
 function exportFromJson(doc) {
   let data;
   try { data = fromB64(doc.albm); } catch (e) { /* base64 inválido */ }
-  if (!doc || doc.format !== SYNC_FORMAT || doc.version !== SYNC_VERSION ||
+  if (!doc || doc.format !== EXPORT_FORMAT || doc.version !== EXPORT_VERSION ||
       typeof doc.albm !== "string" || !data) {
     throw new Error("no es un álbum de la Copa BugCon 2026");
   }
@@ -251,19 +236,7 @@ function exportFromJson(doc) {
   return data;
 }
 
-// Avatares opcionales del backend: {"<dorsal>": base64 de 1152 B}
-function parseAvatars(obj) {
-  const out = new Map();
-  for (const [no, b64] of Object.entries(obj && typeof obj === "object" ? obj : {})) {
-    try {
-      const bytes = fromB64(b64);
-      if (bytes.length === AVATAR_W * AVATAR_H / 8) out.set(+no, bytes);
-    } catch (e) { /* se ignora el que no sirve */ }
-  }
-  return out;
-}
-
-function albumFromExport(data, avatars, source) {
+function albumFromExport(data, source) {
   const mine = parseCard(data.subarray(16, 16 + CARD_BYTES));
   const seen = new Set(), entries = [];
   const count = data[12] | data[13] << 8;
@@ -279,7 +252,7 @@ function albumFromExport(data, avatars, source) {
   // Dorsales 1..400 que tengo, con el mío (album::collected)
   const numbers = new Set([mine.badgeNo, ...entries.filter(e => e.card.type === ATTENDEE)
     .map(e => e.card.badgeNo)].filter(inRange));
-  return { no: mine.badgeNo, mine, entries, numbers, avatars: avatars || new Map(), source };
+  return { no: mine.badgeNo, mine, entries, numbers, source };
 }
 
 // Base32 de RFC 4648 sin relleno -> bytes
@@ -365,16 +338,6 @@ function sections() {
   return list;
 }
 
-// 1 bpp, filas completas, MSB primero, 1 = blanco (formato de AVTR)
-function drawAvatar(canvas, packed) {
-  const ctx = canvas.getContext("2d"), img = ctx.createImageData(AVATAR_W, AVATAR_H);
-  for (let i = 0; i < AVATAR_W * AVATAR_H; i++) {
-    const v = packed[i >> 3] & (0x80 >> (i & 7)) ? 255 : 0;
-    img.data.set([v, v, v, 255], i * 4);
-  }
-  ctx.putImageData(img, 0, 0);
-}
-
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -386,17 +349,7 @@ const pad = n => "#" + String(n).padStart(3, "0");
 const kindName = c => c.type === ATTENDEE ? pad(c.badgeNo) :
   (c.type === CHALLENGE ? "Reto " : "Especial ") + c.badgeNo;
 
-function face(c) {
-  const avatar = c.type === ATTENDEE && album.avatars.get(c.badgeNo);
-  if (avatar) {
-    const cnv = el("canvas", "face");
-    cnv.width = AVATAR_W;
-    cnv.height = AVATAR_H;
-    drawAvatar(cnv, avatar);
-    return cnv;
-  }
-  return el("div", "face", ([...c.nickname][0] || "?").toUpperCase());
-}
+const initial = c => ([...c.nickname][0] || "?").toUpperCase();
 
 function sticker(it) {
   const c = it.card;
@@ -404,11 +357,11 @@ function sticker(it) {
     const e = el("div", "st " + (it.got ? "got" : "empty"));
     e.append(el("span", "no", pad(it.no)));
     if (it.got) e.append(el("span", "sub", "sin datos"));
-    e.title = it.got ? "La tienes; sincroniza el badge para ver sus datos." : "Hueco vacío";
+    e.title = it.got ? "La tienes; abre el .json del configurador para ver sus datos." : "Hueco vacío";
     return e;
   }
   const e = el("button", "st r" + (c.rarity < RARITIES.length ? c.rarity : 0) + (it.mine ? " mine" : ""));
-  e.append(face(c), el("span", "no tag", kindName(c)), el("span", "nick", c.nickname || "—"),
+  e.append(el("div", "face", initial(c)), el("span", "no tag", kindName(c)), el("span", "nick", c.nickname || "—"),
            el("span", "sub", it.mine ? "Mi estampa" : TEAMS[c.team] || "Sin selección"));
   e.addEventListener("click", () => showDetail(c, it.order));
   return e;
@@ -447,11 +400,7 @@ function show(a) {
 }
 
 function showDetail(c, order) {
-  const avatar = c.type === ATTENDEE && album.avatars.get(c.badgeNo);
-  $("dFace").hidden = !avatar;
-  $("dNoFace").hidden = !!avatar;
-  if (avatar) drawAvatar($("dFace"), avatar);
-  else $("dNoFace").textContent = ([...c.nickname][0] || "?").toUpperCase();
+  $("dNoFace").textContent = initial(c);
   $("dNick").textContent = c.nickname || "—";
   $("dMeta").textContent = [kindName(c),
     TEAMS[c.team] || (c.type === ATTENDEE ? "Sin selección" : ""), POSITIONS[c.position],
@@ -485,15 +434,14 @@ async function openFile(f) {
   try {
     if (f.size > MAX_FILE_BYTES) throw new Error("es demasiado grande");
     const bytes = new Uint8Array(await f.arrayBuffer());
-    let data = bytes, avatars, when = "";
+    let data = bytes, when = "";
     if (!validAlbm(bytes)) {   // no es un .bin de ALBM: el .json
       let doc;
       try { doc = JSON.parse(new TextDecoder().decode(bytes)); } catch (e) { /* abajo */ }
       data = exportFromJson(doc);
-      avatars = parseAvatars(doc.avatars);
       if (typeof doc.exported_at === "string") when = ", exportado " + doc.exported_at;
     }
-    show(albumFromExport(data, avatars, "Archivo " + f.name + when + "."));
+    show(albumFromExport(data, "Archivo " + f.name + when + "."));
     setStatus("Álbum abierto.", "ok");
   } catch (err) {
     setStatus(f.name + " no se puede abrir: " + err.message + ".", "err");
@@ -514,43 +462,12 @@ document.addEventListener("drop", e => {
   if (e.dataTransfer.files[0]) openFile(e.dataTransfer.files[0]);
 });
 
-// Vista rápida del QR y, si hay servidor, los detalles del último sync.
-async function openQr(m) {
-  const no = +m[1], bits = m[2].toUpperCase(), tag = m[3].toUpperCase();
-  const numbers = bitmapNumbers(base32(bits));
+// Vista rápida del QR: solo los dorsales del bitmap (destino del QR: D-18).
+function openQr(m) {
+  const no = +m[1], numbers = bitmapNumbers(base32(m[2]));
   if (inRange(no)) numbers.add(no);
-  const quick = { no, mine: null, entries: [], numbers, avatars: new Map(),
-                  source: "Vista rápida del código QR: solo los dorsales." };
-  show(quick);
-  if (!API) { setStatus("Vista rápida del código QR.", "ok"); return; }
-  setStatus("Buscando el álbum sincronizado…", "");
-  let res;
-  try {
-    res = await fetch(API + no + "/" + bits + "/" + tag, { signal: AbortSignal.timeout(API_TIMEOUT_MS) });
-  } catch (e) {
-    setStatus("Sin conexión con el servidor: vista rápida del código QR.", "err");
-    return;
-  }
-  if (res.status === 404) {
-    setStatus("Este badge aún no sincroniza su álbum: se ven solo los dorsales del QR.", "ok");
-    return;
-  }
-  try {
-    const doc = await res.json().catch(() => ({}));
-    if (res.status === 403) throw new Error("el código QR no es válido (¿alterado?)");
-    if (!res.ok) throw new Error(doc.error || "el servidor respondió " + res.status);
-    const data = exportFromJson(doc);
-    if (albumSummary(data).badge_no !== no) throw new Error("el servidor mandó el álbum de otro badge");
-    const a = albumFromExport(data, parseAvatars(doc.avatars),
-      "Sincronizado" + (typeof doc.exported_at === "string" ? " el " + doc.exported_at : "") +
-      " + código QR.");
-    // El QR puede ser más nuevo que la sync: sus dorsales también cuentan.
-    for (const n of numbers) a.numbers.add(n);
-    show(a);
-    setStatus("Álbum sincronizado.", "ok");
-  } catch (err) {
-    setStatus("No se pudo leer el álbum sincronizado: " + err.message + ". Vista rápida del QR.", "err");
-  }
+  show({ no, mine: null, entries: [], numbers, source: "Vista rápida del código QR: solo los dorsales." });
+  setStatus("Vista rápida del código QR.", "ok");
 }
 
 const qr = decodeURIComponent(location.pathname + location.hash.replace(/^#/, "")).match(QR_RE);
