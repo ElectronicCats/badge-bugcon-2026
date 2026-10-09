@@ -52,6 +52,23 @@ class ProtocolError(Exception):
     pass
 
 
+def restore_vmin(port):
+    """Deja el tty con VMIN=1 (el valor de fábrica) antes de cerrarlo.
+
+    pyserial lo pone en 0 y el kernel lo guarda para el siguiente que abra
+    ese ttyACMn, aunque se desconecte el cable. Chrome/Brave en Linux no fijan
+    VMIN: con 0, su read() vuelve vacío, lo toman por "device has been lost"
+    y el configurador nunca recibe respuesta (F6.7)."""
+    try:
+        import termios
+        attrs = termios.tcgetattr(port.fd)
+        attrs[6][termios.VMIN] = 1
+        attrs[6][termios.VTIME] = 0
+        termios.tcsetattr(port.fd, termios.TCSANOW, attrs)
+    except (ImportError, AttributeError, OSError):
+        pass  # Windows no tiene termios ni el problema
+
+
 class Badge:
     def __init__(self, port):
         self.port = serial.Serial(port, 115200, timeout=0.1)
@@ -59,6 +76,7 @@ class Badge:
         self.port.reset_input_buffer()
 
     def close(self):
+        restore_vmin(self.port)
         self.port.close()
 
     def read_line(self, timeout=REPLY_TIMEOUT_S):
