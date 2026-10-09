@@ -5,16 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Configurador Copa BugCon 2026</title>
 <!--
-  Configurador del badge BugCon 2026 (F6.1). Un solo HTML sin dependencias:
-  funciona desde file://, hospedado (F6.9) o embebido en el firmware.
+  Configurador del badge BugCon 2026 (F6.1). Un solo HTML sin dependencias,
+  abierto desde file:// (D-16: sin servidor; no hace peticiones de red).
   Portado de e-ink-Keychain/tool/configurator.html: recorte, tono, dithering,
   texto, vista previa exacta y Web Serial con OK/ERR y timeouts. Agrega el
   editor de la estampa (NICK/CARD/AVTR), la plantilla "Copa BugCon" y la
-  sincronización del álbum (F6.2: ALBM -> backend, o .json para subirlo
-  después). Protocolo: firmware/badge_bugcon_2026/src/services/
-  usb_protocol.h y §3.5 del plan. Web Serial (F6.7): Chrome, Edge o Brave de
-  escritorio, en contexto seguro (https, localhost o file://); en los demás
-  casos la página dice por qué no y qué hacer.
+  exportación local del álbum (ALBM -> .json). Protocolo: firmware/
+  badge_bugcon_2026/src/services/usb_protocol.h y §3.5 del plan. Web Serial
+  (F6.7): Chrome, Edge o Brave de escritorio, en contexto seguro (file://,
+  localhost o https); en los demás casos la página dice por qué no y qué hacer.
 -->
 <style>
 :root {
@@ -209,18 +208,10 @@ canvas.px {
 
     <h2 style="margin-top:14px">Álbum</h2>
     <div class="row">
-      <button id="syncBtn" class="primary" disabled>Sincronizar álbum</button>
-      <button id="jsonBtn" disabled>Guardar .json</button>
-      <button id="uploadBtn">Subir .json guardado</button>
-      <input type="file" id="uploadFile" accept=".json,application/json" hidden>
+      <button id="jsonBtn" class="primary" disabled>Guardar .json</button>
     </div>
-    <div class="row">
-      <label><input type="checkbox" id="avatarPub" disabled> Publicar mi avatar en el álbum web</label>
-    </div>
-    <p class="hint" id="syncHint"></p>
-    <p class="hint">Si marcas la casilla, la sync y el .json llevan el avatar del editor y lo
-    verán quienes tengan tu estampa en su álbum web. Sin marcarla se queda el que ya
-    publicaste; para quitarlo, pídelo al staff.</p>
+    <p class="hint">Guarda en tu computadora tu estampa y las de tu álbum; no se envía a
+    ningún lado. Incluye el nickname y el handle que cada quien compartió en su estampa.</p>
     <p class="hint"><a href="../album/index.html" target="_blank" style="color:var(--accent)">Ver el álbum</a>:
     abre ahí el .json guardado para ver tus estampas por selección y descargar los contactos.</p>
   </section>
@@ -866,7 +857,6 @@ function render() {
   drawBits(pvCtx, bits, W, H);
   if (target === "avatar") {
     avatarBits = bits;
-    $("avatarPub").disabled = false;
     renderTemplate();
   }
 }
@@ -1186,8 +1176,9 @@ function renderTemplate() {
 /* ---------------- transporte: Web Serial ---------------- */
 
 // F6.7: Web Serial solo existe en Chromium de escritorio (Chrome, Edge, Brave)
-// y en contexto seguro: https, localhost o file://. Por http desde una IP de
-// la red el navegador lo esconde aunque lo tenga.
+// y en contexto seguro: file://, localhost o https. Por http desde una IP de
+// la red el navegador lo esconde aunque lo tenga. Sin servidor (D-16), el
+// camino es abrir el archivo local; en el teléfono, el Wi-Fi del badge (RF-15).
 const UA_DATA = navigator.userAgentData;
 const IS_MOBILE = UA_DATA ? UA_DATA.mobile : /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent);
 const IS_LINUX = /linux/i.test((UA_DATA && UA_DATA.platform) || navigator.platform) && !IS_MOBILE;
@@ -1195,21 +1186,18 @@ const BROWSER = navigator.brave ? "brave" : /Edg\//.test(navigator.userAgent) ? 
 const BADGE_USB_VENDOR = 0x303a;   // Hardware CDC del ESP32-S3 (303A:1001, D-06)
 
 function noSerialReason() {
-  // "Subir .json guardado" necesita el servidor (https, como SYNC_URL)
-  const offline = " Sin badge todavía puedes preparar la imagen" +
-                  (location.protocol === "https:" ? " y subir un .json guardado." : ".");
-  if (IS_MOBILE)   // antes que https: en el teléfono no ayuda
-    return "Desde el teléfono no se puede conectar el badge: usa una computadora con Chrome, " +
-           "Edge o Brave. Para ver tu álbum, escanea el código QR del badge.";
-  if (!isSecureContext) {
-    const https = location.protocol === "http:" ? ": abre https://" + location.host + location.pathname : "";
-    return "Web Serial solo funciona en una página segura" + https + "." + offline;
-  }
+  const offline = " Sin badge todavía puedes preparar la imagen.";
+  if (IS_MOBILE)   // antes que el contexto seguro: en el teléfono no ayuda
+    return "Desde el teléfono no se puede conectar el badge por USB: usa una computadora con " +
+           "Chrome, Edge o Brave, o configura tu estampa desde el teléfono con el Wi-Fi del badge.";
+  if (!isSecureContext)
+    return "Web Serial solo funciona en una página segura: descarga este archivo y ábrelo " +
+           "directamente en el navegador (file://), sin servidor." + offline;
   if (navigator.brave)
     return "Este Brave no tiene Web Serial: actualízalo o usa Chrome o Edge." + offline;
-  return "Este navegador no tiene Web Serial (Firefox y Safari no lo incluyen): abre esta " +
-         "página en Chrome, Edge o Brave de escritorio. Para ver tu álbum desde el teléfono, " +
-         "escanea el código QR del badge." + offline;
+  return "Este navegador no tiene Web Serial (Firefox y Safari no lo incluyen): abre este " +
+         "archivo en Chrome, Edge o Brave de escritorio. Desde el teléfono, configura tu " +
+         "estampa con el Wi-Fi del badge." + offline;
 }
 
 // Motivo de un requestPort()/open() fallido, con qué hacer.
@@ -1246,7 +1234,7 @@ function setStatus(msg, cls) {
 }
 
 const DEVICE_BUTTONS = ["sendBtn", "showBtn", "clrBtn", "testBtn", "avatarBtn",
-                        "readCardBtn", "saveCardBtn", "tplSendBtn", "syncBtn", "jsonBtn"];
+                        "readCardBtn", "saveCardBtn", "tplSendBtn", "jsonBtn"];
 function deviceButtons(enabled) {
   for (const id of DEVICE_BUTTONS) $(id).disabled = !enabled;
 }
@@ -1619,25 +1607,13 @@ $("saveCardBtn").addEventListener("click", async () => {
   setStatus("Estampa guardada y firmada por el badge.", "ok");
 });
 
-/* ---------------- sincronización del álbum (F6.2) ----------------
-   El .json lleva la exportación de ALBM completa en base64 ("albm") y un
-   resumen legible; el backend (F6.4) solo confía en "albm" y rechaza un
-   resumen que no coincida. Referencia: to_json()/load_export() de
-   tools/verify_album.py, que también verifica el .json.
-   Contrato con el backend: POST SYNC_URL con el .json (application/json);
-   2xx = recibido, con {"verified": n, "count": m} opcional; si no, un
-   {"error": "<motivo>"} opcional. Sin servidor o sin red se guarda el .json
-   y se sube después (aquí, o en una estación del venue). */
-const SYNC_FORMAT = "bb26-album", SYNC_VERSION = 1;
-const SYNC_TIMEOUT_MS = 15000;
-const SYNC_MAX_BYTES = 256 * 1024;   // el álbum lleno mide ≈ 52 KB en .json
-// El servidor que hospeda la página (F6.9); abierta desde file:// no hay.
-// ?api= solo acepta localhost: un enlace no puede mandar el álbum a otro lado.
-const SYNC_URL = (() => {
-  const api = new URLSearchParams(location.search).get("api");
-  if (api && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(api)) return api;
-  return location.protocol === "https:" ? new URL("/api/album", location).href : null;
-})();
+/* ---------------- exportación local del álbum ----------------
+   El .json (formato bb26-album, §3.6) lleva la exportación de ALBM completa
+   en base64 ("albm") y un resumen legible; quien lo lee solo confía en
+   "albm" y rechaza un resumen que no coincida. Referencia: to_json()/
+   load_export() de tools/verify_album.py; lo abren web/album y
+   verify_album.py. Se guarda en la computadora, no se envía a ningún lado. */
+const EXPORT_FORMAT = "bb26-album", EXPORT_VERSION = 1;
 
 function albumSummary(data) {
   return {
@@ -1650,35 +1626,13 @@ function albumSummary(data) {
 
 const base64 = bytes => btoa(Array.from(bytes, b => String.fromCharCode(b)).join(""));
 
-// "avatar" (opt-in): lo registra el backend (F6.4) para el álbum web
 function albumJson(data) {
-  const pub = $("avatarPub").checked && avatarBits;
   return JSON.stringify({
-    format: SYNC_FORMAT, version: SYNC_VERSION, ...albumSummary(data),
+    format: EXPORT_FORMAT, version: EXPORT_VERSION, ...albumSummary(data),
     fw: info ? info.fw : null,
     exported_at: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
     albm: base64(data),
-    ...(pub ? { avatar: base64(packBits(avatarBits, AVATAR_W, AVATAR_H)) } : {}),
   }, null, 1);
-}
-
-// Un .json guardado antes: se revisa antes de subirlo, como load_export()
-function checkAlbumJson(text) {
-  let doc, data;
-  try {
-    doc = JSON.parse(text);
-    data = Uint8Array.from(atob(doc.albm), c => c.charCodeAt(0));
-  } catch (e) { /* JSON o base64 inválido */ }
-  if (!doc || doc.format !== SYNC_FORMAT || doc.version !== SYNC_VERSION ||
-      typeof doc.albm !== "string" || !data) {
-    throw new Error("no es un álbum de la Copa BugCon 2026");
-  }
-  if (!validAlbm(data)) throw new Error("la exportación está incompleta o dañada");
-  const s = albumSummary(data);
-  for (const k in s) {
-    if (doc[k] !== s[k]) throw new Error("el resumen no coincide con la exportación (¿se editó?)");
-  }
-  return s;
 }
 
 function download(text, name) {
@@ -1689,48 +1643,6 @@ function download(text, name) {
   URL.revokeObjectURL(a.href);
 }
 
-async function postAlbum(body) {
-  let res;
-  try {
-    res = await fetch(SYNC_URL, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body,
-      signal: AbortSignal.timeout(SYNC_TIMEOUT_MS),
-    });
-  } catch (e) {
-    throw new Error("no se pudo contactar al servidor");
-  }
-  const reply = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(reply.error || "el servidor respondió " + res.status);
-  return "Álbum sincronizado" + (Number.isInteger(reply.count) ?
-    ": " + reply.verified + "/" + reply.count + " estampas verificadas." : ".");
-}
-
-let uploading = false;
-async function upload(body, name, saveOnFail) {
-  if (uploading) { setStatus("Ya hay una subida en curso.", "err"); return; }
-  uploading = true;
-  setStatus("Subiendo el álbum…", "");
-  try {
-    setStatus(await postAlbum(body), "ok");
-  } catch (e) {
-    if (saveOnFail) download(body, name);
-    setStatus("No se pudo subir el álbum: " + e.message +
-      (saveOnFail ? ". Se guardó " + name + " para subirlo después." : "."), "err");
-  } finally {
-    uploading = false;
-  }
-}
-
-$("syncBtn").addEventListener("click", async () => {
-  const data = await fetchAlbum();
-  if (!data) return;
-  const body = albumJson(data), name = "album_" + albumSummary(data).badge_no + ".json";
-  if (SYNC_URL && navigator.onLine) return upload(body, name, true);
-  download(body, name);
-  setStatus((SYNC_URL ? "Sin red" : "Sin servidor") + ": se guardó " + name +
-    "; súbelo después con «Subir .json guardado».", "ok");
-});
-
 $("jsonBtn").addEventListener("click", async () => {
   const data = await fetchAlbum();
   if (!data) return;
@@ -1738,30 +1650,6 @@ $("jsonBtn").addEventListener("click", async () => {
   download(albumJson(data), name);
   setStatus("Se guardó " + name + " (" + s.count + " estampas).", "ok");
 });
-
-$("uploadBtn").addEventListener("click", () => $("uploadFile").click());
-$("uploadFile").addEventListener("change", async e => {
-  const f = e.target.files[0];
-  e.target.value = "";   // elegir el mismo archivo otra vez también dispara change
-  if (!f) return;
-  try {
-    if (f.size > SYNC_MAX_BYTES) throw new Error("es demasiado grande");
-    const text = await f.text();
-    checkAlbumJson(text);
-    await upload(text, f.name, false);
-  } catch (err) {
-    setStatus(f.name + " no se puede subir: " + err.message + ".", "err");
-  }
-});
-
-$("uploadBtn").disabled = !SYNC_URL;
-$("syncHint").textContent = (SYNC_URL ?
-  "Sincronizar sube a " + new URL(SYNC_URL).host + " tu estampa y las de tu álbum con el " +
-  "token de cada intercambio (cuentan para el ranking). Sin red se guarda un .json para " +
-  "subirlo después." :
-  "Esta copia del configurador no tiene servidor: Sincronizar guarda un .json que puedes " +
-  "subir después desde el configurador en línea o en una estación del venue.") +
-  " Incluye el nickname y el handle que cada quien compartió en su estampa.";
 
 drawSource();
 setTarget("avatar");
