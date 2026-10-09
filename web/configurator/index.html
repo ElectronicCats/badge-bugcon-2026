@@ -26,14 +26,21 @@
   --ok: #4ec97a;
   --err: #ff6b6b;
   --border: #333845;
+  color-scheme: dark;   /* menús, casillas y flechas nativas en oscuro */
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
 body {
   background: var(--bg);
   color: var(--text);
   font: 14px/1.45 system-ui, sans-serif;
   padding: 16px;
+  max-width: 1632px;
+  margin: 0 auto;
 }
+a { color: var(--accent); }
+input, select { accent-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 header {
   display: flex;
   align-items: center;
@@ -50,10 +57,12 @@ h2 {
   color: var(--muted);
   margin-bottom: 10px;
 }
+.card > h2:not(:first-child) { margin-top: 18px; }
 main {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 16px;
+  align-items: start;   /* cada tarjeta a su altura, sin huecos vacíos */
   max-width: 1600px;
 }
 .card {
@@ -71,10 +80,11 @@ button {
   font: inherit;
   cursor: pointer;
 }
-button:hover { border-color: var(--accent); }
+button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: 0.45; cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #10131a; font-weight: 600; }
 .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.row > label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .ctl { display: grid; grid-template-columns: 92px 1fr 44px; align-items: center; gap: 8px; margin-bottom: 6px; }
 .ctl label { color: var(--muted); }
 .ctl output { text-align: right; font-variant-numeric: tabular-nums; }
@@ -87,6 +97,9 @@ select, input[type=text], input[type=number] {
   padding: 5px 8px;
   font: inherit;
 }
+input:disabled, select:disabled { opacity: 0.5; }
+/* min-width: 0 para que el control no empuje al contador fuera de la tarjeta */
+.ctl > input, .field > input, .field > select { width: 100%; min-width: 0; }
 .field { display: grid; grid-template-columns: 92px 1fr 60px; align-items: center; gap: 8px; margin-bottom: 8px; }
 .field label { color: var(--muted); }
 .field output { text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -100,8 +113,8 @@ select, input[type=text], input[type=number] {
   margin-bottom: 10px;
 }
 #drop.over { border-color: var(--accent); color: var(--accent); }
-#srcWrap { position: relative; width: 100%; }
-#srcCanvas { width: 100%; display: block; border-radius: 6px; background: #000; cursor: move; touch-action: none; }
+#srcWrap { position: relative; width: 100%; margin-bottom: 8px; }
+#srcCanvas { width: 100%; display: block; border-radius: 6px; background: #000; touch-action: none; }
 #video { width: 100%; border-radius: 6px; display: none; margin-bottom: 8px; }
 canvas.px {
   max-width: 100%;
@@ -116,6 +129,7 @@ canvas.px {
 .targets label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
 .slots { display: flex; gap: 8px; margin-bottom: 10px; }
 .slots label {
+  position: relative;
   flex: 1;
   text-align: center;
   padding: 8px 0;
@@ -125,9 +139,12 @@ canvas.px {
   cursor: pointer;
   color: var(--muted);
 }
-.slots input { display: none; }
+.slots input { position: absolute; opacity: 0; pointer-events: none; }   /* oculto, pero con teclado */
+.slots label:hover { border-color: var(--accent); }
+.slots label:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.slots label:has(:checked) { border-color: var(--accent); }
 .slots label.used { color: var(--text); }
-.slots label.used::after { content: " *"; color: var(--ok); }
+.slots label.used::after { content: " ●"; color: var(--ok); font-size: 10px; vertical-align: middle; }
 .slots input:checked + span { color: var(--accent); font-weight: 700; }
 #status {
   padding: 8px 10px;
@@ -139,15 +156,23 @@ canvas.px {
 }
 #status.ok { color: var(--ok); }
 #status.err { color: var(--err); }
-#prog { width: 100%; margin-top: 8px; accent-color: var(--accent); }
+#prog { width: 100%; accent-color: var(--accent); }
 .textline { margin-bottom: 10px; }
-.textline input[type=text] { width: 100%; margin-bottom: 4px; }
-.textopts { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+.textmain { display: flex; gap: 6px; margin-bottom: 4px; }
+.textmain input { flex: 1; min-width: 0; }
+.textopts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; color: var(--muted); font-size: 12px; }
 .textopts label { display: flex; align-items: center; gap: 4px; }
-.textopts input[type=number] { width: 54px; padding: 4px; }
+.textopts input { width: 100%; min-width: 0; padding: 4px; }
 .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
-#nowebserial { color: var(--err); }
-#statusBar { display: flex; gap: 8px; align-items: center; max-width: 1600px; margin-bottom: 16px; }
+header .hint { margin-top: 0; }
+#nowebserial { color: var(--err); flex-basis: 100%; }
+/* pegada arriba: la respuesta del badge se ve aunque el botón quede abajo */
+#statusBar {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; flex-direction: column; gap: 6px;
+  max-width: 1600px; margin: 0 -16px 16px; padding: 8px 16px;
+  background: var(--bg);
+}
 </style>
 </head>
 <body>
@@ -160,9 +185,9 @@ canvas.px {
 </header>
 
 <div id="statusBar">
-  <div id="status">Listo.</div>
+  <div id="status" role="status">Listo.</div>
+  <progress id="prog" max="1" value="0" hidden></progress>
 </div>
-<progress id="prog" max="1" value="0" hidden></progress>
 
 <main>
   <section class="card">
@@ -180,9 +205,9 @@ canvas.px {
       <label for="pos">Posición</label>
       <select id="pos"></select><span></span>
     </div>
-    <h2 style="margin-top:14px">Estadísticas <span id="freeV" style="text-transform:none"></span></h2>
+    <h2>Estadísticas <span id="freeV" style="text-transform:none"></span></h2>
     <div id="statRows"></div>
-    <h2 style="margin-top:14px">Contacto (opcional)</h2>
+    <h2>Contacto (opcional)</h2>
     <div class="row">
       <label><input type="checkbox" id="handleOn"> Compartir mi handle en la estampa</label>
     </div>
@@ -194,25 +219,25 @@ canvas.px {
     <p class="hint">El handle viaja por infrarrojo dentro de tu estampa a cada badge con el
     que intercambies, y aparece en su álbum. Solo se envía si marcas la casilla.
     El avatar se queda en tu badge (no viaja por IR).</p>
-    <div class="row" style="margin-top:10px">
+    <div class="row">
       <button id="readCardBtn" disabled>Leer del badge</button>
       <button id="saveCardBtn" class="primary" disabled>Guardar estampa</button>
     </div>
 
-    <h2 style="margin-top:14px">Plantilla Copa BugCon</h2>
+    <h2>Plantilla Copa BugCon</h2>
     <canvas id="tpl" class="px" width="200" height="200"></canvas>
     <p class="hint">Así se ve tu estampa en 1 bit. Puedes ponerla de gafete en un slot.</p>
     <div class="row">
       <button id="tplSendBtn" disabled>Enviar plantilla al slot</button>
     </div>
 
-    <h2 style="margin-top:14px">Álbum</h2>
+    <h2>Álbum</h2>
     <div class="row">
       <button id="jsonBtn" class="primary" disabled>Guardar .json</button>
     </div>
     <p class="hint">Guarda en tu computadora tu estampa y las de tu álbum; no se envía a
     ningún lado. Incluye el nickname y el handle que cada quien compartió en su estampa.</p>
-    <p class="hint"><a href="../album/index.html" target="_blank" style="color:var(--accent)">Ver el álbum</a>:
+    <p class="hint"><a href="../album/index.html" target="_blank">Ver el álbum</a>:
     abre ahí el .json guardado para ver tus estampas por selección y descargar los contactos.</p>
   </section>
 
@@ -255,9 +280,9 @@ canvas.px {
       <button id="resetBtn">Restablecer</button>
     </div>
 
-    <h2 style="margin-top:14px">Tramado</h2>
+    <h2>Tramado</h2>
     <div class="row">
-      <select id="mode">
+      <select id="mode" aria-label="Tramado">
         <option value="fs" selected>Floyd-Steinberg</option>
         <option value="bayer4">Bayer 4x4</option>
         <option value="bayer8">Bayer 8x8</option>
@@ -268,7 +293,7 @@ canvas.px {
       <label for="thr">Nivel</label><input type="range" id="thr" min="1" max="254" value="128"><output id="thrV">128</output>
     </div>
 
-    <h2 style="margin-top:14px">Texto encima</h2>
+    <h2>Texto encima</h2>
     <div id="textRows"></div>
     <p class="hint">Arrastra el texto sobre la vista previa para moverlo.</p>
   </section>
@@ -627,17 +652,19 @@ for (let i = 0; i < 3; i++) {
   const div = document.createElement("div");
   div.className = "textline";
   div.innerHTML =
-    '<input type="text" placeholder="Renglón ' + (i+1) + '">' +
+    '<div class="textmain">' +
+      '<input type="text" placeholder="Renglón ' + (i+1) + '" aria-label="Renglón ' + (i+1) + '">' +
+      '<select aria-label="Color del renglón ' + (i+1) + '"><option value="black">Negro</option><option value="white">Blanco</option></select>' +
+    '</div>' +
     '<div class="textopts">' +
       '<label>Tamaño <input type="number" min="6" max="80" value="20"></label>' +
       '<label>X <input type="number" min="0" max="399" value="10"></label>' +
       '<label>Y <input type="number" min="0" max="399" value="' + (10 + i * 30) + '"></label>' +
-      '<select><option value="black">Negro</option><option value="white">Blanco</option></select>' +
     '</div>';
   $("textRows").appendChild(div);
-  const text = div.children[0];
-  const [size, x, y] = div.children[1].querySelectorAll("input");
-  const color = div.children[1].querySelector("select");
+  const text = div.querySelector("input[type=text]");
+  const [size, x, y] = div.querySelectorAll("input[type=number]");
+  const color = div.querySelector("select");
   for (const el of [text, size, x, y, color]) el.addEventListener("input", render);
   textRows.push({ text, size, x, y, color });
 }
@@ -668,7 +695,7 @@ function setTarget(t) {
   [W, H] = t === "avatar" ? [AVATAR_W, AVATAR_H] : [panel.w, panel.h];
   $("avatarCtl").hidden = t !== "avatar";
   $("slotCtl").hidden = t === "avatar";
-  $("pvTitle").textContent = "Vista previa (" + W + " x " + H + ")";
+  $("pvTitle").textContent = "Vista previa (" + W + " × " + H + ")";
   fitCanvas(preview, W, H);
   work.width = W; work.height = H;
   lastBits = null;
@@ -760,6 +787,7 @@ function drawSource() {
       srcCtx.fillRect(ox + x, oy + y, Math.min(12, dw - x), Math.min(12, dh - y));
     }
   }
+  srcCanvas.style.cursor = "move";
   srcCtx.drawImage(oriented, ox, oy, dw, dh);
   // oscurecer fuera del recorte
   const cw = crop.size * aspect();
@@ -1076,7 +1104,7 @@ function fitFont(ctx, text, weight, maxSize, maxW) {
 
 function renderTemplate() {
   const w = panel.w, h = panel.h, c = editedCard();
-  if (tpl.width !== w || tpl.height !== h) fitCanvas(tpl, w, h);
+  if (tpl.width !== w || tpl.height !== h || !tpl.style.width) fitCanvas(tpl, w, h);
   const ctx = tplCtx;
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, w, h);
