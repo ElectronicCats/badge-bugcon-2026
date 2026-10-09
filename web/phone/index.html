@@ -1,21 +1,241 @@
 <!doctype html>
-<!-- Página provisional del Wi-Fi del badge (F6.11). La reemplaza el editor
-     de F6.12; se embebe con tools/embed_page.py. -->
+<!-- Página del teléfono (F6.12, RF-15). La sirve el badge desde su propio
+     Wi-Fi (services/wifi_config), comprimida y embebida con
+     tools/embed_page.py. Un solo HTML sin recursos externos: en el AP del
+     badge el teléfono no tiene Internet. Edita los campos de la estampa con
+     los límites del firmware; el avatar y el gafete quedan en el configurador
+     USB (D-20). Rutas: GET /card (64 B firmados) y POST /card (bytes 0..47)
+     -> "OK" o "ERR <motivo>" (los de CARD). -->
 <html lang="es">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Badge BugCon 2026</title>
-<body style="font-family:sans-serif;margin:16px">
-<h1>Badge BugCon 2026</h1>
-<p>Estás conectado al badge. El editor de la estampa llega con F6.12.</p>
-<p>Nickname: <b id="nick">…</b></p>
+<title>Mi estampa · BugCon 2026</title>
+<style>
+:root { color-scheme: light dark; --bg: #fff; --fg: #15171c; --muted: #5d6470;
+  --accent: #0a62c2; --ok: #1d7a3e; --err: #c0262d; --line: #c9ced8; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14161a; --fg: #e8eaf0; --muted: #9aa1ae; --accent: #4da3ff;
+    --ok: #4ec97a; --err: #ff6b6b; --line: #3a4050; }
+}
+* { box-sizing: border-box; }
+body { margin: 0 auto; max-width: 480px; padding: 16px; background: var(--bg);
+  color: var(--fg); font: 16px/1.4 system-ui, sans-serif; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 15px; margin: 22px 0 8px; }
+label { display: block; margin-top: 14px; font-weight: 600; }
+input, select, button { font: inherit; color: inherit; }
+input[type=text], select { width: 100%; min-height: 44px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+input[type=range] { width: 100%; height: 32px; margin: 0; }
+input[type=checkbox] { width: 22px; height: 22px; vertical-align: middle; }
+.row { display: flex; justify-content: space-between; color: var(--muted); }
+.stat { display: grid; grid-template-columns: 3em 1fr 2.5em; gap: 8px;
+  align-items: center; margin-top: 6px; }
+.stat output { text-align: right; }
+.hint, small { color: var(--muted); font-size: 14px; }
+.bad { color: var(--err); }
+button { width: 100%; min-height: 48px; margin-top: 20px; border: 0;
+  border-radius: 8px; background: var(--accent); color: #fff; font-weight: 600; }
+button:disabled { opacity: .45; }
+#status { min-height: 1.4em; margin-top: 12px; }
+#status.ok { color: var(--ok); }
+#status.err { color: var(--err); }
+</style>
+<h1>Mi estampa</h1>
+<div class="row"><span>Badge BugCon 2026</span><span id="no"></span></div>
+
+<form id="form">
+<label for="nick">Nickname</label>
+<input type="text" id="nick" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+<div class="row"><small id="nickE"></small><small id="nickV"></small></div>
+
+<label for="team">Selección</label>
+<select id="team"></select>
+<label for="pos">Posición</label>
+<select id="pos"></select>
+
+<h2>Estadísticas <small id="free"></small></h2>
+<div id="stats"></div>
+
+<h2>Contacto (opcional)</h2>
+<label style="font-weight:400"><input type="checkbox" id="handleOn"> Compartir mi handle en la estampa</label>
+<label for="handle">Handle</label>
+<input type="text" id="handle" placeholder="@usuario" autocomplete="off" autocapitalize="off" spellcheck="false" disabled>
+<div class="row"><small id="handleE"></small><small id="handleV"></small></div>
+<p class="hint">El handle viaja por infrarrojo dentro de tu estampa a cada badge con el que
+intercambies y aparece en su álbum. Solo se envía si marcas la casilla.</p>
+
+<button id="save" disabled>Guardar en el badge</button>
+<p id="status" role="status" aria-live="polite">Leyendo tu estampa…</p>
+</form>
+<p class="hint">Esta página la sirve tu badge por su propio Wi-Fi: no usa Internet, no hay
+servidor y no guarda nada en tu teléfono. El avatar y el gafete se cambian con el
+configurador USB.</p>
+
 <script>
-fetch("/card").then(r => r.arrayBuffer()).then(b => {
-  const nick = new Uint8Array(b, 4, 16);
-  const end = nick.indexOf(0);
-  document.getElementById("nick").textContent =
-    new TextDecoder().decode(end < 0 ? nick : nick.subarray(0, end));
+// Igual que el firmware: services/card.cpp (TEAMS, POSITIONS, STATS) y
+// cfg::card de badge_config.h. El índice viaja en la estampa: no reordenar.
+// tools/test_configurator.py revisa que coincidan.
+const TEAMS = ["Red Team", "Blue Team", "Purple Team", "Hardware",
+               "AppSec", "OSINT", "Forense", "Cripto"];
+const POSITIONS = ["Portero", "Defensa", "Medio", "Delantero", "Pentester"];
+const STATS = ["ATK", "DEF", "HAX", "SUE"];
+const STAT_MAX = 99, STAT_BUDGET = 200;
+const NICK_BYTES = 16, HANDLE_BYTES = 20, NONE = 0xFF;
+const CARD_VERSION = 1, CARD_FIELDS_BYTES = 48, CARD_BYTES = 64;
+
+// Motivos de POST /card: card::editReason() + los del servidor.
+const REASONS = {
+  badver: "el badge no reconoce esta versión de estampa.",
+  badnick: "el badge rechazó el nickname (vacío o con caracteres no válidos).",
+  badteam: "la selección no está en el catálogo del badge.",
+  badpos: "la posición no está en el catálogo del badge.",
+  badstats: `cada estadística va de 0 a ${STAT_MAX} y entre todas suman a lo más ${STAT_BUDGET}.`,
+  badhandle: "el badge rechazó el handle (caracteres no válidos).",
+  flash: "el badge no pudo escribir en su memoria; intenta de nuevo.",
+  badsize: "la estampa no llegó completa; intenta de nuevo.",
+  busy: "el badge está ocupado; intenta de nuevo en unos segundos.",
+};
+const OFFLINE = "No hay conexión con el badge: revisa que tu teléfono siga en su red Wi-Fi " +
+                "(BUGCON26-…) y que el badge siga mostrando la pantalla de Wi-Fi.";
+
+const $ = id => document.getElementById(id), utf8 = new TextEncoder();
+let card = null;  // 64 B leídos del badge; null = todavía no (no se guarda)
+
+// Igual que cleanText() del firmware: sin espacios en los extremos.
+const cleanText = s => s.replace(/^ +| +$/g, "");
+
+// Error en español o "". La fuente del badge es Latin-1 (gfx/font).
+function textError(s, maxBytes) {
+  const n = utf8.encode(s).length;
+  if (n > maxBytes) return `mide ${n} B; caben ${maxBytes}`;
+  if (/[\x00-\x1f\x7f-\x9f]/.test(s)) return "tiene caracteres de control";
+  const bad = s.match(/[^\x20-\x7e\xa0-\xff]/u);
+  return bad ? `el badge no puede dibujar «${bad[0]}» (solo letras, acentos y ñ)` : "";
+}
+
+function status(text, cls) {
+  $("status").textContent = text;
+  $("status").className = cls || "";
+}
+
+for (const [id, names] of [["team", TEAMS], ["pos", POSITIONS]]) {
+  $(id).add(new Option("Ninguna", NONE));
+  names.forEach((n, i) => $(id).add(new Option(n, i)));
+}
+
+const statInputs = STATS.map((name, i) => {
+  const row = document.createElement("div");
+  row.className = "stat";
+  row.innerHTML = `<label for="st${i}" style="margin:0">${name}</label>` +
+    `<input type="range" id="st${i}" min="0" max="${STAT_MAX}" value="0"><output></output>`;
+  $("stats").appendChild(row);
+  const input = row.querySelector("input");
+  // El presupuesto se respeta al mover: no deja pasar de STAT_BUDGET.
+  input.addEventListener("input", () => {
+    const others = statValues().reduce((a, v) => a + v, 0) - +input.value;
+    if (+input.value + others > STAT_BUDGET) input.value = STAT_BUDGET - others;
+  });
+  return input;
 });
+const statValues = () => statInputs.map(s => +s.value);
+
+const nick = () => cleanText($("nick").value);
+const handle = () => $("handleOn").checked ? cleanText($("handle").value) : "";
+
+function onEdit() {
+  statInputs.forEach(s => { s.nextElementSibling.textContent = s.value; });
+  $("free").textContent = "· puntos libres: " + (STAT_BUDGET - statValues().reduce((a, v) => a + v, 0));
+  $("handle").disabled = !$("handleOn").checked;
+  const nickErr = nick() ? textError(nick(), NICK_BYTES) : "escribe un nickname";
+  const handleErr = textError(handle(), HANDLE_BYTES);
+  $("nickE").textContent = nickErr;
+  $("handleE").textContent = handleErr;
+  $("nickV").textContent = utf8.encode(nick()).length + "/" + NICK_BYTES + " B";
+  $("handleV").textContent = utf8.encode(handle()).length + "/" + HANDLE_BYTES + " B";
+  $("nickE").className = $("nickV").className = nickErr ? "bad" : "";
+  $("handleE").className = $("handleV").className = handleErr ? "bad" : "";
+  $("save").disabled = !card || !!nickErr || !!handleErr;
+}
+$("form").addEventListener("input", onEdit);
+
+const text = (b, off, len) => {
+  const s = b.subarray(off, off + len), end = s.indexOf(0);
+  return new TextDecoder().decode(end < 0 ? s : s.subarray(0, end));
+};
+
+function show(b) {
+  card = b;
+  const no = b[2] | b[3] << 8;
+  $("no").textContent = no ? "Dorsal " + String(no).padStart(4, "0") : "Sin dorsal";
+  $("nick").value = text(b, 4, NICK_BYTES);
+  $("team").value = b[20] < TEAMS.length ? b[20] : NONE;
+  $("pos").value = b[21] < POSITIONS.length ? b[21] : NONE;
+  statInputs.forEach((s, i) => { s.value = b[22 + i]; });
+  $("handle").value = text(b, 28, HANDLE_BYTES);
+  $("handleOn").checked = $("handle").value !== "";
+  onEdit();
+}
+
+// La estampa del badge; null y el motivo en el estado si no se pudo.
+async function readCard() {
+  try {
+    const r = await fetch("/card", { cache: "no-store" });
+    const b = new Uint8Array(await r.arrayBuffer());
+    if (r.ok && b.length === CARD_BYTES && b[0] === CARD_VERSION) return b;
+    const reason = new TextDecoder().decode(b).replace(/^ERR /, "");
+    status("No se pudo leer la estampa: " + (REASONS[reason] ||
+           (r.ok ? REASONS.badver : "error " + r.status + ".")), "err");
+  } catch (e) {
+    status(OFFLINE, "err");
+  }
+  return null;
+}
+
+// Payload de POST /card: bytes 0..47 de la estampa leída (version, type,
+// badge_no, rarity y flags los pone el badge) con los campos editados.
+function packFields() {
+  const out = card.slice(0, CARD_FIELDS_BYTES);
+  out.fill(0, 4, 20).set(utf8.encode(nick()), 4);
+  out[20] = +$("team").value;
+  out[21] = +$("pos").value;
+  out.set(statValues(), 22);
+  out.fill(0, 28).set(utf8.encode(handle()), 28);
+  return out;
+}
+
+$("form").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  $("save").disabled = true;
+  status("Guardando…");
+  let reply;
+  try {
+    const r = await fetch("/card", { method: "POST", body: packFields() });
+    reply = await r.text();
+  } catch (e) {
+    status(OFFLINE + " Si el badge ya muestra tu estampa nueva, sí se guardó.", "err");
+    onEdit();
+    return;
+  }
+  if (reply !== "OK") {
+    status("No se guardó: " + (REASONS[reply.replace(/^ERR /, "")] || reply), "err");
+    onEdit();
+    return;
+  }
+  // Lo que quedó (normalizado y firmado). El badge apaga su Wi-Fi a los
+  // pocos segundos de guardar: después ya no se puede editar desde aquí.
+  const b = await readCard();
+  if (b) show(b);
+  for (const el of $("form").elements) el.disabled = true;
+  status("Guardada y firmada por tu badge. Su Wi-Fi se apaga en unos segundos: " +
+         "ya puedes volver a tu red.", "ok");
+});
+
+readCard().then(b => {
+  if (b) {
+    show(b);
+    status("");
+  }
+});
+onEdit();
 </script>
-</body>
-</html>
