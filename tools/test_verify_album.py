@@ -2,7 +2,7 @@
 """
 test_verify_album.py — Pruebas de tools/verify_album.py sin badge (F5.8):
 arma exportaciones ALBM con tools/identity.py y comprueba que se acepten las
-buenas y se rechacen las alteradas, como lo hará el backend (F6.4): firma
+buenas y se rechacen las alteradas, fuera de línea con K_master: firma
 inválida, estampa firmada con la clave de otro badge, token falsificado o de
 otro receptor, nonce cambiado, repetidas, la propia, otra K_master y
 exportaciones truncadas. Incluye el álbum lleno (400 + especiales) y el
@@ -254,8 +254,8 @@ class VerifyAlbum(unittest.TestCase):
             self.assertIn("--master", no_master.stderr)
 
 
-class SyncJson(unittest.TestCase):
-    """El .json de la sincronización (F6.2) que sube o guarda el configurador."""
+class ExportJson(unittest.TestCase):
+    """El .json (bb26-album) que guarda el configurador con "Guardar .json"."""
 
     def test_roundtrip(self):
         data = export([entry(7, 1), entry(8, 2)])

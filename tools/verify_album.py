@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 verify_album.py — Verifica la exportación ALBM de un badge (F5.7, §3.3 del
-plan) como lo hará el backend (F6.4): la firma de mi estampa y, por cada
-estampa del álbum, su firma y el token del intercambio.
+plan), fuera de línea y con K_master (no hay servidor, D-16): la firma de mi
+estampa y, por cada estampa del álbum, su firma y el token del intercambio.
 
   K_A = HMAC-SHA256(K_master, MAC_A || A.no)   (tools/identity.py)
   sig de la estampa de A con K_A; token de A hacia B (el que exporta) con el
@@ -26,10 +26,10 @@ se verifican con la clave del que exporta. Solo cuentan en su álbum.
 
 Una estampa repetida en la exportación (mismo tipo y número que una anterior)
 no cuenta: el badge las deduplica, así que una repetida es una exportación
-alterada (el ranking cuenta tokens únicos, §3.3).
+alterada (cuentan los tokens únicos, §3.3).
 
-Sincronización (F6.2): el configurador sube (o guarda para subir después) la
-exportación como .json; acepta el .bin y el .json. El .json lleva la
+Exportación local: "Guardar .json" del configurador y `badge_usb.py album
+-o x.json` la guardan como .json; acepta el .bin y el .json. El .json lleva la
 exportación completa en base64 ("albm") y un resumen legible; lo único que
 cuenta es "albm" y un resumen que no coincide con ella se rechaza:
   {"format": "bb26-album", "version": 1, "badge_no": 42,
@@ -41,7 +41,7 @@ codifica la pantalla QR del badge (lo que leerá web/album, F6.3):
   <cfg::album::QR_URL><dorsal>/<bitmap>/<tag>
 bitmap = 50 B (dorsal n en el bit n-1, MSB primero) y tag =
 identity.album_tag() en base32 de RFC 4648 sin relleno. Solo prueba que el
-bitmap salió de ese badge; no cuenta para el ranking (no lleva tokens).
+bitmap salió de ese badge (no lleva tokens). Destino del QR: D-18.
 
 Uso:
   ./tools/verify_album.py album.bin --mac 999=F4:12:FA:52:03:F8
@@ -68,7 +68,7 @@ import identity
 HEADER = struct.Struct("<4sBB6sH2s64s")
 ENTRY = struct.Struct("<64s8sHI2s")
 FORMAT = 1
-JSON_FORMAT = "bb26-album"  # .json de la sincronización (F6.2)
+JSON_FORMAT = "bb26-album"  # .json de la exportación local (§3.6)
 ATTENDEE = 0  # card::ATTENDEE
 ATTENDEES = 400  # cfg::album::ATTENDEES
 BITMAP_BYTES = (ATTENDEES + 7) // 8
@@ -129,7 +129,7 @@ def parse_album(data):
 
 
 def to_json(data, fw=None, exported_at=None):
-    """Exportación ALBM -> .json de la sincronización (F6.2)."""
+    """Exportación ALBM -> .json de la exportación local (bb26-album)."""
     header, _ = parse_album(data)
     return json.dumps({
         "format": JSON_FORMAT, "version": FORMAT, "badge_no": header["no"],
@@ -140,7 +140,7 @@ def to_json(data, fw=None, exported_at=None):
 
 
 def load_export(data):
-    """Contenido de un .bin o un .json (F6.2) -> exportación ALBM cruda."""
+    """Contenido de un .bin o un .json (bb26-album) -> exportación ALBM cruda."""
     if not data.lstrip().startswith(b"{"):
         return data
     try:
@@ -152,7 +152,7 @@ def load_export(data):
         summary = (doc["badge_no"], doc["mac"].upper(), doc["provisioned"],
                    doc["count"])
     except (KeyError, TypeError, AttributeError, binascii.Error) as e:
-        raise ValueError(f".json de sincronización inválido: {e!r}") from None
+        raise ValueError(f".json de álbum inválido: {e!r}") from None
     if summary != (header["no"], header["mac"].hex(":").upper(),
                    header["provisioned"], header["count"]):
         raise ValueError("el resumen del .json no coincide con su exportación")
@@ -211,7 +211,7 @@ def read_macs(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     parser.add_argument("file", nargs="?",
-                        help="exportación ALBM (.bin o .json de F6.2)")
+                        help="exportación ALBM (.bin o .json bb26-album)")
     parser.add_argument("-p", "--port", help="leer ALBM del badge")
     parser.add_argument("--qr", help="texto del QR del álbum (F5.6)")
     parser.add_argument("--master", type=bytes.fromhex,

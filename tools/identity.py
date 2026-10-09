@@ -2,15 +2,15 @@
 """
 identity.py — Referencia de la identidad del badge (§3.3 del plan, F5.1): las
 mismas cuentas que firmware/badge_bugcon_2026/src/services/identity.cpp. La
-usan (o la usarán) provision.py (F12.4), verify_album.py (F5) y el backend.
+usan (o la usarán) provision.py (F12.4) y verify_album.py (F5).
 
   K_dev = HMAC-SHA256(K_master, MAC(6) || badge_no(u16 LE))
   sig   = HMAC-SHA256(K_dev, estampa[0:48])[:16]
   tok   = HMAC-SHA256(K_A, "XCHG" || A.no || B.no || nonce_B (u32 LE))[:8]
   tag   = HMAC-SHA256(K_dev, "ALBQ" || badge_no || bitmap(50))[:8]  (QR, F5.6)
 
-Sin provisionar, el badge usa DEV_MASTER (pública) como K_master: el backend,
-con la K_master real, rechaza lo que salga de un DevKit.
+Sin provisionar, el badge usa DEV_MASTER (pública) como K_master:
+verify_album.py, con la K_master real, rechaza lo que salga de un DevKit.
 
 Uso (la clave sale de --key o se deriva con --mac y el dorsal; sin
 --master se usa DEV_MASTER):
