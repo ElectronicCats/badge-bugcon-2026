@@ -28,6 +28,12 @@ def to_header(html: bytes, source: str) -> str:
     )
 
 
+def from_header(header: str) -> bytes:
+    """Los bytes gzip del arreglo de un .h escrito por to_header()."""
+    body = header.split("GZ[] = {\n", 1)[1].split("\n};")[0]
+    return bytes(int(b, 16) for b in body.replace(",", " ").split())
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         sys.exit(__doc__)
@@ -36,7 +42,5 @@ if __name__ == "__main__":
     header = to_header(html, sys.argv[1])
     with open(sys.argv[2], "w") as f:
         f.write(header)
-    body = header.split("GZ[] = {\n", 1)[1].split("\n};")[0]
-    data = bytes(int(b, 16) for b in body.replace(",", " ").split())
-    assert gzip.decompress(data) == html  # El arreglo escrito es la página
+    assert gzip.decompress(from_header(header)) == html  # Es la página
     print(header.splitlines()[1][3:])
