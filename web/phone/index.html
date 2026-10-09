@@ -1,0 +1,21 @@
+<!doctype html>
+<!-- Página provisional del Wi-Fi del badge (F6.11). La reemplaza el editor
+     de F6.12; se embebe con tools/embed_page.py. -->
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Badge BugCon 2026</title>
+<body style="font-family:sans-serif;margin:16px">
+<h1>Badge BugCon 2026</h1>
+<p>Estás conectado al badge. El editor de la estampa llega con F6.12.</p>
+<p>Nickname: <b id="nick">…</b></p>
+<script>
+fetch("/card").then(r => r.arrayBuffer()).then(b => {
+  const nick = new Uint8Array(b, 4, 16);
+  const end = nick.indexOf(0);
+  document.getElementById("nick").textContent =
+    new TextDecoder().decode(end < 0 ? nick : nick.subarray(0, end));
+});
+</script>
+</body>
+</html>
