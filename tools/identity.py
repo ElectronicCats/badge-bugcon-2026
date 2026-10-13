@@ -8,6 +8,7 @@ usan provision.py (F12.4) y verify_album.py (F5).
   sig   = HMAC-SHA256(K_dev, estampa[0:48])[:16]
   tok   = HMAC-SHA256(K_A, "XCHG" || A.no || B.no || nonce_B (u32 LE))[:8]
   tag   = HMAC-SHA256(K_dev, "ALBQ" || badge_no || bitmap(50))[:8]  (QR, F5.6)
+  flag  = SHA-256("BB26FLAG" || etapa (u8, desde 1) || flag UTF-8)  (retos, F9.1)
 
 Sin provisionar, el badge usa DEV_MASTER (pública) como K_master:
 verify_album.py, con la K_master real, rechaza lo que salga de un DevKit.
@@ -18,6 +19,7 @@ Uso (la clave sale de --key o se deriva con --mac y el dorsal; sin
   ./tools/identity.py card <128 hex de 'id'> --mac F4:12:FA:52:03:F8
   ./tools/identity.py token --from 7 --to 999 --nonce 0x1234ABCD \\
       --tok 0011223344556677 --mac F4:12:FA:52:03:F8
+  ./tools/identity.py flag 1 'BB26{...}'   # hash de STAGES[] (challenge_engine)
 """
 import argparse
 import hashlib
@@ -51,6 +53,11 @@ def album_tag(key, badge_no, bitmap):
     return _hmac(key, b"ALBQ" + struct.pack("<H", badge_no) + bitmap)[:8]
 
 
+def flag_hash(stage, flag):
+    """Hash de verificación de la flag (challenge_engine::flagHash)."""
+    return hashlib.sha256(b"BB26FLAG" + bytes([stage]) + flag.encode()).digest()
+
+
 def verify_card(key, card):
     return hmac.compare_digest(card_sig(key, card), card[SIGNED_BYTES:CARD_BYTES])
 
@@ -78,6 +85,9 @@ def parse_mac(text):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("flag", help="hash de una flag para STAGES[]")
+    p.add_argument("stage", type=int, choices=range(1, 256), metavar="etapa")
+    p.add_argument("flag")
     for name in ("key", "card", "token"):
         p = sub.add_parser(name)
         p.add_argument("--key", type=bytes.fromhex, help="K_dev en hex")
@@ -94,6 +104,10 @@ def main():
             p.add_argument("--nonce", type=lambda s: int(s, 0), required=True)
             p.add_argument("--tok", type=bytes.fromhex, required=True)
     args = parser.parse_args()
+    if args.cmd == "flag":
+        h = flag_hash(args.stage, args.flag)
+        print("{" + ", ".join(f"0x{b:02X}" for b in h) + "}")
+        return 0
 
     card = bytes.fromhex(args.hex) if args.cmd == "card" else None
     if card is not None and len(card) != CARD_BYTES:
