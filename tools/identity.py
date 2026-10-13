@@ -2,7 +2,7 @@
 """
 identity.py — Referencia de la identidad del badge (§3.3 del plan, F5.1): las
 mismas cuentas que firmware/badge_bugcon_2026/src/services/identity.cpp. La
-usan (o la usarán) provision.py (F12.4) y verify_album.py (F5).
+usan provision.py (F12.4) y verify_album.py (F5).
 
   K_dev = HMAC-SHA256(K_master, MAC(6) || badge_no(u16 LE))
   sig   = HMAC-SHA256(K_dev, estampa[0:48])[:16]
@@ -26,9 +26,6 @@ import struct
 import sys
 
 DEV_MASTER = b"BugCon26 dev master (public)"
-NVS_NAMESPACE = "badge"  # cfg::storage::NVS_NAMESPACE
-NVS_KEY = "identity"  # cfg::identity::NVS_KEY
-RECORD_VERSION = 1  # identity::RECORD_VERSION
 CARD_BYTES = 64
 SIGNED_BYTES = 48
 
@@ -64,11 +61,6 @@ def verify_token(key, sender, receiver, nonce, tok):
 
 def card_badge_no(card):
     return struct.unpack_from("<H", card, 2)[0]
-
-
-def nvs_record(badge_no, key):
-    """Valor del blob NVS que lee identity::init() (identity::Record, 36 B)."""
-    return struct.pack("<BBH", RECORD_VERSION, 0, badge_no) + key
 
 
 def key_id(key):
