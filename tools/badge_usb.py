@@ -23,6 +23,7 @@ Requiere pyserial. Uso:
   ./tools/badge_usb.py avatar cara.pbm           # 96x96
   ./tools/badge_usb.py album -o album.bin        # luego tools/verify_album.py
   ./tools/badge_usb.py album -o album_42.json    # el .json de "Guardar .json"
+  ./tools/badge_usb.py pwr                       # energía (F4.7)
   ./tools/badge_usb.py -p /dev/ttyACM1 raw "INFO"
 """
 import argparse
@@ -50,6 +51,21 @@ INFO_RE = re.compile(
 
 class ProtocolError(Exception):
     pass
+
+
+def parse_power(reply):
+    """Respuesta de PWR -> dict: estado (texto), contadores (int) y apps
+    ({nombre: ms}, en el orden de APPS[])."""
+    if not reply.startswith("OK "):
+        raise ProtocolError(reply)
+    fields = dict(field.split("=", 1) for field in reply[3:].split())
+    apps = fields.pop("apps", "")
+    power = {k: v if k == "estado" else int(v) for k, v in fields.items()}
+    power["apps"] = {
+        name: int(ms)
+        for name, ms in (app.split(":") for app in apps.split(",") if app)
+    }
+    return power
 
 
 def restore_vmin(port):
@@ -146,6 +162,9 @@ class Badge:
             raise ProtocolError(f"ALBM: llegaron {len(data)} de {size} B")
         return data
 
+    def power(self):
+        return parse_power(self.expect_ok("PWR"))
+
     def my_card(self):
         """Mi estampa firmada (64 B), de la cabecera de ALBM."""
         return self.album()[16:ALBUM_HEADER_BYTES]
@@ -241,6 +260,7 @@ def main():
     cd.add_argument("--handle")
     sub.add_parser("avatar").add_argument("file", help=".pbm (P4) o .bin")
     sub.add_parser("album").add_argument("-o", "--output", required=True)
+    sub.add_parser("pwr")
     args = parser.parse_args()
 
     badge = Badge(args.port)
@@ -278,6 +298,9 @@ def main():
             if len(image) != AVATAR_BYTES:
                 raise ValueError(f"el avatar mide {AVATAR_BYTES} B")
             print(badge.expect_ok("AVTR", image))
+        elif args.cmd == "pwr":
+            for key, value in badge.power().items():
+                print(f"{key}={value}")
         elif args.cmd == "album":
             data = badge.album()
             if args.output.endswith(".json"):  # el de "Guardar .json" (bb26-album)
