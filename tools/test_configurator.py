@@ -102,7 +102,10 @@ class PackageTest(unittest.TestCase):
         folder = package_web.FOLDER
         self.assertEqual(names, {f"{folder}/{n}" for n in package_web.FILES})
         self.assertIn("Versión: v9.9.9", z.read(f"{folder}/LEEME.txt").decode())
-        for name in names - {f"{folder}/LEEME.txt"}:
+        self.assertIn("GPL-3.0", z.read(f"{folder}/LEEME.txt").decode())
+        self.assertIn("GNU GENERAL PUBLIC LICENSE",
+                      z.read(f"{folder}/LICENSE.txt").decode())
+        for name in names - {f"{folder}/LEEME.txt", f"{folder}/LICENSE.txt"}:
             html = z.read(name).decode("utf-8")
             with self.subTest(page=name):
                 self.assertEqual(html, PAGES[name.split("/")[1]])

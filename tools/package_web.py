@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 package_web.py — Empaqueta el configurador USB local (web/configurator), el
-álbum web (web/album) y sus instrucciones (web/LEEME.txt) en un .zip para
-descargar, descomprimir y abrir con file://, sin servidor (F6.15, D-06, D-16).
+álbum web (web/album), sus instrucciones (web/LEEME.txt) y la licencia
+(LICENSE, como LICENSE.txt) en un .zip para descargar, descomprimir y abrir
+con file://, sin servidor (F6.15, D-06, D-16).
 Las páginas conservan su carpeta para que el enlace relativo "Ver el álbum"
 (../album/index.html) funcione. La salida es reproducible (fechas fijas): los
 mismos archivos y la misma versión dan el mismo .zip.
@@ -17,14 +18,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 FOLDER = "bugcon26-configurador"
-FILES = ("LEEME.txt", "configurator/index.html", "album/index.html")
+FILES = ("LEEME.txt", "LICENSE.txt", "configurator/index.html",
+         "album/index.html")
 
 
 def build(version: str = "desarrollo") -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         for name in FILES:
-            data = (ROOT / "web" / name).read_bytes()
+            # La GPL-3.0 pide entregar su texto junto con el código.
+            source = ROOT / ("LICENSE" if name == "LICENSE.txt" else f"web/{name}")
+            data = source.read_bytes()
             if name == "LEEME.txt":
                 data = data.replace(b"{version}", version.encode("utf-8"))
             info = zipfile.ZipInfo(f"{FOLDER}/{name}", (1980, 1, 1, 0, 0, 0))
