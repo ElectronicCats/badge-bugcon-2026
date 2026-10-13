@@ -44,3 +44,9 @@ prueba otro cable o revisa el permiso "Puertos serie" del navegador.
 El archivo incluye el nickname y el handle que cada quien compartió en su
 estampa: no lo publiques. Para verlo, abre album/index.html (o "Ver el
 álbum" en el configurador) y arrastra el .json.
+
+
+Licencia
+--------
+Las páginas y el firmware del badge son software libre bajo la GPL-3.0
+(LICENSE.txt). Código fuente: https://github.com/ElectronicCats/badge-bugcon-2026
