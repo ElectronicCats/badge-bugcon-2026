@@ -68,9 +68,21 @@ intercambies y aparece en su álbum. Solo se envía si marcas la casilla.</p>
 <button id="save" disabled>Guardar en el badge</button>
 <p id="status" role="status" aria-live="polite">Leyendo tu estampa…</p>
 </form>
-<p class="hint">Esta página la sirve tu badge por su propio Wi-Fi: no usa Internet, no hay
-servidor y no guarda nada en tu teléfono. El avatar y el gafete se cambian con el
-configurador USB.</p>
+<section id="privacy">
+<h2>Privacidad</h2>
+<ul class="hint">
+<li>Esta página la sirve tu badge por su propio Wi-Fi: no usa Internet, no hay servidor
+ni almacenamiento central y no guarda nada en tu teléfono. Tu estampa y tu álbum viven
+solo en tu badge.</li>
+<li>Al intercambiar, tu estampa (nickname, selección, posición, stats y dorsal) viaja por
+infrarrojo al otro badge y se queda en su álbum; no se puede retirar de un badge ajeno.
+Tu handle solo va si marcas la casilla.</li>
+<li>El .json que guarda el configurador USB incluye el nickname y el handle de quienes
+los compartieron contigo: no lo publiques.</li>
+<li>Para borrar tu estampa y tu álbum: en el badge, Ajustes &gt; "Borrar datos". El
+avatar y el gafete se cambian con el configurador USB.</li>
+</ul>
+</section>
 
 <script>
 // Igual que el firmware: services/card.cpp (TEAMS, POSITIONS, STATS) y
