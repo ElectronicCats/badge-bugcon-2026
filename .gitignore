@@ -34,3 +34,6 @@ hardware/**/*.csv
 
 # Configurador empaquetado (tools/package_web.py, F6.15)
 dist/
+
+# Reto N3 (generador, textos y soluciones): privado hasta el evento
+tools/challenges/

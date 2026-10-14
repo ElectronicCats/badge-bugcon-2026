@@ -11,6 +11,9 @@ Pasos, con un badge conectado por USB:
   3. Graba el merged.bin hasta el final de la app (sin el relleno 0xFF: los
      8 MB completos tardan ~90 s) y borra la partición littlefs, así que el
      badge arranca en blanco: sin identidad (NVS), álbum, estampa ni récords.
+     Con --vestidor DIR, en la misma pasada graba DIR/vestidor-NNN.bin (NNN =
+     el dorsal) en la partición vestidor: los datos del reto N3 y el tiro de
+     este badge (tools/challenges/generate.py, privado).
   4. Ya arrancado: K_dev = HMAC-SHA256(K_master, MAC || dorsal) se escribe
      con `id prov` (identity::provision(), el blob de NVS) y `id` confirma
      dorsal, id de la clave y MAC.
@@ -25,10 +28,10 @@ CSV (un renglón por intento, se agrega; lo lee `verify_album.py --macs`):
   resultado = ASIGNADO (la reserva del paso 2), PASS, FAIL o ERROR; detalle =
   la línea final de la QA o el error. Vale el último renglón de cada MAC.
 Varios puertos: una instancia por puerto con el mismo CSV (se bloquea al
-escribirlo). El reto N3 (shares, partición vestidor) aún no existe (F9.4).
+escribirlo).
 
 Uso (pyserial; esptool del core de Arduino o del PATH):
-  ./tools/provision.py -p /dev/ttyACM0 --master HEX
+  ./tools/provision.py -p /dev/ttyACM0 --master HEX --vestidor DIR
   ./tools/provision.py -p /dev/ttyACM1 --master HEX --no 17 --no-flash
   # DevKit con el puente IO18 -> IO17, que es probado y dorado a la vez:
   ./tools/provision.py --master HEX --before "ir carrier 0" --before "QA GOLD"
@@ -155,8 +158,22 @@ def read_mac(args):
     return m.group(1).upper()
 
 
-def flash(args, image_path, littlefs):
-    esptool(args, "--after", "no_reset", "write_flash", "0x0", image_path)
+def vestidor(folder, no, image):
+    """(offset, ruta) de la imagen del vestidor del dorsal `no`."""
+    path = os.path.join(folder, f"vestidor-{no:03d}.bin")
+    if not os.path.isfile(path):
+        raise Failure(f"no existe {path}")
+    offset, size = partition(image, "vestidor")
+    if os.path.getsize(path) > size:
+        raise Failure(f"{path} no cabe en la partición vestidor ({size} B)")
+    return offset, path
+
+
+def flash(args, image_path, littlefs, vest=None):
+    """Graba la imagen (y el vestidor: offset, ruta) y borra littlefs."""
+    extra = [hex(vest[0]), vest[1]] if vest else []
+    esptool(args, "--after", "no_reset", "write_flash", "0x0", image_path,
+            *extra)
     esptool(args, "erase_region", hex(littlefs[0]), hex(littlefs[1]))
 
 
@@ -241,6 +258,8 @@ def main():
     parser.add_argument("--before", action="append", default=[],
                         help="línea de consola antes de la QA (repetible)")
     parser.add_argument("--esptool", help="ruta de esptool")
+    parser.add_argument("--vestidor", metavar="DIR",
+                        help="imágenes vestidor-NNN.bin del reto N3")
     args = parser.parse_args()
     args.esptool = args.esptool or find_esptool()
 
@@ -263,12 +282,16 @@ def main():
                         lambda rows: assign(rows, row["mac"], args.no))
         no = int(row["no"])
         print(f"MAC {row['mac']} -> dorsal {no}")
+        vest = vestidor(args.vestidor, no, image) if args.vestidor else None
         if not args.no_flash:
             with tempfile.NamedTemporaryFile(suffix=".bin") as tmp:
                 tmp.write(trim(image))
                 tmp.flush()
                 print(f"Grabando {os.path.basename(args.bin)}…")
-                flash(args, tmp.name, littlefs)
+                flash(args, tmp.name, littlefs, vest)
+        elif vest:
+            print(f"Grabando {os.path.basename(vest[1])}…")
+            esptool(args, "write_flash", hex(vest[0]), vest[1])
         badge = connect(args.port)
         key = identity.derive_key(args.master, bytes.fromhex(
             row["mac"].replace(":", "")), no)

@@ -19,7 +19,7 @@ Uso (la clave sale de --key o se deriva con --mac y el dorsal; sin
   ./tools/identity.py card <128 hex de 'id'> --mac F4:12:FA:52:03:F8
   ./tools/identity.py token --from 7 --to 999 --nonce 0x1234ABCD \\
       --tok 0011223344556677 --mac F4:12:FA:52:03:F8
-  ./tools/identity.py flag 1 'BB26{...}'   # hash de STAGES[] (challenge_engine)
+  ./tools/identity.py flag 1 'BB26{...}'   # hash del vestidor (N3)
 """
 import argparse
 import hashlib
