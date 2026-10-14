@@ -77,6 +77,16 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(number(PAGES["album"], "ATTENDEES"),
                          number(CONFIG, "ATTENDEES"))
 
+    def test_privacy_notice(self):
+        # F6.6: el aviso va en las tres páginas y en el LEEME del .zip.
+        leeme = (ROOT / "web/LEEME.txt").read_text(encoding="utf-8")
+        for page, text in [*PAGES.items(), ("LEEME", leeme)]:
+            text = " ".join(text.split()).lower()  # sin saltos de línea
+            for phrase in ["privacidad",
+                           "no hay servidor ni almacenamiento central",
+                           "infrarrojo", "handle", "publiques", "borrar datos"]:
+                with self.subTest(page=page, phrase=phrase):
+                    self.assertIn(phrase, text)
 
 
 class PhonePageTest(unittest.TestCase):
