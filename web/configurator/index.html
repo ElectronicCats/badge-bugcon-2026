@@ -165,6 +165,7 @@ canvas.px {
 .textopts input { width: 100%; min-width: 0; padding: 4px; }
 .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
 footer.hint { margin-top: 24px; }
+#privacy li { margin: 4px 0 0 18px; }
 header .hint { margin-top: 0; }
 #nowebserial { color: var(--err); flex-basis: 100%; }
 /* pegada arriba: la respuesta del badge se ve aunque el botón quede abajo */
@@ -321,6 +322,22 @@ header .hint { margin-top: 0; }
         <button id="testBtn" disabled>Patrón de prueba</button>
       </div>
     </div>
+  </section>
+
+  <section class="card" id="privacy">
+    <h2>Privacidad</h2>
+    <ul class="hint">
+      <li>No hay servidor ni almacenamiento central: tu estampa, tu avatar y tu álbum
+      se guardan solo en tu badge. Nadie, ni la organización, recibe una copia.</li>
+      <li>Al intercambiar, tu estampa (nickname, selección, posición, stats y dorsal) viaja
+      por infrarrojo al otro badge y se queda en su álbum; no se puede retirar de un badge
+      ajeno. Tu handle solo va si marcas "Compartir mi handle". El avatar y el gafete no
+      salen de tu badge.</li>
+      <li>El .json de "Guardar .json" incluye el nickname y el handle de quienes los
+      compartieron contigo: guárdalo para ti y no lo publiques.</li>
+      <li>Para borrar tu estampa, tu avatar y tu álbum: en el badge, Ajustes &gt; "Borrar
+      datos". Las imágenes del gafete se quedan hasta que subas otras a sus slots.</li>
+    </ul>
   </section>
 </main>
 

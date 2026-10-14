@@ -60,6 +60,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #10131a; font-weight: 600; }
 .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
 footer.hint { margin-top: 24px; }
+#privacy li { margin: 4px 0 0 18px; }
 #status { padding: 8px 10px; background: var(--card2); border-radius: 6px; color: var(--muted); margin-bottom: 12px; }
 #status.ok { color: var(--ok); }
 #status.err { color: var(--err); }
@@ -149,6 +150,18 @@ el .json que guarda el configurador con «Guardar .json».</div>
     <form method="dialog"><button>Cerrar</button></form>
   </div>
 </dialog>
+
+<section id="privacy">
+  <h2>Privacidad</h2>
+  <ul class="hint">
+    <li>El archivo se abre solo en este navegador: la página no lo envía a ningún lado y
+    no hay servidor ni almacenamiento central.</li>
+    <li>El .json y los .vcf incluyen el nickname y el handle de quienes los compartieron
+    contigo por infrarrojo: guárdalos para ti y no los publiques.</li>
+    <li>Para borrar tu estampa y tu álbum del badge: Ajustes &gt; "Borrar datos". Lo que ya
+    pasó a otros badges se queda en sus álbumes.</li>
+  </ul>
+</section>
 
 <footer class="hint">Licencia GPL-3.0 · Código fuente: github.com/ElectronicCats/badge-bugcon-2026</footer>
 

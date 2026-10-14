@@ -46,6 +46,17 @@ estampa: no lo publiques. Para verlo, abre album/index.html (o "Ver el
 álbum" en el configurador) y arrastra el .json.
 
 
+5. Privacidad
+-------------
+No hay servidor ni almacenamiento central: tu estampa, tu avatar y tu álbum
+se guardan solo en tu badge, y nadie (ni la organización) recibe una copia.
+Al intercambiar, tu estampa (nickname, selección, posición, stats y dorsal)
+viaja por infrarrojo al otro badge y se queda en su álbum; no se puede
+retirar de un badge ajeno. Tu handle solo va si marcas "Compartir mi handle".
+El avatar y el gafete no salen de tu badge. Para borrar tu estampa, tu avatar
+y tu álbum: en el badge, Ajustes > "Borrar datos".
+
+
 Licencia
 --------
 Las páginas y el firmware del badge son software libre bajo la GPL-3.0
