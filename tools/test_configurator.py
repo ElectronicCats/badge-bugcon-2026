@@ -88,6 +88,15 @@ class CatalogTest(unittest.TestCase):
                 with self.subTest(page=page, phrase=phrase):
                     self.assertIn(phrase, text)
 
+    def test_stats_glossary(self):
+        # Glosario de la Copa (games/cup.h) junto a las barras de stats.
+        for page in ["configurator", "phone"]:
+            text = " ".join(PAGES[page].split())
+            for phrase in ['id="glossary"', "ATK · ataque", "DEF · defensa",
+                           "HAX · control", "SUE · suerte", "99 como 149"]:
+                with self.subTest(page=page, phrase=phrase):
+                    self.assertIn(phrase, text)
+
 
 class PhonePageTest(unittest.TestCase):
     def test_embedded_page_is_current(self):
