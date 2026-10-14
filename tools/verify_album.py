@@ -22,7 +22,10 @@ de la consola (`album add|fill|stress`) firman con la MAC del propio badge:
 
 Especiales (F5.5): las de tipo reto o especial las genera el propio badge
 (services/specials) y las firma con su clave, sin token (no hay intercambio):
-se verifican con la clave del que exporta. Solo cuentan en su álbum.
+se verifican con la clave del que exporta. Solo cuentan en su álbum. Una
+firma OK prueba que las pegó ese badge, no que su dueño las ganó: puede leer
+su K_dev del flash (§3.3, D-10). Los premios de N3 se validan con la flag,
+no con la estampa (F9.5).
 
 Una estampa repetida en la exportación (mismo tipo y número que una anterior)
 no cuenta: el badge las deduplica, así que una repetida es una exportación
