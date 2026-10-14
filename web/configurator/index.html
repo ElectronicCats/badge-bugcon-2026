@@ -166,6 +166,9 @@ canvas.px {
 .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
 footer.hint { margin-top: 24px; }
 #privacy li { margin: 4px 0 0 18px; }
+#glossary summary { cursor: pointer; color: var(--accent); }
+#glossary dt { font-weight: 700; color: var(--text); }
+#glossary dd { margin: 0 0 6px; }
 header .hint { margin-top: 0; }
 #nowebserial { color: var(--err); flex-basis: 100%; }
 /* pegada arriba: la respuesta del badge se ve aunque el botón quede abajo */
@@ -209,6 +212,22 @@ header .hint { margin-top: 0; }
     </div>
     <h2>Estadísticas <span id="freeV" style="text-transform:none"></span></h2>
     <div id="statRows"></div>
+    <details id="glossary" class="hint">
+      <summary>¿Qué hace cada estadística en la Copa?</summary>
+      <p>Cada punto se suma al jugador (0 juega como 50, 99 como 149) y cuenta más o menos
+      según su posición.</p>
+      <dl>
+        <dt>ATK · ataque</dt><dd>Pasar la defensa del rival y la fuerza del tiro; el de más ATK
+        tira más seguido. Al Portero no le sirve.</dd>
+        <dt>DEF · defensa</dt><dd>Cortar los ataques del rival. El Portero ataja con su DEF; sin
+        Portero, ataja el de más DEF a la mitad.</dd>
+        <dt>HAX · control</dt><dd>Quién se queda con el balón en cada jugada. Con la táctica
+        Parche también ayuda a defender.</dd>
+        <dt>SUE · suerte</dt><dd>Solo en el tiro contra el portero: se promedia entre los 5 y
+        ayuda a tirar y a atajar.</dd>
+      </dl>
+      <p>Cuenta más: Portero y Defensa → DEF; Medio y Pentester → HAX; Delantero → ATK.</p>
+    </details>
     <h2>Contacto (opcional)</h2>
     <div class="row">
       <label><input type="checkbox" id="handleOn"> Compartir mi handle en la estampa</label>
