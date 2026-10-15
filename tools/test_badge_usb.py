@@ -14,7 +14,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import badge_usb  # noqa: E402
 
 REPLY = ("OK estado=USB ACTIVO=30000 REPOSO=1200 SUENO=95000 USB=4000 "
-         "ligero=12 dormido=900 profundo=1 completos=3 parciales=7 ir=5 "
+         "ligero=12 dormido=900 profundo=1 completos=3 parciales=7 "
+         "completo_ms=1522 completo_max_ms=1530 parcial_ms=641 "
+         "parcial_max_ms=650 epd_timeouts=0 ir=5 "
          "apps=home:120000,menu:2500,penalty:0")
 
 
@@ -24,6 +26,7 @@ class ParsePower(unittest.TestCase):
         self.assertEqual(power["estado"], "USB")
         self.assertEqual(power["SUENO"], 95000)
         self.assertEqual(power["parciales"], 7)
+        self.assertEqual(power["parcial_max_ms"], 650)
         self.assertEqual(power["ir"], 5)
         self.assertEqual(list(power["apps"].items()),
                          [("home", 120000), ("menu", 2500), ("penalty", 0)])
