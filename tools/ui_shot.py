@@ -2,8 +2,8 @@
 """
 ui_shot.py — Captura la pantalla de la UI del badge por la consola serie
 (`ui shot`) y la guarda como PNG: tinta negra sobre blanco, como en la
-e-paper, sin importar la pantalla real (en la OLED el framebuffer está
-invertido y el firmware ya lo corrige).
+e-paper. Es el último cuadro dibujado, que puede ir adelante del panel
+mientras refresca.
 
 Con --keys se presionan botones antes de capturar (`key <botón>`, el mismo
 camino que un botón real), para llegar a una pantalla sin tocar el badge.
@@ -24,7 +24,10 @@ import serial
 from badge_usb import restore_vmin
 
 OPEN_WAIT_S = 0.3  # La consola descarta lo que llega en los primeros 200 ms
-KEY_WAIT_S = 0.3  # Un cuadro en la OLED tarda ~41 ms; la e-paper, más
+KEY_WAIT_S = 0.3  # Entre botones: la app ya cambió su estado
+# Tras el último botón: el cuadro nuevo se dibuja cuando termina el refresco
+# en curso (parcial 0.64 s, completo 1.52 s en el DevKit).
+SHOT_WAIT_S = 1.6
 
 
 def command(port, text, until="OK", timeout=5):
@@ -88,6 +91,8 @@ def main():
         if "OK" not in reply:
             sys.exit(f"key {key}: {reply.strip()}")
         time.sleep(KEY_WAIT_S)
+    if args.keys.split():
+        time.sleep(SHOT_WAIT_S)
     try:
         width, height, rows = parse_shot(command(port, "ui shot"))
     except (StopIteration, ValueError) as error:
