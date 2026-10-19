@@ -32,6 +32,14 @@ solo los límites del modelo; Antigravity, protobuf sin esquema publicado).
 No combine `api` con `claude-code` si Claude Code usa una clave de esa misma
 organización: serían las mismas respuestas en dos páginas. El día es el local
 de la PC (el mismo que `TIME`). Si el badge se reinicia, se le reenvía todo.
+
+Sin `--puerto`, en cada conexión busca el badge en /dev/serial/by-id (el
+primero si hay varios) y, si no está, usa /dev/ttyACM0. En Windows y macOS
+hay que pasar `--puerto` (COM3, /dev/cu.usbmodem…). Abre el puerto en
+exclusiva: mientras corre, `badge_usb.py`, las otras herramientas de Python
+y `arduino-cli upload` no pueden abrirlo (no se comprobó si el configurador
+del navegador lo respeta: no lo use con el script corriendo).
+
 Requiere pyserial. Uso:
   ./tools/ai_tokens.py                        # se queda corriendo
   ./tools/ai_tokens.py --meta 5M --cada 30
@@ -41,6 +49,7 @@ Requiere pyserial. Uso:
 """
 import argparse
 import datetime
+import glob
 import json
 import os
 import sqlite3
@@ -74,6 +83,16 @@ SUFFIXES = {"k": 1000, "m": 1000000}
 # Fuente -> nombre de su página en el badge
 SOURCES = {"claude-code": "Claude Code", "opencode": "opencode",
            "api": "API org"}
+# El enlace de udev del Hardware CDC del ESP32-S3 (lleva la MAC del badge)
+BY_ID = "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_*"
+DEFAULT_PORT = "/dev/ttyACM0"
+
+
+def find_port():
+    """El badge por su enlace de udev. Si se reconecta mientras el script aún
+    tiene abierto el ttyACM0 viejo, sale como ttyACM1 y el enlace lo sigue."""
+    found = sorted(glob.glob(BY_ID))
+    return found[0] if found else DEFAULT_PORT
 
 
 def parse_count(text):
@@ -335,7 +354,9 @@ def read_sources(sources, key):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
-    parser.add_argument("-p", "--puerto", default="/dev/ttyACM0")
+    parser.add_argument("-p", "--puerto",
+                        help="por omisión, el badge en /dev/serial/by-id "
+                        "(o /dev/ttyACM0)")
     parser.add_argument("--cada", type=int, default=30,
                         help="segundos entre lecturas (30; con api, ≥ 60)")
     parser.add_argument("--meta", type=parse_count, default=0,
@@ -410,7 +431,7 @@ def main():
                 todo = [p for p in lines if due or sent.get(p[0]) != p[3]]
                 try:
                     if todo and badge is None:
-                        badge = Badge(args.puerto)
+                        badge = Badge(args.puerto or find_port())
                     if todo and not sent:  # Al conectarse o tras un reinicio
                         badge.expect_ok(f"TIME {local_epoch()}")
                     for name, counts, week, line in todo:
