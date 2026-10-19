@@ -235,6 +235,36 @@ class Opencode(LocalTime):
             ("glm-5.3-flash-free", [277, 503, 26880, 0], 27660 + 5),
             ("opencode: space-bunny-free", [3, 9, 6, 7], 25)])
 
+    def test_local_sources(self):
+        # Sin --fuente: las que existan; la que no se puede leer se omite
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
+                os.environ, {"CLAUDE_CONFIG_DIR": f"{tmp}/claude",
+                             "XDG_DATA_HOME": f"{tmp}/data"}), \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(ai_tokens.local_sources(), ["claude-code"])
+            db = ai_tokens.opencode_db()
+            db.parent.mkdir(parents=True)
+            db.write_bytes(b"no es SQLite" * 100)
+            self.assertEqual(ai_tokens.local_sources(), ["opencode"])
+            with self.assertRaises(sqlite3.Error):  # Solo opencode, y falla
+                ai_tokens.read_sources(["opencode"], None, optional=True)
+            ai_tokens.projects_dir().mkdir(parents=True)
+            sources = ai_tokens.local_sources()
+            self.assertEqual(sources, ["claude-code", "opencode"])
+            self.assertEqual(list(ai_tokens.read_sources(sources, None, True)),
+                             ["claude-code"])
+            with self.assertRaises(sqlite3.Error):  # Con --fuente, falla todo
+                ai_tokens.read_sources(sources, None)
+
+    def test_missing_db(self):
+        # Sin base de opencode: se avisa claro (no el error de SQLite)
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
+                os.environ, {"XDG_DATA_HOME": f"{tmp}/data"}):
+            missing = ai_tokens.opencode_db()
+            with self.assertRaises(FileNotFoundError) as error:
+                ai_tokens.opencode_days(missing)
+            self.assertIn("no hay base de opencode", str(error.exception))
+
     def test_sources(self):
         self.assertEqual(ai_tokens.parse_sources("claude-code,opencode"),
                          ["claude-code", "opencode"])
