@@ -2,13 +2,15 @@
 """
 test_ai_tokens.py — Pruebas de tools/ai_tokens.py sin badge ni red:
 transcripts de ejemplo (duplicados, renglón roto, sin usage, subagente,
-medianoche local, archivo viejo), una base de opencode de ejemplo y una
-respuesta guardada de la API de uso.
+medianoche local, archivo viejo), una base de opencode de ejemplo, una
+respuesta guardada de la API de uso y el lazo de main() con un badge falso
+(reinicio y desconexión).
 
 Uso (requiere pyserial, que badge_usb.py importa):
   python3 -m unittest tools/test_ai_tokens.py -v
 """
 import argparse
+import contextlib
 import datetime
 import io
 import json
@@ -19,9 +21,11 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ai_tokens  # noqa: E402
+import serial  # noqa: E402
 
 TODAY = datetime.date(2026, 10, 19)
 NOW = 1792454400  # 2026-10-19 18:00 en CST+6, para la fecha de modificación
@@ -285,6 +289,82 @@ class Meta(unittest.TestCase):
         for text in ("abc", "-5", "1.5", "M", ""):
             with self.assertRaises(argparse.ArgumentTypeError):
                 ai_tokens.parse_count(text)
+
+
+class Main(unittest.TestCase):
+    """El lazo de main() con un badge falso: conecta, ve el arranque del ROM
+    (reset sin reenumerar), se desconecta y vuelve como ttyACM1."""
+
+    def test_reconnect(self):
+        log = []
+        # Lo que lee cada ciclo del primer badge: nada, un reinicio, el cable
+        reads = [b"", b"log\r\nESP-ROM:esp32s3-20210327\r\n",
+                 serial.SerialException("desconectado")]
+
+        class Port:
+            in_waiting = 0
+
+            def read(self, size):
+                item = reads.pop(0)
+                if isinstance(item, Exception):
+                    raise item
+                return item
+
+        class FakeBadge:
+            def __init__(self, port):
+                self.name = port
+                self.port = Port()
+                log.append(("abre", port))
+
+            def expect_ok(self, line):
+                log.append((self.name, line))
+                return "OK"
+
+            def close(self):
+                log.append(("cierra", self.name))
+
+        cycles = []
+
+        def sleep(seconds):
+            if seconds == ai_tokens.BOOT_S:
+                return
+            cycles.append(seconds)
+            if len(cycles) == 4:
+                raise KeyboardInterrupt
+
+        today = datetime.date.today()
+        data = {"claude-code": {"claude-opus-5-5": {today: [1, 2, 3, 4]}}}
+        # El enlace de udev antes (ttyACM0) y después de reconectarse (ttyACM1)
+        first, second = "/dev/serial/by-id/acm0", "/dev/serial/by-id/acm1"
+        with mock.patch.object(ai_tokens, "Badge", FakeBadge), \
+                mock.patch.object(ai_tokens, "read_sources",
+                                  return_value=data), \
+                mock.patch.object(ai_tokens, "local_epoch", return_value=123), \
+                mock.patch.object(ai_tokens.glob, "glob",
+                                  side_effect=[[first], [second]]), \
+                mock.patch.object(ai_tokens.time, "sleep", sleep), \
+                mock.patch.object(sys, "argv", ["ai_tokens.py"]), \
+                contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(ai_tokens.main(), 0)
+
+        line = "TOKENS 1 2 3 4 10 0 Claude Code"
+        self.assertEqual(log, [
+            ("abre", first), (first, "TIME 123"), (first, line),
+            # Ciclo 2 sin cambios: nada. Ciclo 3: el reinicio lo reenvía todo
+            (first, "TIME 123"), (first, line),
+            # Ciclo 4: se desconectó; se vuelve a buscar el puerto
+            ("cierra", first), ("abre", second), (second, "TIME 123"),
+            (second, line), ("cierra", second)])
+        self.assertEqual(cycles, [30] * 4)
+
+    def test_find_port(self):
+        with mock.patch.object(ai_tokens.glob, "glob", return_value=[]):
+            self.assertEqual(ai_tokens.find_port(), "/dev/ttyACM0")
+        with mock.patch.object(ai_tokens.glob, "glob",
+                               return_value=["/dev/serial/by-id/b",
+                                             "/dev/serial/by-id/a"]):
+            self.assertEqual(ai_tokens.find_port(), "/dev/serial/by-id/a")
 
 
 if __name__ == "__main__":
