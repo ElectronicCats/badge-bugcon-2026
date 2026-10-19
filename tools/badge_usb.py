@@ -26,6 +26,9 @@ Requiere pyserial. Uso:
   ./tools/badge_usb.py pwr                       # energía (F4.7)
   ./tools/badge_usb.py time                      # reloj con la hora de la PC
   ./tools/badge_usb.py led ff0000                # notificador (000000 apaga)
+  ./tools/badge_usb.py tokens 1200 3400 500000 20000 9000000 2000000
+                       # tokens de Claude: entrada salida caché_lect
+                       # caché_escr total_7d meta (0 = sin meta)
   ./tools/badge_usb.py -p /dev/ttyACM1 raw "INFO"
 """
 import argparse
@@ -271,6 +274,10 @@ def main():
     sub.add_parser("pwr")
     sub.add_parser("time", help="fija el reloj con la hora local de la PC")
     sub.add_parser("led").add_argument("rgb", help="rrggbb en hex; 000000 apaga")
+    sub.add_parser("tokens", help="tokens de Claude (vista del escritorio)"
+                   ).add_argument("n", nargs=6, type=int,
+                                  help="entrada salida caché_lect caché_escr "
+                                  "total_7d meta")
     sub.add_parser("campeon", help="estampa de campeón (cierre del evento)")
     args = parser.parse_args()
 
@@ -316,6 +323,8 @@ def main():
             print(badge.expect_ok(f"TIME {local_epoch()}"))
         elif args.cmd == "led":
             print(badge.expect_ok(f"LED {args.rgb}"))
+        elif args.cmd == "tokens":
+            print(badge.expect_ok("TOKENS " + " ".join(map(str, args.n))))
         elif args.cmd == "campeon":
             print(badge.expect_ok("CAMPEON"))
         elif args.cmd == "album":
