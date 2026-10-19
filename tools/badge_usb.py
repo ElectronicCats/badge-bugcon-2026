@@ -271,6 +271,7 @@ def main():
     sub.add_parser("pwr")
     sub.add_parser("time", help="fija el reloj con la hora local de la PC")
     sub.add_parser("led").add_argument("rgb", help="rrggbb en hex; 000000 apaga")
+    sub.add_parser("campeon", help="estampa de campeón (cierre del evento)")
     args = parser.parse_args()
 
     badge = Badge(args.port)
@@ -315,6 +316,8 @@ def main():
             print(badge.expect_ok(f"TIME {local_epoch()}"))
         elif args.cmd == "led":
             print(badge.expect_ok(f"LED {args.rgb}"))
+        elif args.cmd == "campeon":
+            print(badge.expect_ok("CAMPEON"))
         elif args.cmd == "album":
             data = badge.album()
             if args.output.endswith(".json"):  # el de "Guardar .json" (bb26-album)
