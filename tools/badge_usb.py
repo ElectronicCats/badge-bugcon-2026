@@ -96,7 +96,9 @@ def restore_vmin(port):
 
 class Badge:
     def __init__(self, port):
-        self.port = serial.Serial(port, 115200, timeout=0.1)
+        # En exclusiva: dos programas en el mismo tty se roban las respuestas
+        # (ai_tokens.py se queda con el puerto abierto)
+        self.port = serial.Serial(port, 115200, timeout=0.1, exclusive=True)
         time.sleep(OPEN_WAIT_S)
         self.port.reset_input_buffer()
 
