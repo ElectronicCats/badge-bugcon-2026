@@ -83,12 +83,15 @@ def restore_vmin(port):
     y el configurador nunca recibe respuesta (F6.7)."""
     try:
         import termios
+    except ImportError:
+        return  # Windows no tiene termios ni el problema
+    try:
         attrs = termios.tcgetattr(port.fd)
         attrs[6][termios.VMIN] = 1
         attrs[6][termios.VTIME] = 0
         termios.tcsetattr(port.fd, termios.TCSANOW, attrs)
-    except (ImportError, AttributeError, OSError):
-        pass  # Windows no tiene termios ni el problema
+    except (termios.error, AttributeError, OSError):
+        pass  # Badge desconectado (EIO): ya no hay tty que arreglar
 
 
 class Badge:

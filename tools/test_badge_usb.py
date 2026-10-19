@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 test_badge_usb.py — Pruebas de tools/badge_usb.py sin badge: la respuesta de
-PWR (F4.7) tal como la escribe usb_protocol.cpp.
+PWR (F4.7) tal como la escribe usb_protocol.cpp y restore_vmin() con el tty
+ya desconectado.
 
 Uso (requiere pyserial, que badge_usb.py importa):
   python3 -m unittest tools/test_badge_usb.py -v
@@ -34,6 +35,18 @@ class ParsePower(unittest.TestCase):
     def test_error(self):
         with self.assertRaises(badge_usb.ProtocolError):
             badge_usb.parse_power("ERR badcmd")
+
+
+class RestoreVmin(unittest.TestCase):
+    def test_gone(self):
+        # Badge desconectado: tcgetattr lanza termios.error (EIO), que no es
+        # OSError; aquí, con un pipe, ENOTTY. close() no debe caerse.
+        read, write = os.pipe()
+        try:
+            badge_usb.restore_vmin(type("Port", (), {"fd": read})())
+        finally:
+            os.close(read)
+            os.close(write)
 
 
 if __name__ == "__main__":
