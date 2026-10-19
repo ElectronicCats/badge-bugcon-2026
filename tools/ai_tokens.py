@@ -9,8 +9,10 @@ por modelo (↑/↓ en el badge, hasta MAX_PAGES). Cada página se manda cada
 `--cada` s si cambió, y todas cada KEEPALIVE_S aunque no cambien para que el
 badge no diga "Sin actualizar". La meta vale para cada página.
 
-Fuentes (`--fuente`, varias separadas por comas):
-  claude-code  (por omisión) los transcripts locales de Claude Code,
+Fuentes (`--fuente`, varias separadas por comas). Sin `--fuente`, claude-code
+y opencode, las que existan en la PC; si una falla al leerse se omite y
+quedan las demás (con `--fuente`, cualquier falla detiene el ciclo):
+  claude-code  los transcripts locales de Claude Code,
                ~/.claude/projects/**/*.jsonl (o $CLAUDE_CONFIG_DIR/projects),
                subagentes incluidos. De cada renglón solo se leen `usage`,
                `model`, `timestamp`, `message.id` y `requestId`: las
@@ -41,10 +43,10 @@ y `arduino-cli upload` no pueden abrirlo (no se comprobó si el configurador
 del navegador lo respeta: no lo use con el script corriendo).
 
 Requiere pyserial. Uso:
-  ./tools/ai_tokens.py                        # se queda corriendo
+  ./tools/ai_tokens.py                        # Claude Code y opencode
   ./tools/ai_tokens.py --meta 5M --cada 30
   ./tools/ai_tokens.py --una-vez              # imprime, manda y sale
-  ./tools/ai_tokens.py --fuente claude-code,opencode
+  ./tools/ai_tokens.py --fuente opencode
   ANTHROPIC_ADMIN_KEY=... ./tools/ai_tokens.py --fuente api
 """
 import argparse
@@ -248,7 +250,12 @@ def opencode_days(db, now=None):
     `session_message`, en solo lectura, y de cada respuesta solo `tokens`,
     `model.id` y `time.created` (ms). Una fila por respuesta (`id` es la
     llave), sin duplicados. La salida suma `reasoning`, que opencode cuenta
-    aparte."""
+    aparte.
+
+    Si opencode no está instalado (no hay base), se avisa claro: la fuente no
+    da datos y (sin `--fuente`) se omite."""
+    if not db.exists():
+        raise FileNotFoundError(f"no hay base de opencode ({db})")
     since_ms = int(((time.time() if now is None else now)
                     - FILE_DAYS * 86400) * 1000)
     db = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
@@ -338,17 +345,35 @@ def parse_sources(text):
     return sources
 
 
-def read_sources(sources, key):
+def local_sources():
+    """Sin `--fuente`: claude-code y opencode, las que existan en la PC (si
+    ninguna, claude-code, que da su página en 0)."""
+    found = [source for source, path in (("claude-code", projects_dir()),
+                                         ("opencode", opencode_db()))
+             if path.exists()]
+    return found or ["claude-code"]
+
+
+def read_sources(sources, key, optional=False):
     """{fuente: {modelo: días}}. Si una fuente falla, falla el ciclo entero:
-    mejor no mandar nada que cifras a las que les falta una parte (R-24)."""
-    data = {}
+    mejor no mandar nada que cifras a las que les falta una parte (R-24).
+    Con `optional` (sin `--fuente`) la que falla se omite, salvo todas."""
+    data, error = {}, None
     for source in sources:
-        if source == "api":
-            data[source] = api_days(api_pages(key, datetime.date.today()))
-        elif source == "opencode":
-            data[source] = opencode_days(opencode_db())
-        else:
-            data[source] = transcript_days(read_transcripts(projects_dir()))
+        try:
+            if source == "api":
+                data[source] = api_days(api_pages(key, datetime.date.today()))
+            elif source == "opencode":
+                data[source] = opencode_days(opencode_db())
+            else:
+                data[source] = transcript_days(read_transcripts(projects_dir()))
+        except (OSError, ValueError, sqlite3.Error) as e:
+            if not optional:
+                raise
+            error = e
+            print(f"{source}: {e} (se omite)", file=sys.stderr)
+    if not data:
+        raise error
     return data
 
 
@@ -364,14 +389,15 @@ def main():
                         "(0 = sin meta)")
     parser.add_argument("--una-vez", action="store_true",
                         help="manda una vez y sale")
-    parser.add_argument("--fuente", type=parse_sources, default=["claude-code"],
-                        help="claude-code (por omisión), opencode, api; "
-                        "varias separadas por comas")
+    parser.add_argument("--fuente", type=parse_sources,
+                        help="claude-code, opencode, api; varias separadas "
+                        "por comas (por omisión, claude-code y opencode, las "
+                        "que existan)")
     args = parser.parse_args()
 
     key = None
     every = max(1, args.cada)
-    if "api" in args.fuente:
+    if args.fuente and "api" in args.fuente:
         key = os.environ.get(API_KEY_ENV)
         if not key:
             print(f"error: falta la variable de entorno {API_KEY_ENV} "
@@ -385,7 +411,10 @@ def main():
 
     def drop(error):
         nonlocal badge
-        print(f"\nbadge: {error}", file=sys.stderr)
+        hint = ""
+        if str(error) == "timeout":
+            hint = " (si el badge está dormido, un botón lo despierta)"
+        print(f"\nbadge: {error}{hint}", file=sys.stderr)
         if badge is not None:
             try:
                 badge.close()
@@ -408,15 +437,17 @@ def main():
                         print("badge: se reinició", file=sys.stderr)
                         sent.clear()
                         time.sleep(BOOT_S)
+            # Sin --fuente se busca en cada ciclo: opencode puede llegar después
+            sources = args.fuente or local_sources()
             try:
-                current = pages(read_sources(args.fuente, key),
+                current = pages(read_sources(sources, key, not args.fuente),
                                 datetime.date.today())
             except urllib.error.HTTPError as e:
                 current = None  # El cuerpo no lleva la clave; no se imprime
                 print(f"api: HTTP {e.code} {e.reason}", file=sys.stderr)
             except (OSError, ValueError, sqlite3.Error) as e:  # Red, JSON, DB
                 current = None
-                print(f"{','.join(args.fuente)}: {e}", file=sys.stderr)
+                print(f"{','.join(sources)}: {e}", file=sys.stderr)
             if current is None:
                 if args.una_vez:
                     return 1
@@ -445,7 +476,12 @@ def main():
                         except ProtocolError as e:
                             if str(e) != "ERR full":
                                 raise
-                            print(e)  # Sin lugar en el badge: no se reintenta
+                            # El badge guarda 8 páginas en RAM y no borra
+                            # ninguna: si ya tiene 8 de otra sesión, no cabe
+                            # una más (reiniciar el badge las borra).
+                            print("ERR full: el badge ya tiene 8 páginas de "
+                                  "otra sesión; reinícialo o usa menos "
+                                  "fuentes", file=sys.stderr)
                         sent[name] = line
                     if todo and len(todo) == len(lines):
                         sent_at = time.time()
