@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-claude_tokens.py — Tokens de IA de hoy para la vista Tokens del modo
+ai_tokens.py — Tokens de IA de hoy para la vista Tokens del modo
 Escritorio del badge (F11.11, D-24). La PC cuenta y el badge solo muestra: al
 conectarse manda `TIME` y luego un `TOKENS <entrada> <salida> <caché_lect>
 <caché_escr> <total_7d> <meta> <nombre>` (firmware/README.md, protocolo USB)
@@ -33,11 +33,11 @@ No combine `api` con `claude-code` si Claude Code usa una clave de esa misma
 organización: serían las mismas respuestas en dos páginas. El día es el local
 de la PC (el mismo que `TIME`). Si el badge se reinicia, se le reenvía todo.
 Requiere pyserial. Uso:
-  ./tools/claude_tokens.py                        # se queda corriendo
-  ./tools/claude_tokens.py --meta 5M --cada 30
-  ./tools/claude_tokens.py --una-vez              # imprime, manda y sale
-  ./tools/claude_tokens.py --fuente claude-code,opencode
-  ANTHROPIC_ADMIN_KEY=... ./tools/claude_tokens.py --fuente api
+  ./tools/ai_tokens.py                        # se queda corriendo
+  ./tools/ai_tokens.py --meta 5M --cada 30
+  ./tools/ai_tokens.py --una-vez              # imprime, manda y sale
+  ./tools/ai_tokens.py --fuente claude-code,opencode
+  ANTHROPIC_ADMIN_KEY=... ./tools/ai_tokens.py --fuente api
 """
 import argparse
 import datetime

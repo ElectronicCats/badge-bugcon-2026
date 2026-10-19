@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-test_claude_tokens.py — Pruebas de tools/claude_tokens.py sin badge ni red:
+test_ai_tokens.py — Pruebas de tools/ai_tokens.py sin badge ni red:
 transcripts de ejemplo (duplicados, renglón roto, sin usage, subagente,
 medianoche local, archivo viejo), una base de opencode de ejemplo y una
 respuesta guardada de la API de uso.
 
 Uso (requiere pyserial, que badge_usb.py importa):
-  python3 -m unittest tools/test_claude_tokens.py -v
+  python3 -m unittest tools/test_ai_tokens.py -v
 """
 import argparse
 import datetime
@@ -21,7 +21,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import claude_tokens  # noqa: E402
+import ai_tokens  # noqa: E402
 
 TODAY = datetime.date(2026, 10, 19)
 NOW = 1792454400  # 2026-10-19 18:00 en CST+6, para la fecha de modificación
@@ -118,10 +118,10 @@ class Transcripts(LocalTime):
         for name, lines in files.items():
             (root / name).write_text("\n".join(lines) + "\n")
             os.utime(root / name, (NOW, NOW))
-        old = NOW - (claude_tokens.FILE_DAYS + 1) * 86400
+        old = NOW - (ai_tokens.FILE_DAYS + 1) * 86400
         os.utime(root / "proj/viejo.jsonl", (old, old))
-        self.models = claude_tokens.transcript_days(
-            claude_tokens.read_transcripts(root, now=NOW))
+        self.models = ai_tokens.transcript_days(
+            ai_tokens.read_transcripts(root, now=NOW))
 
     def tearDown(self):
         self.dir.cleanup()
@@ -136,13 +136,13 @@ class Transcripts(LocalTime):
                          [5, 50, 500, 5000])
         # La herramienta y sus 2 modelos (el más usado primero); el
         # 2026-10-12 queda fuera de los 7 días (13..19)
-        pages = claude_tokens.pages({"claude-code": self.models}, TODAY)
+        pages = ai_tokens.pages({"claude-code": self.models}, TODAY)
         self.assertEqual(pages, [
             ("Claude Code", [8, 281, 1503, 5304], 7096 + 100),
             ("Claude Code: haiku-5-5", [5, 50, 500, 5000], 5555),
             ("Claude Code: opus-5-5", [3, 231, 1003, 304], 1541 + 100)])
         self.assertEqual(
-            claude_tokens.tokens_line(*pages[0][1:], 5000000, pages[0][0]),
+            ai_tokens.tokens_line(*pages[0][1:], 5000000, pages[0][0]),
             "TOKENS 8 281 1503 5304 7196 5000000 Claude Code")
 
     def test_ignored(self):
@@ -153,13 +153,13 @@ class Transcripts(LocalTime):
 
 class Api(LocalTime):
     def test_days(self):
-        models = claude_tokens.api_days(API_PAGES)
+        models = ai_tokens.api_days(API_PAGES)
         opus = models["claude-opus-5-5"]
         self.assertEqual(opus[TODAY - datetime.timedelta(1)],
                          [100, 200, 300, 40])
         self.assertEqual(opus[TODAY], [1, 2, 3, 9])
         self.assertEqual(models["claude-haiku-5-5"][TODAY], [10, 20, 30, 40])
-        self.assertEqual(claude_tokens.pages({"api": models}, TODAY)[0],
+        self.assertEqual(ai_tokens.pages({"api": models}, TODAY)[0],
                          ("API org", [11, 22, 33, 49], 115 + 640))
 
     def test_pages(self):
@@ -169,7 +169,7 @@ class Api(LocalTime):
             requests.append(request)
             return io.BytesIO(json.dumps(API_PAGES[len(requests) - 1]).encode())
 
-        pages = list(claude_tokens.api_pages("sk-prueba", TODAY, urlopen))
+        pages = list(ai_tokens.api_pages("sk-prueba", TODAY, urlopen))
         self.assertEqual(pages, API_PAGES)
         self.assertEqual(requests[0].get_header("X-api-key"), "sk-prueba")
         self.assertIn("starting_at=2026-10-13T06%3A00%3A00Z",
@@ -219,26 +219,26 @@ class Opencode(LocalTime):
                            rows)
             db.commit()
             db.close()
-            models = claude_tokens.opencode_days(db_path, now=NOW)
+            models = ai_tokens.opencode_days(db_path, now=NOW)
         glm = models["glm-5.3-flash-free"]
         self.assertEqual(glm[TODAY], [277, 503, 26880, 0])
         self.assertEqual(glm[TODAY - datetime.timedelta(1)], [1, 2, 1, 1])
         self.assertEqual(set(glm), {TODAY, TODAY - datetime.timedelta(1)})
         self.assertEqual(dict(models["space-bunny-free"]), {TODAY: [3, 9, 6, 7]})
         # El nombre con la herramienta no cabe en 27 B: solo el modelo
-        self.assertEqual(claude_tokens.pages({"opencode": models}, TODAY), [
+        self.assertEqual(ai_tokens.pages({"opencode": models}, TODAY), [
             ("opencode", [280, 512, 26886, 7], 27660 + 5 + 25),
             ("glm-5.3-flash-free", [277, 503, 26880, 0], 27660 + 5),
             ("opencode: space-bunny-free", [3, 9, 6, 7], 25)])
 
     def test_sources(self):
-        self.assertEqual(claude_tokens.parse_sources("claude-code,opencode"),
+        self.assertEqual(ai_tokens.parse_sources("claude-code,opencode"),
                          ["claude-code", "opencode"])
-        self.assertEqual(claude_tokens.parse_sources("opencode, opencode"),
+        self.assertEqual(ai_tokens.parse_sources("opencode, opencode"),
                          ["opencode"])
         for text in ("copilot", "claude-code,", ""):
             with self.assertRaises(argparse.ArgumentTypeError):
-                claude_tokens.parse_sources(text)
+                ai_tokens.parse_sources(text)
 
 
 class Pages(unittest.TestCase):
@@ -249,12 +249,12 @@ class Pages(unittest.TestCase):
     def test_one_model(self):
         # Un solo modelo: solo la página de la herramienta
         self.assertEqual(
-            claude_tokens.pages({"claude-code": self.used("claude-opus-5-5")},
+            ai_tokens.pages({"claude-code": self.used("claude-opus-5-5")},
                                 TODAY), [("Claude Code", [1, 0, 0, 0], 1)])
 
     def test_nothing(self):
         # Sin uso en 7 días: la primera fuente en 0 (el badge dice algo)
-        self.assertEqual(claude_tokens.pages(
+        self.assertEqual(ai_tokens.pages(
             {"opencode": {}, "claude-code": self.used()}, TODAY),
             [("opencode", [0, 0, 0, 0], 0)])
 
@@ -262,18 +262,18 @@ class Pages(unittest.TestCase):
         # Las herramientas tienen lugar siempre; los modelos llenan el resto
         data = {"claude-code": self.used(*(f"m{i}" for i in range(9))),
                 "opencode": self.used("a", "b")}
-        pages = claude_tokens.pages(data, TODAY)
-        self.assertEqual(len(pages), claude_tokens.MAX_PAGES)
+        pages = ai_tokens.pages(data, TODAY)
+        self.assertEqual(len(pages), ai_tokens.MAX_PAGES)
         self.assertEqual([p[0] for p in pages][-1], "opencode")
         self.assertEqual(pages[0], ("Claude Code", [9, 0, 0, 0], 9))
 
     def test_name(self):
-        self.assertEqual(claude_tokens.page_name("Claude Code", "claude-opus-5-5"),
+        self.assertEqual(ai_tokens.page_name("Claude Code", "claude-opus-5-5"),
                          "Claude Code: opus-5-5")
-        name = claude_tokens.page_name("opencode", "ñ" * 40 + "\n")
-        self.assertLessEqual(len(name.encode()), claude_tokens.NAME_MAX)
+        name = ai_tokens.page_name("opencode", "ñ" * 40 + "\n")
+        self.assertLessEqual(len(name.encode()), ai_tokens.NAME_MAX)
         self.assertEqual(name, "ñ" * 13)  # Sin cortar una letra a la mitad
-        self.assertEqual(claude_tokens.page_name("opencode", " \t"),
+        self.assertEqual(ai_tokens.page_name("opencode", " \t"),
                          "opencode: ?")
 
 
@@ -281,10 +281,10 @@ class Meta(unittest.TestCase):
     def test_parse(self):
         for text, value in (("5M", 5000000), ("800k", 800000),
                             ("1.5M", 1500000), ("0", 0), ("1200", 1200)):
-            self.assertEqual(claude_tokens.parse_count(text), value)
+            self.assertEqual(ai_tokens.parse_count(text), value)
         for text in ("abc", "-5", "1.5", "M", ""):
             with self.assertRaises(argparse.ArgumentTypeError):
-                claude_tokens.parse_count(text)
+                ai_tokens.parse_count(text)
 
 
 if __name__ == "__main__":
