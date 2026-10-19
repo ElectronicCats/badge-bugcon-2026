@@ -24,6 +24,8 @@ Requiere pyserial. Uso:
   ./tools/badge_usb.py album -o album.bin        # luego tools/verify_album.py
   ./tools/badge_usb.py album -o album_42.json    # el .json de "Guardar .json"
   ./tools/badge_usb.py pwr                       # energía (F4.7)
+  ./tools/badge_usb.py time                      # reloj con la hora de la PC
+  ./tools/badge_usb.py led ff0000                # notificador (000000 apaga)
   ./tools/badge_usb.py -p /dev/ttyACM1 raw "INFO"
 """
 import argparse
@@ -235,6 +237,12 @@ def load_image(path, info):
     return open(path, "rb").read()
 
 
+def local_epoch(now=None):
+    """Segundos desde 1970 en hora local, lo que espera TIME (F11.1)."""
+    now = time.time() if now is None else now
+    return int(now) + time.localtime(now).tm_gmtoff
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     parser.add_argument("-p", "--port", default="/dev/ttyACM0")
@@ -261,6 +269,8 @@ def main():
     sub.add_parser("avatar").add_argument("file", help=".pbm (P4) o .bin")
     sub.add_parser("album").add_argument("-o", "--output", required=True)
     sub.add_parser("pwr")
+    sub.add_parser("time", help="fija el reloj con la hora local de la PC")
+    sub.add_parser("led").add_argument("rgb", help="rrggbb en hex; 000000 apaga")
     args = parser.parse_args()
 
     badge = Badge(args.port)
@@ -301,6 +311,10 @@ def main():
         elif args.cmd == "pwr":
             for key, value in badge.power().items():
                 print(f"{key}={value}")
+        elif args.cmd == "time":
+            print(badge.expect_ok(f"TIME {local_epoch()}"))
+        elif args.cmd == "led":
+            print(badge.expect_ok(f"LED {args.rgb}"))
         elif args.cmd == "album":
             data = badge.album()
             if args.output.endswith(".json"):  # el de "Guardar .json" (bb26-album)
