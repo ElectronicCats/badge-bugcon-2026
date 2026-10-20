@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
 fs_powercut.py — Reinicia el badge en momentos aleatorios mientras escribe y
-verifica que el almacenamiento sobreviva (criterio de F2: 200 cortes sin
+verifica que el almacenamiento sobreviva (criterio: 200 cortes sin
 corrupción).
 
 Cada ciclo: `fs check` (el registro de prueba está completo y su seq no
 retrocede), `fs stress` y, tras una espera aleatoria, un reinicio por la línea
 RTS del USB (como hace esptool). Solo prueba LittleFS: NVS no sobrevivió a
-esta prueba (sesión 8) y queda para datos que se escriben una vez.
+esta prueba y queda para datos que se escriben una vez.
 
 Limitación: el reinicio corta al ESP32-S3 pero no al flash, así que una
 operación de escritura o borrado ya iniciada termina. Para cortes reales,
 desconectar el USB (o SW1 con pilas) durante `fs stress` y correr `fs check`.
 
-Con --album prueba el alta en el álbum (F5.8) en lugar del registro de
+Con --album prueba el alta en el álbum en lugar del registro de
 prueba: `album clear` + `album fill <base>` (un álbum grande: cada alta
 reescribe ~24-38 KB en 0.5-0.8 s) y en cada ciclo `album stress`, que agrega
 estampas una a una e imprime "saved=<n>" tras cada guardado completo. Tras el
@@ -30,7 +30,7 @@ Requiere pyserial. Uso:
   ./tools/fs_powercut.py                  # 200 ciclos en /dev/ttyACM0
   ./tools/fs_powercut.py -n 20 -p /dev/ttyACM1
   ./tools/fs_powercut.py -n 176 --resume  # tras reconectar
-  ./tools/fs_powercut.py --album -n 200   # cortes durante el alta (F5.8)
+  ./tools/fs_powercut.py --album -n 200   # cortes durante el alta
 """
 import argparse
 import random
@@ -162,7 +162,7 @@ def main():
     parser.add_argument("--resume", action="store_true",
                         help="no borra el registro: el ciclo 1 lo verifica")
     parser.add_argument("--album", action="store_true",
-                        help="cortes durante el alta del álbum (F5.8)")
+                        help="cortes durante el alta del álbum")
     parser.add_argument("--base", type=int, default=300,
                         help="--album: dorsales 1..base al empezar (300)")
     args = parser.parse_args()

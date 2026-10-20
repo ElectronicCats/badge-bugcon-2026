@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-provision.py — Línea de producción (F12.4, §3.3 del plan): flashea un badge,
-le asigna su dorsal y su K_dev, corre la QA (app qa, F12.3) y lo registra en
+provision.py — Línea de producción: flashea un badge,
+le asigna su dorsal y su K_dev, corre la QA (app qa) y lo registra en
 el CSV (MAC ↔ dorsal ↔ resultado).
 
 Pasos, con un badge conectado por USB:
@@ -249,7 +249,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     parser.add_argument("-p", "--port", default="/dev/ttyACM0")
     parser.add_argument("--master", type=bytes.fromhex, required=True,
-                        help="K_master en hex (D-09)")
+                        help="K_master en hex")
     parser.add_argument("--csv", default="provision.csv")
     parser.add_argument("--bin", default=DEFAULT_BIN, help="merged.bin")
     parser.add_argument("--no", type=int, help="fija el dorsal")

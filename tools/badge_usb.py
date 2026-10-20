@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-badge_usb.py — Cliente del protocolo USB del badge (F2.9, el mismo contrato
+badge_usb.py — Cliente del protocolo USB del badge (el mismo contrato
 que el e-ink-Keychain; detalle en firmware/badge_bugcon_2026/src/services/
 usb_protocol.h): sirve para probar el firmware sin el configurador web y como
-base de provision.py (F12.4).
+base de provision.py.
 
 Las imágenes van en el formato del badge: 1 bpp, filas completas, MSB primero,
 1 = blanco, del tamaño `panel` que reporta INFO. Se leen y se escriben como
 PBM binario (P4, 1 = negro: se invierte) o como .bin crudo.
 
-El avatar (AVTR, F5.7) va en el mismo formato, de AVATAR_W x AVATAR_H.
+El avatar (AVTR) va en el mismo formato, de AVATAR_W x AVATAR_H.
 
 Requiere pyserial. Uso:
   ./tools/badge_usb.py info
@@ -23,7 +23,7 @@ Requiere pyserial. Uso:
   ./tools/badge_usb.py avatar cara.pbm           # 96x96
   ./tools/badge_usb.py album -o album.bin        # luego tools/verify_album.py
   ./tools/badge_usb.py album -o album_42.json    # el .json de "Guardar .json"
-  ./tools/badge_usb.py pwr                       # energía (F4.7)
+  ./tools/badge_usb.py pwr                       # energía
   ./tools/badge_usb.py time                      # reloj con la hora de la PC
   ./tools/badge_usb.py led ff0000                # notificador (000000 apaga)
   ./tools/badge_usb.py tokens 1200 3400 500000 20000 9000000 2000000
@@ -44,7 +44,7 @@ OPEN_WAIT_S = 0.3  # El badge descarta lo que llega en los primeros 200 ms
 REPLY_TIMEOUT_S = 15  # Como el configurador del keychain
 AVATAR_W = AVATAR_H = 96  # cfg::card::AVATAR_WIDTH/HEIGHT
 AVATAR_BYTES = (AVATAR_W + 7) // 8 * AVATAR_H
-# Bytes 0..47 de la estampa v1 (card::Card, §3.2): version, type, badge_no,
+# Bytes 0..47 de la estampa v1 (card::Card): version, type, badge_no,
 # nickname, team, position, stats, rarity, flags, handle. Lo que lleva CARD.
 CARD_FIELDS = struct.Struct("<BBH16sBB4sBB20s")
 ALBUM_HEADER_BYTES = 80  # Cabecera de ALBM; mi estampa va en 16..80
@@ -80,7 +80,7 @@ def restore_vmin(port):
     pyserial lo pone en 0 y el kernel lo guarda para el siguiente que abra
     ese ttyACMn, aunque se desconecte el cable. Chrome/Brave en Linux no fijan
     VMIN: con 0, su read() vuelve vacío, lo toman por "device has been lost"
-    y el configurador nunca recibe respuesta (F6.7)."""
+    y el configurador nunca recibe respuesta."""
     try:
         import termios
     except ImportError:
@@ -247,7 +247,7 @@ def load_image(path, info):
 
 
 def local_epoch(now=None):
-    """Segundos desde 1970 en hora local, lo que espera TIME (F11.1)."""
+    """Segundos desde 1970 en hora local, lo que espera TIME."""
     now = time.time() if now is None else now
     return int(now) + time.localtime(now).tm_gmtoff
 

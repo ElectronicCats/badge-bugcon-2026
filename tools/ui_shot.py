@@ -99,7 +99,7 @@ def main():
         sys.exit(f"no llegó la captura: {error or 'sin SHOT'}")
     write_png(args.output, width, height, rows, args.scale)
     print(f"{args.output}: {width}x{height}")
-    restore_vmin(port)  # Si no, el configurador en Chrome/Brave no lee (F6.7)
+    restore_vmin(port)  # Si no, el configurador en Chrome/Brave no lee
     port.close()
 
 

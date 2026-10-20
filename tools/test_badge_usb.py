@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 test_badge_usb.py — Pruebas de tools/badge_usb.py sin badge: la respuesta de
-PWR (F4.7) tal como la escribe usb_protocol.cpp y restore_vmin() con el tty
+PWR tal como la escribe usb_protocol.cpp y restore_vmin() con el tty
 ya desconectado.
 
 Uso (requiere pyserial, que badge_usb.py importa):

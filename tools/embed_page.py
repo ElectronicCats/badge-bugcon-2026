@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 embed_page.py — Comprime con gzip la página del Wi-Fi del badge y la escribe
-como arreglo de C (patrón html_data.h del keychain; F6.11/F6.12, RNF-08).
+como arreglo de C (patrón html_data.h del keychain).
 El resultado se guarda en el repo, así compilar no necesita Python. La salida
 es reproducible (mtime = 0): el mismo HTML da el mismo .h.
 

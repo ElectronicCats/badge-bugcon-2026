@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-test_verify_album.py — Pruebas de tools/verify_album.py sin badge (F5.8):
+test_verify_album.py — Pruebas de tools/verify_album.py sin badge:
 arma exportaciones ALBM con tools/identity.py y comprueba que se acepten las
 buenas y se rechacen las alteradas, fuera de línea con K_master: firma
 inválida, estampa firmada con la clave de otro badge, token falsificado o de
 otro receptor, nonce cambiado, repetidas, la propia, otra K_master y
 exportaciones truncadas. Incluye el álbum lleno (400 + especiales) y el
-texto del QR del álbum (F5.6).
+texto del QR del álbum.
 
 Uso (biblioteca estándar):
   python3 -m unittest tools/test_verify_album.py -v
@@ -151,8 +151,8 @@ class VerifyAlbum(unittest.TestCase):
         self.assertEqual(status[1], "especial, firma OK")
 
     def test_special_signed_by_another_badge(self):
-        # F5.5: la firma el badge que la ganó; copiada a otro álbum no sirve.
-        # Sin firma (antes de F5.5) o alterada, tampoco.
+        # La firma el badge que la ganó; copiada a otro álbum no sirve.
+        # Sin firma o alterada, tampoco.
         tampered = bytearray(card(1, MY_KEY, type_=SPECIAL))
         tampered[26] = GOLD
         for c in (card(1, key_of(7), type_=SPECIAL), card(1, type_=SPECIAL),

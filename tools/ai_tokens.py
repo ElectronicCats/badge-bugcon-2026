@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ai_tokens.py — Tokens de IA de hoy para la vista Tokens del modo
-Escritorio del badge (F11.11, D-24). La PC cuenta y el badge solo muestra: al
+Escritorio del badge. La PC cuenta y el badge solo muestra: al
 conectarse manda `TIME` y luego un `TOKENS <entrada> <salida> <caché_lect>
 <caché_escr> <total_7d> <meta> <nombre>` (firmware/README.md, protocolo USB)
 por página: una por herramienta y, si usó más de un modelo en 7 días, una
@@ -17,7 +17,7 @@ quedan las demás (con `--fuente`, cualquier falla detiene el ciclo):
                subagentes incluidos. De cada renglón solo se leen `usage`,
                `model`, `timestamp`, `message.id` y `requestId`: las
                conversaciones no salen de la PC. El formato no es una API
-               documentada (R-24).
+               documentada.
   opencode     la base local de opencode ≥ 2.0,
                ~/.local/share/opencode/opencode.db (o $XDG_DATA_HOME), en
                solo lectura y solo la tabla de mensajes. Cuenta cualquier
@@ -144,7 +144,7 @@ def read_transcripts(root, now=None):
     Una respuesta sale en varios renglones con la misma llave (uno por bloque
     de contenido) y, a veces, el primero trae `output_tokens` a medio contar
     (8 contra 229 en transcripts reales): se cuenta una vez, con el máximo de
-    cada campo. Lo que no se entiende se ignora (R-24)."""
+    cada campo. Lo que no se entiende se ignora."""
     since = (time.time() if now is None else now) - FILE_DAYS * 86400
     responses = {}
     for path in Path(root).glob("**/*.jsonl"):
@@ -356,7 +356,7 @@ def local_sources():
 
 def read_sources(sources, key, optional=False):
     """{fuente: {modelo: días}}. Si una fuente falla, falla el ciclo entero:
-    mejor no mandar nada que cifras a las que les falta una parte (R-24).
+    mejor no mandar nada que cifras a las que les falta una parte.
     Con `optional` (sin `--fuente`) la que falla se omite, salvo todas."""
     data, error = {}, None
     for source in sources:

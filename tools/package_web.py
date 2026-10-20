@@ -3,7 +3,7 @@
 package_web.py — Empaqueta el configurador USB local (web/configurator), el
 álbum web (web/album), sus instrucciones (web/LEEME.txt) y la licencia
 (LICENSE, como LICENSE.txt) en un .zip para descargar, descomprimir y abrir
-con file://, sin servidor (F6.15, D-06, D-16).
+con file://, sin servidor.
 Las páginas conservan su carpeta para que el enlace relativo "Ver el álbum"
 (../album/index.html) funcione. La salida es reproducible (fechas fijas): los
 mismos archivos y la misma versión dan el mismo .zip.

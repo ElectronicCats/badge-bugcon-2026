@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-verify_album.py — Verifica la exportación ALBM de un badge (F5.7, §3.3 del
-plan), fuera de línea y con K_master (no hay servidor, D-16): la firma de mi
+verify_album.py — Verifica la exportación ALBM de un badge, fuera de
+línea y con K_master (no hay servidor): la firma de mi
 estampa y, por cada estampa del álbum, su firma y el token del intercambio.
 
   K_A = HMAC-SHA256(K_master, MAC_A || A.no)   (tools/identity.py)
@@ -14,22 +14,22 @@ count entradas de 80 B (estampa 64, token 8, orden u16, nonce u32, reservado
 2), little endian.
 
 Para derivar K_A hace falta la MAC de cada badge: la tiene la tabla de la
-provisión (F12.4). Aquí se pasa con --mac NO=MAC (repetible) o --macs CSV
+provisión. Aquí se pasa con --mac NO=MAC (repetible) o --macs CSV
 (no,mac por renglón). Sin --master se usa DEV_MASTER si el badge no está
 provisionado. El par virtual Eco del DevKit (#999) y las estampas de prueba
 de la consola (`album add|fill|stress`) firman con la MAC del propio badge:
 --self-mac la usa para todo dorsal sin MAC.
 
-Especiales (F5.5): las de tipo reto o especial las genera el propio badge
+Especiales: las de tipo reto o especial las genera el propio badge
 (services/specials) y las firma con su clave, sin token (no hay intercambio):
 se verifican con la clave del que exporta. Solo cuentan en su álbum. Una
 firma OK prueba que las pegó ese badge, no que su dueño las ganó: puede leer
-su K_dev del flash (§3.3, D-10). Los premios de N3 se validan con la flag,
-no con la estampa (F9.5).
+su K_dev del flash. Los premios de N3 se validan con la flag,
+no con la estampa.
 
 Una estampa repetida en la exportación (mismo tipo y número que una anterior)
 no cuenta: el badge las deduplica, así que una repetida es una exportación
-alterada (cuentan los tokens únicos, §3.3).
+alterada (cuentan los tokens únicos).
 
 Exportación local: "Guardar .json" del configurador y `badge_usb.py album
 -o x.json` la guardan como .json; acepta el .bin y el .json. El .json lleva la
@@ -39,12 +39,12 @@ cuenta es "albm" y un resumen que no coincide con ella se rechaza:
    "mac": "F4:12:FA:52:03:F8", "provisioned": false, "count": 1,
    "fw": "0.1.0", "exported_at": "2026-10-08T19:00:00Z", "albm": "<base64>"}
 
-QR del álbum (F5.6, vista rápida web): con --qr verifica el texto que
-codifica la pantalla QR del badge (lo que leerá web/album, F6.3):
+QR del álbum (vista rápida web): con --qr verifica el texto que
+codifica la pantalla QR del badge (lo que leerá web/album):
   <cfg::album::QR_URL><dorsal>/<bitmap>/<tag>
 bitmap = 50 B (dorsal n en el bit n-1, MSB primero) y tag =
 identity.album_tag() en base32 de RFC 4648 sin relleno. Solo prueba que el
-bitmap salió de ese badge (no lleva tokens). Destino del QR: D-18.
+bitmap salió de ese badge (no lleva tokens). El destino del QR aún no tiene hosting.
 
 Uso:
   ./tools/verify_album.py album.bin --mac 999=F4:12:FA:52:03:F8
@@ -71,7 +71,7 @@ import identity
 HEADER = struct.Struct("<4sBB6sH2s64s")
 ENTRY = struct.Struct("<64s8sHI2s")
 FORMAT = 1
-JSON_FORMAT = "bb26-album"  # .json de la exportación local (§3.6)
+JSON_FORMAT = "bb26-album"  # .json de la exportación local
 ATTENDEE = 0  # card::ATTENDEE
 ATTENDEES = 400  # cfg::album::ATTENDEES
 BITMAP_BYTES = (ATTENDEES + 7) // 8
@@ -177,7 +177,7 @@ def verify(header, entries, master, macs, default_mac=None):
             # El badge no pega la suya; con su K_dev cualquiera fabrica una.
             e["status"] = "es la del que exporta (no cuenta)"
         elif e["type"] != ATTENDEE:
-            # La generó y la firmó el badge que exporta (F5.5).
+            # La generó y la firmó el badge que exporta.
             sig = identity.verify_card(my_key, e["card"])
             e["status"] = f"especial, {'firma OK' if sig else 'firma INVÁLIDA'}"
         elif mac is None:
@@ -216,7 +216,7 @@ def main():
     parser.add_argument("file", nargs="?",
                         help="exportación ALBM (.bin o .json bb26-album)")
     parser.add_argument("-p", "--port", help="leer ALBM del badge")
-    parser.add_argument("--qr", help="texto del QR del álbum (F5.6)")
+    parser.add_argument("--qr", help="texto del QR del álbum")
     parser.add_argument("--master", type=bytes.fromhex,
                         help="K_master en hex (por omisión DEV_MASTER)")
     parser.add_argument("--mac", action="append", default=[],
