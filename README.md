@@ -1,199 +1,85 @@
+# Badge BugCon 2026
 
-# Plantilla para proyectos de ingeniería
+Badge electrónico de BugCon 2026, diseñado por Electronic Cats: ESP32-S3,
+e-paper de 1.54" (200×200), 6 LEDs RGB, enlace infrarrojo, acelerómetro y
+3 pilas AAA. Los asistentes intercambian estampas por IR para llenar su
+álbum, juegan penales, la Copa BugCon y futbolito, y resuelven retos.
 
-Esta plantilla es la base para cualquier proyecto desarrollado en Electronic Cats.
-
-Automáticamente, se generarán todos los archivos necesarios para la compra de material, fabricación y ensamble.
-
-Así como documentos complementarios para un proyecto completo.
-
-
-
-> Este README.md puede ser utilizado como plantilla para documentación, de esta manera se puede incluir generalidades, recomendaciones y todo lo necesario para entender el proyecto.
-
-
-
-## ¿Cómo utilizar esta plantilla?
-
-Para comenzar un nuevo proyecto, presiona el botón de "Use this template".
-
-
-
-### KiCad
-
-Para esta plantilla, el hardware debe de ser diseñado y/o desarrollado en KiCad 9.
-
-Al término del diseño del proyecto, KiCad deberá de generar los siguientes archivos:
-
-
-
-- nombre_del_proyecto.kicad_pro
-
-- nombre_de_la_pcb.kicad_pcb
-
-- nombre_del_esquematico.kicad_sch
-
-
-
-Además de archivos temporales, los cuales Git ignora al momento de cualquier push.
-
-[Archivos ignorados](.gitignore)
-
-
-
-Estos archivos deberán ser guardados dentro de la carpeta de [hardware](hardware/).
-
-
-
-### Configuración de automatización
-
-Los workflows de GitHub Actions detectan automáticamente los archivos de KiCAD en el directorio `hardware/`. No es necesario modificar ningún archivo de configuración.
-
-Los workflows buscarán automáticamente:
-- El primer archivo `.kicad_pcb` encontrado en `hardware/`
-- El archivo `.kicad_sch` que coincida con el nombre del PCB
-- Si no hay coincidencia exacta, usará el primer `.kicad_sch` disponible
-
-**Nota**: Asegúrate de que los archivos de KiCAD estén guardados en la carpeta `hardware/` con sus extensiones correctas (`.kicad_pro`, `.kicad_pcb`, `.kicad_sch`).
-
-
-
-### Activar/desactivar DRC y ERC
-
-Las opciones de DRC y ERC están siempre activas predeterminadamente. Para desactivarlas, se deberá modificar el archivo [electroniccats_sch.kibot.yaml](hardware/electroniccats_sch.kibot.yaml) cambiando las siguientes líneas:
-
-```yaml
-
-run_erc: false  # Cambiar a false para desactivar ERC
-
-run_drc: false  # Cambiar a false para desactivar DRC
+## Estructura
 
 ```
-
-**Workflows disponibles:**
-- **DRC y ERC**: Se ejecutan automáticamente en cada `push` y `pull_request` para validar el diseño
-- **Archivos de fabricación**: Se generan automáticamente cuando se crea un `release` publicado
-
-## Creación de Release
-
-Al terminar el proyecto y su revisión, se publicará el primer Release.
-
-Para crear un nuevo Release, presiona el botón de "Create a new release".
-
-Una vez creado el Release, podrás ver la creación de los archivos en la sección de Actions.
-
-Al terminar, los archivos serán generados en el mismo release.
-
-## Elementos para mejorar tu `Readme.md`
-
-Los archivos `Readme.md` se crean con el propósito de hacer visualmente agradable un repositorio para los usuarios que visiten nuestro proyecto, puedes utilizar algunos de los siguientes elementos.
-
-### Código
-Quoting code, como lo dice su nombre, se utiliza para añadir código y que se separe del texto plano. Debes de agregar el codigo dentro de ` ``` ```` ` , ademas si agregas el nombre del lenguaje inmediatamente despues de las primeras ` ``` ` las funciones se pondran de color diferenciandolas del resto del codigo. Aquí algunos ejemplos. Puedes encontrar los lenguajes aquí:
-https://github.com/github/linguist/blob/master/vendor/README.md
-```sh
-192.168.0.1
-cd Downloads
-```
-  ```diff
-- text in red
-+ text in green
-! text in orange
-# text in gray
-@@ text in purple (and bold)@@
+.
+├── firmware/            Firmware del badge (arduino-cli, core esp32:esp32)
+│   ├── README.md        Arquitectura, compilación, consola, protocolo USB y módulos
+│   ├── Badge_Bugcon_2026_conexiones.md   Conexiones del esquema (fuente de los pines)
+│   ├── docs/            Guías (bring-up de la PCB, control remoto y TV-Gone)
+│   ├── art/             Iconos y sprites fuente de la UI
+│   ├── scripts/         bootstrap.sh, compile.sh, flash.sh
+│   └── badge_bugcon_2026/   Sketch
+├── tools/               Herramientas de PC (Python): cliente USB, provisión,
+│                        verificación del álbum, generadores y pruebas
+├── web/                 Páginas sin servidor: configurador USB, álbum y la
+│                        página del teléfono que sirve el badge por Wi-Fi
+├── hardware/            Proyecto KiCad 9 (esquema, PCB, footprints, KiBot)
+├── .github/workflows/   CI: pre-commit, archivos de fabricación y el .zip del configurador
+├── LICENSE              GPL-3.0
+└── THIRD_PARTY.md       Componentes de terceros y sus licencias
 ```
 
-### Hipervínculos
+## Inicio rápido
 
-Usa hipervínculos o links para redirigir a los usuarios a páginas donde puedan conocer más acerca de algún tema o concepto en concreto, hay dos formas de hacer esto:
+Firmware (detalles en [firmware/README.md](firmware/README.md)):
 
-- [Agregando el link en seguida](https://github.com/ElectronicCats/Template-Project-KiCAD-CI) - Con esta forma deberas de seguir el siguiente formato `[Texto](www.url.com)`. El texto que se mostrará en la página principal del Readme será el que se encuentra dentro de los corchetes y el link de la página deberá de ir de manera inmediata a los corchetes dentro de paréntesis.
-
-- [Agregando el link como referencia] - Al igual que otro tipo de formatos de referencia en este agregas el texto que se mostrará en la página principal del repositorio dentro de corchetes `[Texto]` y al final de tu archivo (de preferencia) agregas la referencia de la siguiente manera: `[Texto]:<www.url.com>`, este no se mostrara en el archivo por lo que es una buena forma de mantener un formato y un orden.
-
-### Tablas
-
-Las tablas que todos conocemos con filas y columnas. El formato para estas tablas se basa en el uso del símbolo `|`, entonces debes de encerrar las palabras como esto: `|Columna1|` (sin la posibilidad de dos | seguidos), para agregar más columnas basta con dar un espacio y repetir el formato, sin embargo, para añadir filas debes de hacer un salto de línea y repetir el formato de columnas, dejándonos una tabla como la siguiente:
-
-|Columna1|Columna2|
-|-|-|
-|Fila 1 Columna 1|Fila 2 Columna 2|
-
-Nota: Si agregas en la segunda fila guiones (-) harás que la primera fila se convierta en el encabezado de la tabla.
-
-### Imágenes
-Puedes añadir imágenes siempre y cuando estas estén en Internet, si quieres agregar una nueva imagen tambien la puedes arrastrar y soltar en el cuadro de texto (en caso de que edites tu `Readme.md`) directo desde GitHub, esto hará que se guarde tu imagen en una carpeta oculta dentro de tu repositorio.
-El formato para agregar imagenes es: `![](www.urlimagen.com)`
-Si requieres que al hacer click en tu imagen se redirija a otra pagina usa el siguiente formado `[![](www.urldeimagen.com)](https://www.urlaredirigir.com)`
-Es importante agregar `https://` , si no te enviara a una página de GitHub que probablemente no exista.
-
-[![](https://electroniccats.com/wp-content/uploads/2018/01/fav.png)](https://www.electroniccats.com)
-
-### Referencias
-Es posible que en la wiki hayas visto numeritos como este --->[^1], pero que significan?
-
-No son más que referencias que puedes hacer para hacer saltos de información e ir directo a la referencia haciendo click en el pequeño número.
-[^1]: Soy la referencia :))))
-
-### Emojis :trollface: :shipit:
-Solo escribe el código del emoji así: `:EMOJICODE:`.
-Aqui la lista de los [EMOJICODEs](https://github.com/ikatyang/emoji-cheat-sheet/blob/master/README.md#github-custom-emoji)
-
-### Listas con checkbox
-Usa este formato:
+```bash
+cd firmware
+./scripts/bootstrap.sh     # una vez: arduino-cli y el core esp32:esp32
+./scripts/compile.sh       # compila → firmware/build/
+./scripts/flash.sh         # compila, carga y abre el monitor serie
 ```
-- [x] GFM task list 1
-- [x] GFM task list 2
-- [ ] GFM task list 3
-    - [ ] GFM task list 3-1
-    - [ ] GFM task list 3-2
-    - [ ] GFM task list 3-3
-- [ ] GFM task list 4
-    - [ ] GFM task list 4-1
-    - [ ] GFM task list 4-2
-  ```
-  Y tendras algo asi:
-- [x] GFM task list 1
-- [x] GFM task list 2
-- [ ] GFM task list 3
-    - [ ] GFM task list 3-1
-    - [ ] GFM task list 3-2
-    - [ ] GFM task list 3-3
-- [ ] GFM task list 4
-    - [ ] GFM task list 4-1
-    - [ ] GFM task list 4-2
 
-### Otros Elementos
+Pruebas de PC (desde la raíz; requieren Python 3, `pyserial` y `g++`):
 
-![](https://img.shields.io/github/stars/ElectronicCats/Template-Project-KiCAD-CI?style=for-the-badge)
-![](https://img.shields.io/github/forks/ElectronicCats/Template-Project-KiCAD-CI?color=green&style=for-the-badge)
+```bash
+python3 -m unittest discover -s tools -p 'test_*.py'
+```
 
-Este tipo de indicadores nos pueden ayudar a identificar diferente información relacionada al proyecto, solo los debes de agregar como una imagen y en el URL  pegar el link correspondiente.
-Los ejemplos de arriba fueron generados con la pagina: Shields.io , solo debes de asegurarte que son para GitHub y que tienen el formato `MarkDown`
+Archivos generados que no se editan a mano (se regeneran con su herramienta):
 
-- Badges,
-En caso de que necesites algun referente a alguna empresa o plataforma puedes usar esta pagina: https://dev.to/envoy_/150-badges-for-github-pnk
+| Archivo | Fuente | Herramienta |
+|---|---|---|
+| `firmware/badge_bugcon_2026/src/ui/icons.cpp` | `firmware/art/` | `tools/img2bitmap.py --all` |
+| `firmware/badge_bugcon_2026/src/services/ir_codes.cpp` | la tabla de `tools/ir_codes.py` | `tools/ir_codes.py --all` |
+| `firmware/badge_bugcon_2026/src/services/wifi_page.h` | `web/phone/index.html` | `tools/embed_page.py` |
+| `firmware/badge_bugcon_2026/src/gfx/fonts/*.cpp` | fuentes bitmap (Terminus, misc-fixed) | `tools/fontgen.py` |
 
-[![](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/company/electroniccats/?originalSubdomain=mx)
+Los datos del reto N3 (`tools/challenges/`) son privados y no viven en este
+repositorio.
 
-- Estadísticas
-Utilizando el projecto de este usuario puedes agregar estadísticas del proyecto como estas:
+## Calidad y CI
 
-![This repository Stats](https://github-readme-stats.vercel.app/api/pin?username=ElectronicCats&repo=Template-Project-KiCAD-CI&title_color=fff&icon_color=f9f9f9&text_color=9f9f9f&bg_color=151515)
+- **pre-commit** ([.pre-commit-config.yaml](.pre-commit-config.yaml)):
+  clang-format, espacios al final, fin de archivo y mensajes de commit con
+  [Conventional Commits](https://www.conventionalcommits.org/). Excluye
+  `hardware/`. Localmente: `pre-commit install --hook-type pre-commit
+  --hook-type commit-msg`.
+- **Hardware**: en cada `push` y `pull_request`, KiBot corre DRC y ERC sobre
+  el primer `.kicad_pcb` de `hardware/` y su `.kicad_sch`. Para desactivarlos,
+  cambiar `run_erc`/`run_drc` en
+  [hardware/electroniccats_sch.kibot.yaml](hardware/electroniccats_sch.kibot.yaml).
+- **Release publicado**: se generan los archivos de fabricación y se adjunta
+  `bugcon26-configurador.zip` (`tools/package_web.py`).
 
-https://github.com/anuraghazra/github-readme-stats
+## Licencia
 
-**NOTA**:Son pocas las tarjetas que puedes utilizar con el proyecto de este usuario para repositorios ya que son más dirigidos a perfiles de GitHub.
+GPL-3.0 ([LICENSE](LICENSE)). Componentes de terceros en
+[THIRD_PARTY.md](THIRD_PARTY.md).
 
 ## Maintainer
 
-<a
-href="https://github.com/sponsors/ElectronicCats">
-
-<img  src="https://electroniccats.com/wp-content/uploads/2020/07/Badge_GHS.png"  height="104" />
-
+<a href="https://github.com/sponsors/ElectronicCats">
+<img src="https://electroniccats.com/wp-content/uploads/2020/07/Badge_GHS.png" height="104" />
 </a>
 
-Electronic Cats invests time and resources providing this open source design, please support Electronic Cats and open-source hardware by purchasing products from Electronic Cats!
-
-[Agregando el link como referencia]: <https://github.com/ElectronicCats/Template-Project-KiCAD-CI>
+Electronic Cats invests time and resources providing this open source design,
+please support Electronic Cats and open-source hardware by purchasing products
+from Electronic Cats!
