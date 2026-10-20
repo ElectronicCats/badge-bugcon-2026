@@ -5,16 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Álbum Copa BugCon 2026</title>
 <!--
-  Álbum web del badge BugCon 2026 (F6.3). Un solo HTML sin dependencias,
-  abierto desde file:// en la computadora o el teléfono (D-16: sin servidor;
+  Álbum web del badge BugCon 2026. Un solo HTML sin dependencias,
+  abierto desde file:// en la computadora o el teléfono (sin servidor;
   no hace peticiones de red).
 
-  Fuentes (§3.6 del plan):
+  Fuentes:
   - El .json que guarda el configurador ("bb26-album" v1) o el .bin de ALBM.
     ALBM no trae avatares: el detalle muestra la inicial.
-  - Ruta del QR del badge (F5.6) en el fragmento: index.html#/A/<dorsal>/
+  - Ruta del QR del badge en el fragmento: index.html#/A/<dorsal>/
     <bitmap>/<tag>. Solo dice qué dorsales tiene (vista rápida); el destino
-    del QR está pendiente (D-18).
+    del QR está pendiente.
   Nada aquí verifica firmas ni tokens (necesitan K_master): eso lo hace
   tools/verify_album.py fuera de línea.
   Los textos de las estampas vienen de otros badges: siempre como texto.
@@ -199,7 +199,7 @@ function setStatus(msg, cls) {
 
 /* ---------------- formato: ALBM y .json (como el configurador) ---------------- */
 
-// 64 B de la estampa v1 (§3.2) -> objeto
+// 64 B de la estampa v1 -> objeto
 function parseCard(b) {
   const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
   const text = (off, len) => {
@@ -421,7 +421,7 @@ function showDetail(c, order) {
     TEAMS[c.team] || (c.type === ATTENDEE ? "Sin selección" : ""), POSITIONS[c.position],
     RARITIES[c.rarity], order !== undefined ? "recibida " + (order + 1) + "ª" : ""]
     .filter(Boolean).join(" · ");
-  // Las especiales (F5.5) no tienen stats: su descripción va en el handle.
+  // Las especiales no tienen stats: su descripción va en el handle.
   $("dStats").replaceChildren(...(c.type !== ATTENDEE ? [] : STATS).map((name, i) => {
     const row = el("div", "stat"), bar = el("i");
     bar.style.width = Math.min(100, c.stats[i] * 100 / STAT_MAX) + "%";
@@ -477,7 +477,7 @@ document.addEventListener("drop", e => {
   if (e.dataTransfer.files[0]) openFile(e.dataTransfer.files[0]);
 });
 
-// Vista rápida del QR: solo los dorsales del bitmap (destino del QR: D-18).
+// Vista rápida del QR: solo los dorsales del bitmap (el destino del QR aún no tiene hosting).
 function openQr(m) {
   const no = +m[1], numbers = bitmapNumbers(base32(m[2]));
   if (inRange(no)) numbers.add(no);

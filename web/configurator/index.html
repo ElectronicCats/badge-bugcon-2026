@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Configurador Copa BugCon 2026</title>
 <!--
-  Configurador del badge BugCon 2026 (F6.1). Un solo HTML sin dependencias,
-  abierto desde file:// (D-16: sin servidor; no hace peticiones de red).
+  Configurador del badge BugCon 2026. Un solo HTML sin dependencias,
+  abierto desde file:// (sin servidor; no hace peticiones de red).
   Portado de e-ink-Keychain/tool/configurator.html: recorte, tono, dithering,
   texto, vista previa exacta y Web Serial con OK/ERR y timeouts. Agrega el
   editor de la estampa (NICK/CARD/AVTR), la plantilla "Copa BugCon" y la
   exportación local del álbum (ALBM -> .json). Protocolo: firmware/
-  badge_bugcon_2026/src/services/usb_protocol.h y §3.5 del plan. Web Serial
-  (F6.7): Chrome, Edge o Brave de escritorio, en contexto seguro (file://,
+  badge_bugcon_2026/src/services/usb_protocol.h. Web Serial:
+  Chrome, Edge o Brave de escritorio, en contexto seguro (file://,
   localhost o https); en los demás casos la página dice por qué no y qué hacer.
 -->
 <style>
@@ -391,7 +391,7 @@ const $ = id => document.getElementById(id);
 
 /* ---------------- estado ---------------- */
 
-let panel = { w: 200, h: 200 };   // de INFO (panel=WxH); 200x200 = D-03
+let panel = { w: 200, h: 200 };   // de INFO (panel=WxH); 200x200 = panel del badge
 let numSlots = 4;
 let target = "avatar";            // "avatar" | "slot"
 let W = AVATAR_W, H = AVATAR_H;   // tamaño del destino actual
@@ -595,7 +595,7 @@ function textError(s, maxBytes, name) {
   return null;
 }
 
-// 64 B de la estampa v1 (§3.2) -> objeto
+// 64 B de la estampa v1 -> objeto
 function parseCard(b) {
   const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
   const text = (off, len) => {
@@ -1242,15 +1242,15 @@ function renderTemplate() {
 
 /* ---------------- transporte: Web Serial ---------------- */
 
-// F6.7: Web Serial solo existe en Chromium de escritorio (Chrome, Edge, Brave)
+// Web Serial solo existe en Chromium de escritorio (Chrome, Edge, Brave)
 // y en contexto seguro: file://, localhost o https. Por http desde una IP de
-// la red el navegador lo esconde aunque lo tenga. Sin servidor (D-16), el
-// camino es abrir el archivo local; en el teléfono, el Wi-Fi del badge (RF-15).
+// la red el navegador lo esconde aunque lo tenga. Sin servidor, el
+// camino es abrir el archivo local; en el teléfono, el Wi-Fi del badge.
 const UA_DATA = navigator.userAgentData;
 const IS_MOBILE = UA_DATA ? UA_DATA.mobile : /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent);
 const IS_LINUX = /linux/i.test((UA_DATA && UA_DATA.platform) || navigator.platform) && !IS_MOBILE;
 const BROWSER = navigator.brave ? "brave" : /Edg\//.test(navigator.userAgent) ? "edge" : "chrome";
-const BADGE_USB_VENDOR = 0x303a;   // Hardware CDC del ESP32-S3 (303A:1001, D-06)
+const BADGE_USB_VENDOR = 0x303a;   // Hardware CDC del ESP32-S3 (303A:1001)
 
 function noSerialReason() {
   const offline = " Sin badge todavía puedes preparar la imagen.";
@@ -1675,7 +1675,7 @@ $("saveCardBtn").addEventListener("click", async () => {
 });
 
 /* ---------------- exportación local del álbum ----------------
-   El .json (formato bb26-album, §3.6) lleva la exportación de ALBM completa
+   El .json (formato bb26-album) lleva la exportación de ALBM completa
    en base64 ("albm") y un resumen legible; quien lo lee solo confía en
    "albm" y rechaza un resumen que no coincida. Referencia: to_json()/
    load_export() de tools/verify_album.py; lo abren web/album y
