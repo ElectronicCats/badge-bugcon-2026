@@ -115,20 +115,23 @@ const STAT_MAX = 99, STAT_BUDGET = 200;
 const NICK_BYTES = 16, HANDLE_BYTES = 20, NONE = 0xFF;
 const CARD_VERSION = 1, CARD_FIELDS_BYTES = 48, CARD_BYTES = 64;
 
-// Motivos de POST /card: card::editReason() + los del servidor.
+// Motivos de POST /card: card::editReason() + los del servidor. Cada uno
+// dice qué hacer; "Guardar" es el botón de abajo.
+const AGAIN = " Toca «Guardar en el badge» otra vez.";
 const REASONS = {
-  badver: "el badge no reconoce esta versión de estampa.",
-  badnick: "el badge rechazó el nickname (vacío o con caracteres no válidos).",
-  badteam: "la selección no está en el catálogo del badge.",
-  badpos: "la posición no está en el catálogo del badge.",
-  badstats: `cada estadística va de 0 a ${STAT_MAX} y entre todas suman a lo más ${STAT_BUDGET}.`,
-  badhandle: "el badge rechazó el handle (caracteres no válidos).",
-  flash: "el badge no pudo escribir en su memoria; intenta de nuevo.",
-  badsize: "la estampa no llegó completa; intenta de nuevo.",
-  busy: "el badge está ocupado; intenta de nuevo en unos segundos.",
+  badver: "esta página no corresponde a tu badge. Vuelve a escanear su QR.",
+  badnick: "el nickname no puede ir vacío ni llevar emojis. Corrígelo.",
+  badteam: "elige otra vez la selección.",
+  badpos: "elige otra vez la posición.",
+  badstats: `cada estadística va de 0 a ${STAT_MAX} y entre todas suman ${STAT_BUDGET} o menos. Ajústalas.`,
+  badhandle: "el handle no puede llevar emojis. Corrígelo.",
+  flash: "tu badge no pudo guardarla." + AGAIN,
+  badsize: "la estampa no llegó completa." + AGAIN,
+  busy: "tu badge está ocupado. Espera unos segundos." + AGAIN,
 };
-const OFFLINE = "No hay conexión con el badge: revisa que tu teléfono siga en su red Wi-Fi " +
-                "(BUGCON26-…) y que el badge siga mostrando la pantalla de Wi-Fi.";
+const OFFLINE = "Se perdió la conexión con tu badge. Revisa que el teléfono siga en la red " +
+                "Wi-Fi BUGCON26-…; si el badge ya no muestra el QR, ábrelo otra vez en " +
+                "Mi Estampa › Editar › Desde el teléfono.";
 
 const $ = id => document.getElementById(id), utf8 = new TextEncoder();
 let card = null;  // 64 B leídos del badge; null = todavía no (no se guarda)
@@ -136,13 +139,14 @@ let card = null;  // 64 B leídos del badge; null = todavía no (no se guarda)
 // Igual que cleanText() del firmware: sin espacios en los extremos.
 const cleanText = s => s.replace(/^ +| +$/g, "");
 
-// Error en español o "". La fuente del badge es Latin-1 (gfx/font).
+// Error con qué hacer, o "". La fuente del badge es Latin-1 (gfx/font); el
+// límite es de bytes de UTF-8: á, ñ, ü y compañía ocupan 2.
 function textError(s, maxBytes) {
   const n = utf8.encode(s).length;
-  if (n > maxBytes) return `mide ${n} B; caben ${maxBytes}`;
-  if (/[\x00-\x1f\x7f-\x9f]/.test(s)) return "tiene caracteres de control";
+  if (n > maxBytes) return `Muy largo: borra ${n - maxBytes} (á, ñ… cuentan 2)`;
+  if (/[\x00-\x1f\x7f-\x9f]/.test(s)) return "Tiene un carácter invisible: bórralo";
   const bad = s.match(/[^\x20-\x7e\xa0-\xff]/u);
-  return bad ? `el badge no puede dibujar «${bad[0]}» (solo letras, acentos y ñ)` : "";
+  return bad ? `Tu badge no puede mostrar «${bad[0]}»: usa letras, números o signos` : "";
 }
 
 function status(text, cls) {
@@ -178,12 +182,12 @@ function onEdit() {
   statInputs.forEach(s => { s.nextElementSibling.textContent = s.value; });
   $("free").textContent = "· puntos libres: " + (STAT_BUDGET - statValues().reduce((a, v) => a + v, 0));
   $("handle").disabled = !$("handleOn").checked;
-  const nickErr = nick() ? textError(nick(), NICK_BYTES) : "escribe un nickname";
+  const nickErr = nick() ? textError(nick(), NICK_BYTES) : "Escribe tu nickname";
   const handleErr = textError(handle(), HANDLE_BYTES);
   $("nickE").textContent = nickErr;
   $("handleE").textContent = handleErr;
-  $("nickV").textContent = utf8.encode(nick()).length + "/" + NICK_BYTES + " B";
-  $("handleV").textContent = utf8.encode(handle()).length + "/" + HANDLE_BYTES + " B";
+  $("nickV").textContent = utf8.encode(nick()).length + "/" + NICK_BYTES;
+  $("handleV").textContent = utf8.encode(handle()).length + "/" + HANDLE_BYTES;
   $("nickE").className = $("nickV").className = nickErr ? "bad" : "";
   $("handleE").className = $("handleV").className = handleErr ? "bad" : "";
   $("save").disabled = !card || !!nickErr || !!handleErr;
@@ -214,9 +218,10 @@ async function readCard() {
     const r = await fetch("/card", { cache: "no-store" });
     const b = new Uint8Array(await r.arrayBuffer());
     if (r.ok && b.length === CARD_BYTES && b[0] === CARD_VERSION) return b;
-    const reason = new TextDecoder().decode(b).replace(/^ERR /, "");
-    status("No se pudo leer la estampa: " + (REASONS[reason] ||
-           (r.ok ? REASONS.badver : "error " + r.status + ".")), "err");
+    // Al leer, el único motivo real es ERR busy; el código HTTP queda entre
+    // paréntesis para quien ayude.
+    status(`No se pudo leer tu estampa (${r.status}). Espera unos segundos y ` +
+           "recarga la página.", "err");
   } catch (e) {
     status(OFFLINE, "err");
   }
@@ -249,7 +254,8 @@ $("form").addEventListener("submit", async ev => {
     return;
   }
   if (reply !== "OK") {
-    status("No se guardó: " + (REASONS[reply.replace(/^ERR /, "")] || reply), "err");
+    status("No se guardó: " + (REASONS[reply.replace(/^ERR /, "")] ||
+           "respuesta inesperada." + AGAIN), "err");
     onEdit();
     return;
   }
