@@ -332,7 +332,7 @@ function download(text, name) {
 /* ---------------- vista ---------------- */
 
 // Secciones como la app del badge (apps/album): Todas (un hueco por
-// dorsal), cada selección, "Sin selección" (solo si hay) y Especiales.
+// dorsal), cada villa, "Sin villa" (solo si hay) y Especiales.
 function sections() {
   const att = album.entries.filter(e => e.card.type === ATTENDEE)
     .sort((a, b) => a.card.badgeNo - b.card.badgeNo);
@@ -347,7 +347,7 @@ function sections() {
   const list = [{ name: "Todas", items: all }];
   TEAMS.forEach((name, i) => list.push({ name, items: att.filter(e => e.card.team === i).map(item) }));
   const none = att.filter(e => !(e.card.team < TEAMS.length));
-  if (none.length) list.push({ name: "Sin selección", items: none.map(item) });
+  if (none.length) list.push({ name: "Sin villa", items: none.map(item) });
   list.push({ name: "Especiales", items: album.entries.filter(e => e.card.type !== ATTENDEE)
     .sort((a, b) => a.card.type - b.card.type || a.card.badgeNo - b.card.badgeNo).map(item) });
   return list;
@@ -377,7 +377,7 @@ function sticker(it) {
   }
   const e = el("button", "st r" + (c.rarity < RARITIES.length ? c.rarity : 0) + (it.mine ? " mine" : ""));
   e.append(el("div", "face", initial(c)), el("span", "no tag", kindName(c)), el("span", "nick", c.nickname || "—"),
-           el("span", "sub", it.mine ? "Mi estampa" : TEAMS[c.team] || "Sin selección"));
+           el("span", "sub", it.mine ? "Mi estampa" : TEAMS[c.team] || "Sin villa"));
   e.addEventListener("click", () => showDetail(c, it.order));
   return e;
 }
@@ -418,7 +418,7 @@ function showDetail(c, order) {
   $("dNoFace").textContent = initial(c);
   $("dNick").textContent = c.nickname || "—";
   $("dMeta").textContent = [kindName(c),
-    TEAMS[c.team] || (c.type === ATTENDEE ? "Sin selección" : ""), POSITIONS[c.position],
+    TEAMS[c.team] || (c.type === ATTENDEE ? "Sin villa" : ""), POSITIONS[c.position],
     RARITIES[c.rarity], order !== undefined ? "recibida " + (order + 1) + "ª" : ""]
     .filter(Boolean).join(" · ");
   // Las especiales no tienen stats: su descripción va en el handle.

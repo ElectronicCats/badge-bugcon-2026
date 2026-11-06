@@ -52,7 +52,7 @@ button:disabled { opacity: .45; }
 <input type="text" id="nick" autocomplete="off" autocapitalize="off" spellcheck="false" required>
 <div class="row"><small id="nickE"></small><small id="nickV"></small></div>
 
-<label for="team">Selección</label>
+<label for="team">Villa</label>
 <select id="team"></select>
 <label for="pos">Posición</label>
 <select id="pos"></select>
@@ -64,16 +64,16 @@ button:disabled { opacity: .45; }
 <p>Cada punto se suma al jugador (0 juega como 50, 99 como 149) y cuenta más o menos
 según su posición.</p>
 <dl>
-<dt>ATK · ataque</dt><dd>Pasar la defensa del rival y la fuerza del tiro; el de más ATK
+<dt>Ataque</dt><dd>Pasar la defensa del rival y la fuerza del tiro; el de más ataque
 tira más seguido. Al Portero no le sirve.</dd>
-<dt>DEF · defensa</dt><dd>Cortar los ataques del rival. El Portero ataja con su DEF; sin
-Portero, ataja el de más DEF a la mitad.</dd>
-<dt>HAX · control</dt><dd>Quién se queda con el balón en cada jugada. Con la táctica
+<dt>Defensa</dt><dd>Cortar los ataques del rival. El Portero ataja con su defensa; sin
+Portero, ataja el de más defensa a la mitad.</dd>
+<dt>Hack · control</dt><dd>Define quién se queda con el balón en cada jugada. Con la táctica
 Parche también ayuda a defender.</dd>
-<dt>SUE · suerte</dt><dd>Solo en el tiro contra el portero: se promedia entre los 5 y
+<dt>Suerte</dt><dd>Solo en el tiro contra el portero: se promedia entre los 5 y
 ayuda a tirar y a atajar.</dd>
 </dl>
-<p>Cuenta más: Portero y Defensa → DEF; Medio y Pentester → HAX; Delantero → ATK.</p>
+<p>Cuenta más: Portero y Defensa → defensa; Medio y Pentester → hack; Delantero → ataque.</p>
 </details>
 
 <h2>Contacto (opcional)</h2>
@@ -93,13 +93,13 @@ intercambies y aparece en su álbum. Solo se envía si marcas la casilla.</p>
 <li>Esta página la sirve tu badge por su propio Wi-Fi: no usa Internet, no hay servidor
 ni almacenamiento central y no guarda nada en tu teléfono. Tu estampa y tu álbum viven
 solo en tu badge.</li>
-<li>Al intercambiar, tu estampa (nickname, selección, posición, stats y dorsal) viaja por
+<li>Al intercambiar, tu estampa (nickname, villa, posición, estadísticas y dorsal) viaja por
 infrarrojo al otro badge y se queda en su álbum; no se puede retirar de un badge ajeno.
 Tu handle solo va si marcas la casilla.</li>
 <li>El .json que guarda el configurador USB incluye el nickname y el handle de quienes
 los compartieron contigo: no lo publiques.</li>
 <li>Para borrar tu estampa, tu avatar y tu álbum: en el badge, Ajustes &gt; "Borrar
-datos". El avatar y el gafete se cambian con el configurador USB.</li>
+datos". El avatar y la imagen del badge se cambian con el configurador USB.</li>
 </ul>
 </section>
 
@@ -111,6 +111,8 @@ const TEAMS = ["Hardware", "RF", "Rookie", "OT", "Payments",
                "BugBounty", "WoSec", "APT", "Chaviza"];
 const POSITIONS = ["Portero", "Defensa", "Medio", "Delantero", "Pentester"];
 const STATS = ["ATK", "DEF", "HAX", "SUE"];
+// Lo que lee la persona en el formulario; STATS (siglas) es el catálogo del firmware.
+const STAT_LABELS = ["Ataque", "Defensa", "Hack", "Suerte"];
 const STAT_MAX = 99, STAT_BUDGET = 200;
 const NICK_BYTES = 16, HANDLE_BYTES = 20, NONE = 0xFF;
 const CARD_VERSION = 1, CARD_FIELDS_BYTES = 48, CARD_BYTES = 64;
@@ -121,7 +123,7 @@ const AGAIN = " Toca «Guardar en el badge» otra vez.";
 const REASONS = {
   badver: "esta página no corresponde a tu badge. Vuelve a escanear su QR.",
   badnick: "el nickname no puede ir vacío ni llevar emojis. Corrígelo.",
-  badteam: "elige otra vez la selección.",
+  badteam: "elige otra vez la villa.",
   badpos: "elige otra vez la posición.",
   badstats: `cada estadística va de 0 a ${STAT_MAX} y entre todas suman ${STAT_BUDGET} o menos. Ajústalas.`,
   badhandle: "el handle no puede llevar emojis. Corrígelo.",
@@ -162,7 +164,7 @@ for (const [id, names] of [["team", TEAMS], ["pos", POSITIONS]]) {
 const statInputs = STATS.map((name, i) => {
   const row = document.createElement("div");
   row.className = "stat";
-  row.innerHTML = `<label for="st${i}" style="margin:0">${name}</label>` +
+  row.innerHTML = `<label for="st${i}" style="margin:0">${STAT_LABELS[i]}</label>` +
     `<input type="range" id="st${i}" min="0" max="${STAT_MAX}" value="0"><output></output>`;
   $("stats").appendChild(row);
   const input = row.querySelector("input");

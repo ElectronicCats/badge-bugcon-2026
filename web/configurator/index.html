@@ -205,7 +205,7 @@ header .hint { margin-top: 0; }
       <output id="nickV">0/16 B</output>
     </div>
     <div class="field">
-      <label for="team">Selección</label>
+      <label for="team">Villa</label>
       <select id="team"></select><span></span>
     </div>
     <div class="field">
@@ -219,16 +219,16 @@ header .hint { margin-top: 0; }
       <p>Cada punto se suma al jugador (0 juega como 50, 99 como 149) y cuenta más o menos
       según su posición.</p>
       <dl>
-        <dt>ATK · ataque</dt><dd>Pasar la defensa del rival y la fuerza del tiro; el de más ATK
+        <dt>Ataque</dt><dd>Pasar la defensa del rival y la fuerza del tiro; el de más ataque
         tira más seguido. Al Portero no le sirve.</dd>
-        <dt>DEF · defensa</dt><dd>Cortar los ataques del rival. El Portero ataja con su DEF; sin
-        Portero, ataja el de más DEF a la mitad.</dd>
-        <dt>HAX · control</dt><dd>Quién se queda con el balón en cada jugada. Con la táctica
+        <dt>Defensa</dt><dd>Cortar los ataques del rival. El Portero ataja con su defensa; sin
+        Portero, ataja el de más defensa a la mitad.</dd>
+        <dt>Hack · control</dt><dd>Quién se queda con el balón en cada jugada. Con la táctica
         Parche también ayuda a defender.</dd>
-        <dt>SUE · suerte</dt><dd>Solo en el tiro contra el portero: se promedia entre los 5 y
+        <dt>Suerte</dt><dd>Solo en el tiro contra el portero: se promedia entre los 5 y
         ayuda a tirar y a atajar.</dd>
       </dl>
-      <p>Cuenta más: Portero y Defensa → DEF; Medio y Pentester → HAX; Delantero → ATK.</p>
+      <p>Cuenta más: Portero y Defensa → defensa; Medio y Pentester → hack; Delantero → ataque.</p>
     </details>
     <h2>Contacto (opcional)</h2>
     <div class="row">
@@ -261,7 +261,7 @@ header .hint { margin-top: 0; }
     <p class="hint">Guarda en tu computadora tu estampa y las de tu álbum; no se envía a
     ningún lado. Incluye el nickname y el handle que cada quien compartió en su estampa.</p>
     <p class="hint"><a href="../album/index.html" target="_blank">Ver el álbum</a>:
-    abre ahí el .json guardado para ver tus estampas por selección y descargar los contactos.</p>
+    abre ahí el .json guardado para ver tus estampas por villa y descargar los contactos.</p>
   </section>
 
   <section class="card">
@@ -350,7 +350,7 @@ header .hint { margin-top: 0; }
     <ul class="hint">
       <li>No hay servidor ni almacenamiento central: tu estampa, tu avatar y tu álbum
       se guardan solo en tu badge. Nadie, ni la organización, recibe una copia.</li>
-      <li>Al intercambiar, tu estampa (nickname, selección, posición, stats y dorsal) viaja
+      <li>Al intercambiar, tu estampa (nickname, villa, posición, estadísticas y dorsal) viaja
       por infrarrojo al otro badge y se queda en su álbum; no se puede retirar de un badge
       ajeno. Tu handle solo va si marcas "Compartir mi handle". El avatar y el gafete no
       salen de tu badge.</li>
@@ -382,6 +382,8 @@ const TEAMS = ["Hardware", "RF", "Rookie", "OT", "Payments",
 const POSITIONS = ["Portero", "Defensa", "Medio", "Delantero", "Pentester"];
 const RARITIES = ["Común", "Plata", "Oro"];
 const STATS = ["ATK", "DEF", "HAX", "SUE"];
+// Lo que lee la persona en el formulario; STATS (siglas) es el catálogo del firmware.
+const STAT_LABELS = ["Ataque", "Defensa", "Hack", "Suerte"];
 const STAT_MAX = 99, STAT_BUDGET = 200;
 const AVATAR_W = 96, AVATAR_H = 96;
 const NICK_BYTES = 16, HANDLE_BYTES = 20, NONE = 0xFF;
@@ -1066,7 +1068,7 @@ fillSelect($("pos"), POSITIONS);
 const statInputs = STATS.map((name, i) => {
   const div = document.createElement("div");
   div.className = "ctl";
-  div.innerHTML = '<label for="st' + i + '">' + name + '</label>' +
+  div.innerHTML = '<label for="st' + i + '">' + STAT_LABELS[i] + '</label>' +
     '<input type="range" id="st' + i + '" min="0" max="' + STAT_MAX + '" value="0">' +
     '<output id="st' + i + 'V">0</output>';
   $("statRows").appendChild(div);
@@ -1193,7 +1195,7 @@ function renderTemplate() {
   fitFont(ctx, "CDMX · 20-21 NOV 2026", "", foot, w - 12);
   ctx.fillText("CDMX · 20-21 NOV 2026", w / 2, h - 5 - foot / 2);
 
-  // cuerpo: avatar y, a su derecha o debajo, nickname, selección y posición
+  // cuerpo: avatar y, a su derecha o debajo, nickname, villa y posición
   const top = 6 + band, bottom = statsTop - 3, bodyH = bottom - top;
   const team = TEAMS[c.team] || "", pos = POSITIONS[c.position] || "";
   const sub = [team, [pos, RARITIES[c.rarity] || ""].filter(Boolean).join(" · ")];
@@ -1436,7 +1438,7 @@ const FRIENDLY = {
   "ERR badcmd":    "el badge no entendió el comando (¿firmware viejo?).",
   "ERR badver":    "el badge no reconoce esta versión de estampa (¿firmware viejo?).",
   "ERR badnick":   "el badge rechazó el nickname (vacío o con caracteres no válidos).",
-  "ERR badteam":   "la selección no está en el catálogo del badge.",
+  "ERR badteam":   "la villa no está en el catálogo del badge.",
   "ERR badpos":    "la posición no está en el catálogo del badge.",
   "ERR badstats":  "cada estadística va de 0 a " + STAT_MAX + " y entre todas suman a lo más " + STAT_BUDGET + ".",
   "ERR badhandle": "el badge rechazó el handle (caracteres no válidos).",
