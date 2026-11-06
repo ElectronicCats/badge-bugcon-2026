@@ -170,7 +170,8 @@ footer.hint { margin-top: 24px; }
 #glossary dt { font-weight: 700; color: var(--text); }
 #glossary dd { margin: 0 0 6px; }
 header .hint { margin-top: 0; }
-#nowebserial { color: var(--err); flex-basis: 100%; }
+#howto, #nowebserial { flex-basis: 100%; }
+#nowebserial { color: var(--err); }
 /* pegada arriba: la respuesta del badge se ve aunque el botón quede abajo */
 #statusBar {
   position: sticky; top: 0; z-index: 1;
@@ -186,6 +187,7 @@ header .hint { margin-top: 0; }
   <h1>Copa BugCon 2026 · Configurador</h1>
   <button id="connectBtn" class="primary">Conectar</button>
   <span id="connState" class="hint">sin conexión</span>
+  <p id="howto" class="hint">Abre este archivo en Chrome, Edge o Brave de una computadora y conecta el badge con un cable USB de datos.</p>
   <p id="nowebserial" hidden></p>
 </header>
 
@@ -1288,6 +1290,7 @@ const hasSerial = "serial" in navigator;
 if (!hasSerial) {
   $("nowebserial").textContent = noSerialReason();
   $("nowebserial").hidden = false;
+  $("howto").hidden = true;    // el motivo de arriba ya dice qué navegador usar
   $("connectBtn").disabled = true;
 }
 
