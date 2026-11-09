@@ -28,10 +28,14 @@ from ui_shot import command, parse_shot, write_png, OPEN_WAIT_S
 MENU = [("estampa", ""), ("album", ""), ("infrarrojo", ""), ("juegos", ""),
         ("herramientas", ""), ("retos", ""), ("ajustes", ""), ("agenda", ""),
         ("acerca_de", "")]
-# (nombre, casilla del menú o botones sueltos)
+# (nombre, casilla del menú o botones sueltos, o (casilla, botones tras abrirla))
+# Control remoto: 5.º renglón de Infrarrojo; Botones = la primera marca. Las
+# listas recuerdan su renglón: ↑ sostenido (una página, sin vuelta) va al 1.º.
+REMOTE = ["up!"] + ["down"] * 4 + ["a"]
 SCREENS = [("gafete", None), ("luces", "right"), ("menu", -1)] + [
     (name, i) for i, (name, _) in enumerate(MENU)
-] + [("estampa_editar", "estampa")]
+] + [("estampa_editar", "estampa"), ("remoto_marcas", (2, REMOTE)),
+     ("remoto_botones", (2, REMOTE + ["up!", "a"]))]
 TAP_WAIT_S = 0.35  # Entre botones
 SETTLE_S = 1.8  # Tras el último: el cuadro sale cuando termina el refresco
 
@@ -90,6 +94,9 @@ def main():
             continue
         press(port, "b!")
         time.sleep(SETTLE_S)
+        extra = []
+        if isinstance(what, tuple):
+            what, extra = what
         if what is None:
             keys = []
         elif isinstance(what, str) and what != "estampa":
@@ -99,7 +106,7 @@ def main():
             keys = ["a"] + route(sel, target) + (
                 [] if what == -1 else ["a"] + (["a"] if what == "estampa" else []))
             sel = target
-        for key in keys:
+        for key in keys + extra:
             press(port, key)
             time.sleep(TAP_WAIT_S)
         time.sleep(SETTLE_S)
