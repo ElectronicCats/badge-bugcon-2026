@@ -37,6 +37,7 @@ cmd("wifi on", timeout=10)
 check("sdr refused with AP", cmd("sdr on")[-1].startswith("ERR"))
 cmd("wifi off")
 check("sdr on", cmd("sdr on", timeout=10)[-1] == "OK")
+check("dump without burst", cmd("sdr dump")[-1].startswith("ERR"))
 check("AP refused with sdr", cmd("wifi on", timeout=10)[-1].startswith("ERR"))
 r = cmd("sdr"); print(r[-1])
 r = cmd("pwr", until=("OK", "ERR", "PWR", "POWER", "power")); print(" | ".join(r))
@@ -73,7 +74,17 @@ f = np.fft.fftshift(np.fft.fftfreq(len(z), 1 / 80.0))
 inb = 10*np.log10(P[np.abs(f) < 9].mean()); outb = 10*np.log10(P[np.abs(f) > 15].mean())
 check("spectrum in-band > out-of-band", inb - outb > 10, f"n={len(z)} rms={best[0]} in-out={inb-outb:.1f} dB")
 print("after raw:", cmd("sdr")[-1])
+import zlib
+for n, rate in ((16380, 80), (4096, 40), (1000, 16)):
+    cmd(f"sdr cap {n} {rate}")
+    r = cmd("sdr dump", until=("OK", "ERR"), timeout=15)
+    h = re.match(r"DUMP mhz=2437 n=(\d+) msps=(\d+) crc=([0-9a-f]{8})$", r[0]) if r else None
+    # Cada palabra va en hex como número; la memoria la guarda little-endian
+    raw = b"".join(bytes.fromhex(w)[::-1] for l in r[1:-1] for w in re.findall(r"[0-9a-f]{8}", l))
+    check(f"dump {n}@{rate}", bool(h) and r[-1] == "OK" and int(h[1]) == n and int(h[2]) == rate
+          and len(raw) == 4 * n and zlib.crc32(raw) == int(h[3], 16), r[0] if r else "")
 check("sdr off", cmd("sdr off")[-1] == "OK")
+check("dump after off", cmd("sdr dump")[-1].startswith("ERR"))
 r = cmd("sdr"); print(r[-1]); heap1 = int(re.search(r"heap=(\d+)", r[-1]).group(1))
 check("AP after sdr", cmd("wifi on", timeout=10)[-1] == "OK"); cmd("wifi off")
 # El primer `wifi on` deja lwIP y el loop de eventos creados: se compara
