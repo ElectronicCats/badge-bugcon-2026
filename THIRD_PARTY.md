@@ -25,6 +25,7 @@ y agrégala aquí.
 | [littlefs](https://github.com/littlefs-project/littlefs) (dentro de esp_littlefs) | — | BSD-3-Clause | Idem |
 | [esp_qrcode](https://components.espressif.com/components/espressif/qrcode) (`espressif__qrcode`) | 0.1.0~2 | Apache-2.0 | Códigos QR (`src/gfx/qr.cpp`) |
 | [QR Code generator library](https://www.nayuki.io/page/qr-code-generator-library) (qrcodegen, dentro de esp_qrcode) | — | MIT (texto abajo) | Idem |
+| [ESPARGOS esp-sdr](https://github.com/ESPARGOS/esp-sdr) vía [Minino](https://github.com/ElectronicCats/Minino) (commit `4b6fc6b9`) | — | GPL-3.0-or-later | Protocolo de ráfaga del visor web, osmosdr, espectro en chip y empaquetado de I/Q (`src/services/sdr/`, sin cambios; encabezados SPDX conservados). Pruebas de host en `tools/sdr/` |
 | [Terminus Font](https://terminus-font.sourceforge.net/) | console-setup 1.226 | OFL-1.1 | `FONT_6X12` y `FONT_8X16B` … `FONT_16X32B`, convertidas por `tools/fontgen.py`. Aviso y licencia en `firmware/badge_bugcon_2026/src/gfx/fonts/LICENSE-OFL.txt` |
 | X11 misc-fixed (`xfonts-base`) | — | Dominio público | `FONT_5X8` y `FONT_6X10` |
 
