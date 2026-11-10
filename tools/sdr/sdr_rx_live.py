@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Prueba en vivo del receptor SDR (services/sdr/sdr_rx) por la consola.
 
-Necesita un badge o DevKit con la variante SDR (`scripts/compile.sh --sdr`)
-y USB. Uso: python3 tools/sdr/sdr_rx_live.py [/dev/serial/by-id/...]
+Necesita un badge o DevKit con USB.
+Uso: python3 tools/sdr/sdr_rx_live.py [/dev/serial/by-id/...]
 Revisa la exclusión con el AP, 300 ráfagas en los canales 1-13 a 80/40/16
 MS/s, la ganancia forzada, el espectro de un canal y el heap en ciclos on/off.
 """
@@ -31,7 +31,7 @@ def check(name, cond, info=""):
 
 r = cmd("sdr"); print(r[-1] if r else "(sin respuesta)")
 if not r or not r[-1].startswith("SDR"):
-    sys.exit("el firmware no trae el receptor: compila con scripts/compile.sh --sdr")
+    sys.exit("el firmware no trae el receptor (¿firmware viejo?)")
 check("cap while off", cmd("sdr cap")[-1].startswith("ERR"))
 cmd("wifi on", timeout=10)
 check("sdr refused with AP", cmd("sdr on")[-1].startswith("ERR"))
