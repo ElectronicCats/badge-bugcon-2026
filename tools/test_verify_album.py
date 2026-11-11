@@ -74,7 +74,7 @@ def check(data, master=MASTER, macs=None):
     """-> (estado de mi estampa, [status de cada entrada], [ok])."""
     header, entries = va.parse_album(data)
     if macs is None:
-        macs = {e["no"]: mac_of(e["no"]) for e in entries}
+        macs = {e["no"]: [mac_of(e["no"])] for e in entries}
     mine = va.verify(header, entries, master, macs)
     return mine, [e["status"] for e in entries], [e["ok"] for e in entries]
 
@@ -166,7 +166,7 @@ class VerifyAlbum(unittest.TestCase):
         # Con su K_dev cualquiera fabrica una "estampa suya hacia sí mismo".
         e = entry(MY_NO, 1)
         e["card"] = card(MY_NO, identity.derive_key(MASTER, MY_MAC, MY_NO))
-        _, status, ok = check(export([e]), macs={MY_NO: MY_MAC})
+        _, status, ok = check(export([e]), macs={MY_NO: [MY_MAC]})
         self.assertFalse(ok[0])
         self.assertIn("del que exporta", status[0])
 
@@ -219,8 +219,10 @@ class VerifyAlbum(unittest.TestCase):
         self.assertEqual(len(data), 80 + CAPACITY * 80)
         mine, status, ok = check(data)
         self.assertEqual(mine, "OK")
-        self.assertEqual(sum(ok), CAPACITY)
-        self.assertEqual(sum(s == "especial, firma OK" for s in status), 81)
+        # La especial 30 ("Gira de villas") no tiene maestros que la respalden.
+        self.assertEqual(sum(ok), CAPACITY - 1)
+        self.assertEqual(sum(s == "especial, firma OK" for s in status), 80)
+        self.assertIn("sin respaldo (0/10)", status[-81 + va.VILLA_TOUR - 1])
 
     def test_cli_exit_codes(self):
         script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -252,6 +254,76 @@ class VerifyAlbum(unittest.TestCase):
                                        capture_output=True, text=True)
             self.assertNotEqual(no_master.returncode, 0)
             self.assertIn("--master", no_master.stderr)
+
+
+def villa_tour(order):
+    return {"card": card(va.VILLA_TOUR, MY_KEY, type_=SPECIAL, rarity=GOLD),
+            "token": b"\0" * 8, "order": order, "nonce": 0}
+
+
+class Villas(unittest.TestCase):
+    MASTERS = range(va.MASTER_FIRST, va.MASTER_FIRST + va.VILLAS)
+
+    def test_ten_verified_back_the_special(self):
+        entries = [entry(no, i + 1) for i, no in enumerate(self.MASTERS)]
+        _, status, ok = check(export(entries + [villa_tour(11)]))
+        self.assertTrue(all(ok), status)
+        header, entries = va.parse_album(export(entries))
+        va.verify(header, entries, MASTER,
+                  {e["no"]: [mac_of(e["no"])] for e in entries})
+        self.assertEqual(va.villa_count(entries), 10)
+
+    def test_forged_master_leaves_special_unbacked(self):
+        entries = [entry(no, i + 1) for i, no in enumerate(self.MASTERS)]
+        # Un firmware modificado con dorsal 905 firma con otra clave.
+        fake = identity.derive_key(MASTER, bytes(6), 905)
+        entries[4]["card"] = card(905, fake)
+        _, status, ok = check(export(entries + [villa_tour(11)]))
+        self.assertEqual(ok.count(False), 2)
+        self.assertEqual(status[-1], "especial, firma OK, sin respaldo (9/10)")
+
+    def test_spare_master_with_another_mac(self):
+        spare = bytes.fromhex("0A0000000385")
+        key = identity.derive_key(MASTER, spare, 901)
+        e = {"card": card(901, key), "token": identity.token(key, 901, MY_NO,
+                                                            7),
+             "order": 1, "nonce": 7}
+        _, _, ok = check(export([e, entry(902, 2)]),
+                         macs={901: [mac_of(901), spare],
+                               902: [mac_of(902), spare]})
+        self.assertEqual(ok, [True, True])
+        _, status, ok = check(export([e]), macs={901: [mac_of(901)]})
+        self.assertEqual(status, ["firma INVÁLIDA, token INVÁLIDO"])
+
+    def test_read_macs_keeps_every_master_mac(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "provision.csv")
+            with open(path, "w") as f:
+                f.write("no,mac\n7,02:00:00:00:00:01\n7,02:00:00:00:00:02\n"
+                        "901,02:00:00:00:00:03\n901,02:00:00:00:00:04\n"
+                        "901,02:00:00:00:00:03\n")
+
+            class Args:
+                macs, mac = path, ["901=02:00:00:00:00:05"]
+            macs = va.read_macs(Args)
+        self.assertEqual([m[-1] for m in macs[7]], [2])
+        self.assertEqual([m[-1] for m in macs[901]], [3, 4, 5])
+
+    def test_cli_villas_line(self):
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "verify_album.py")
+        entries = [entry(no, i + 1) for i, no in enumerate(self.MASTERS)]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "album.bin")
+            with open(path, "wb") as f:
+                f.write(export(entries[:3] + [villa_tour(4)]))
+            macs = [f"--mac={no}={mac_of(no).hex()}" for no in self.MASTERS]
+            run = subprocess.run([sys.executable, script, path, "--master",
+                                  MASTER.hex(), *macs],
+                                 capture_output=True, text=True)
+        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+        self.assertIn("villas: 3/10 verificadas", run.stdout)
+        self.assertIn("sin respaldo (3/10)", run.stdout)
 
 
 class ExportJson(unittest.TestCase):
