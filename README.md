@@ -199,7 +199,7 @@ Si te pasas, el Badge dice "Ya no caben más letras".
 
 Elige tu villa de la lista. La actual tiene una marca `*`. Presiona **A**
 para guardar. Villas disponibles: Hardware, RF, Rookie, OT, Payments,
-BugBounty, WoSec, APT, Chaviza, Nación Hacker y Live Hacking.
+BugBounty, WoSec, APT, Nación Hacker y Live Hacking.
 
 ### Posición
 

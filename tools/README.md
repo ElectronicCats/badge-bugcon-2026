@@ -227,10 +227,10 @@ python3 tools/badge_usb.py card --team 2 --pos 4
 |---|---|---|---|
 | 0 | Hardware | 6 | WoSec |
 | 1 | RF | 7 | APT |
-| 2 | Rookie | 8 | Chaviza |
-| 3 | OT | 9 | Nación Hacker |
-| 4 | Payments | 10 | Live Hacking |
-| 5 | BugBounty | -1 | Sin villa |
+| 2 | Rookie | 8 | Nación Hacker |
+| 3 | OT | 9 | Live Hacking |
+| 4 | Payments | -1 | Sin villa |
+| 5 | BugBounty | | |
 
 **`--pos`: tu posición.**
 
