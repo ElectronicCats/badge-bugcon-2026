@@ -15,7 +15,9 @@ count entradas de 80 B (estampa 64, token 8, orden u16, nonce u32, reservado
 
 Para derivar K_A hace falta la MAC de cada badge: la tiene la tabla de la
 provisión. Aquí se pasa con --mac NO=MAC (repetible) o --macs CSV
-(no,mac por renglón). Sin --master se usa DEV_MASTER si el badge no está
+(no,mac por renglón). Un maestro de villa (901..910) y su repuesto
+comparten dorsal con otra MAC: para esos dorsales se prueban todas las MAC
+del CSV. Sin --master se usa DEV_MASTER si el badge no está
 provisionado. El par virtual Eco del DevKit (#999) y las estampas de prueba
 de la consola (`album add|fill|stress`) firman con la MAC del propio badge:
 --self-mac la usa para todo dorsal sin MAC.
@@ -26,6 +28,12 @@ se verifican con la clave del que exporta. Solo cuentan en su álbum. Una
 firma OK prueba que las pegó ese badge, no que su dueño las ganó: puede leer
 su K_dev del flash. Los premios de N3 se validan con la flag,
 no con la estampa.
+
+Gira de villas: "villas: n/10 verificadas" cuenta las estampas de maestros
+(901..910) con firma y token válidos. La especial "Gira de villas" la pega el
+badge con solo ver los dorsales (un firmware modificado los falsifica), así
+que solo es válida con las 10 verificadas; si no, "sin respaldo (n/10)" y no
+cuenta.
 
 Una estampa repetida en la exportación (mismo tipo y número que una anterior)
 no cuenta: el badge las deduplica, así que una repetida es una exportación
@@ -74,6 +82,10 @@ FORMAT = 1
 JSON_FORMAT = "bb26-album"  # .json de la exportación local
 ATTENDEE = 0  # card::ATTENDEE
 ATTENDEES = 400  # cfg::album::ATTENDEES
+SPECIAL = 2  # card::SPECIAL
+MASTER_FIRST = 901  # cfg::villa::MASTER_FIRST: maestro de la villa v = 901 + v
+VILLAS = 10  # card::TEAM_COUNT
+VILLA_TOUR = 30  # Número de la especial "Gira de villas" (services/specials)
 BITMAP_BYTES = (ATTENDEES + 7) // 8
 
 
@@ -162,14 +174,26 @@ def load_export(data):
     return raw
 
 
+def is_master(no):
+    return MASTER_FIRST <= no < MASTER_FIRST + VILLAS
+
+
+def attendee_key(master, no, candidates, card):
+    """Clave de `no` con la primera MAC cuya firma cuadra (o la primera)."""
+    keys = [identity.derive_key(master, mac, no) for mac in candidates]
+    return next((k for k in keys if identity.verify_card(k, card)), keys[0])
+
+
 def verify(header, entries, master, macs, default_mac=None):
-    """Agrega a cada entrada `status`; devuelve el estado de mi estampa."""
+    """Agrega a cada entrada `status`; devuelve el estado de mi estampa.
+    macs = {dorsal: [MAC, ...]}."""
     me = header["no"]
     my_key = identity.derive_key(master, header["mac"], me)
     mine = "OK" if identity.verify_card(my_key, header["card"]) else "INVÁLIDA"
     seen = set()
     for e in entries:
-        mac = macs.get(e["no"], default_mac)
+        candidates = macs.get(e["no"]) or ([default_mac] if default_mac
+                                           else [])
         ident = (e["type"], e["no"])
         if ident in seen:
             e["status"] = "repetida (ya contada)"
@@ -180,10 +204,10 @@ def verify(header, entries, master, macs, default_mac=None):
             # La generó y la firmó el badge que exporta.
             sig = identity.verify_card(my_key, e["card"])
             e["status"] = f"especial, {'firma OK' if sig else 'firma INVÁLIDA'}"
-        elif mac is None:
+        elif not candidates:
             e["status"] = "sin MAC: no se puede derivar su clave"
         else:
-            key = identity.derive_key(master, mac, e["no"])
+            key = attendee_key(master, e["no"], candidates, e["card"])
             sig = identity.verify_card(key, e["card"])
             if not any(e["token"]):
                 tok = "sin token"
@@ -195,19 +219,41 @@ def verify(header, entries, master, macs, default_mac=None):
             e["status"] = f"{'firma OK' if sig else 'firma INVÁLIDA'}, {tok}"
         seen.add(ident)
         e["ok"] = e["status"] in ("firma OK, token OK", "especial, firma OK")
+    villas = villa_count(entries)
+    for e in entries:
+        if e["ok"] and (e["type"], e["no"]) == (SPECIAL, VILLA_TOUR) \
+                and villas < VILLAS:
+            e["status"] += f", sin respaldo ({villas}/{VILLAS})"
+            e["ok"] = False
     return mine
 
 
+def villa_count(entries):
+    """Villas con la estampa de su maestro verificada (tras verify())."""
+    return sum(e["ok"] and e["type"] == ATTENDEE and is_master(e["no"])
+               for e in entries)
+
+
 def read_macs(args):
+    """{dorsal: [MAC, ...]}: la última de cada dorsal; todas las de un
+    maestro (el repuesto tiene el mismo dorsal y otra MAC)."""
     macs = {}
+
+    def add(no, mac):
+        mac = identity.parse_mac(mac)
+        if not is_master(no):
+            macs[no] = [mac]
+        elif mac not in macs.setdefault(no, []):
+            macs[no].append(mac)
+
     if args.macs:
         with open(args.macs, newline="") as f:
             for row in csv.reader(f):
                 if row and row[0].strip().isdigit():
-                    macs[int(row[0])] = identity.parse_mac(row[1].strip())
+                    add(int(row[0]), row[1].strip())
     for item in args.mac:
         no, _, mac = item.partition("=")
-        macs[int(no)] = identity.parse_mac(mac)
+        add(int(no), mac)
     return macs
 
 
@@ -253,7 +299,7 @@ def main():
         parser.error("el badge está provisionado: falta --master")
     master = args.master or identity.DEV_MASTER
     macs = read_macs(args)
-    macs.setdefault(header["no"], header["mac"])
+    macs.setdefault(header["no"], [header["mac"]])
 
     mine = verify(header, entries, master, macs,
                   header["mac"] if args.self_mac else None)
@@ -267,6 +313,7 @@ def main():
                   f"{e['nick']!r:20} {e['status']}")
     valid = sum(e["ok"] for e in entries)
     print(f"verificadas {valid}/{len(entries)}")
+    print(f"villas: {villa_count(entries)}/{VILLAS} verificadas")
     return 0 if mine == "OK" and valid == len(entries) else 1
 
 
@@ -276,11 +323,12 @@ def main_qr(parser, args):
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    mac = read_macs(args).get(no)
-    if mac is None:
+    candidates = read_macs(args).get(no)
+    if not candidates:
         parser.error(f"falta la MAC de #{no} (--mac {no}=MAC o --macs)")
-    no, numbers, ok = verify_qr(args.qr, args.master or identity.DEV_MASTER,
-                                mac)
+    results = [verify_qr(args.qr, args.master or identity.DEV_MASTER, mac)
+               for mac in candidates]
+    no, numbers, ok = next((r for r in results if r[2]), results[0])
     print(f"#{no}: {len(numbers)}/{ATTENDEES} estampas, tag "
           f"{'OK' if ok else 'INVÁLIDO'}")
     if args.verbose:
