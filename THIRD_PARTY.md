@@ -39,6 +39,16 @@ completos de LGPL-2.1, Apache-2.0 y BSD-3-Clause están en
 etiqueta `3.3.12` de arduino-esp32, y este repositorio basta para recompilar y
 volver a enlazar el firmware completo (`firmware/README.md`).
 
+## Logos de las villas (marcas de terceros)
+
+Los logos de las villas del evento que se graban en el firmware
+(`firmware/art/sprites/logo_*.png` y las versiones derivadas en
+`firmware/art/villas/`) son marcas de sus respectivas comunidades. **No están
+bajo GPL-3.0** ni bajo ninguna otra licencia de este repositorio: son propiedad
+de cada comunidad y se usan con su permiso y el del evento para identificar a
+cada villa. No se pueden reutilizar fuera de ese contexto sin autorización de
+la comunidad correspondiente.
+
 ## Páginas web y herramientas
 
 Las páginas de `web/` no cargan nada de terceros: todo va en el propio HTML.
