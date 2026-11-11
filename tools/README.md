@@ -47,10 +47,10 @@ paso más allá.
 | Tomar una foto de la pantalla | `ui_shot.py` |
 | Usar las luces como aviso en mi escritorio | `badge_usb.py led` |
 | Ver mi consumo de inteligencia artificial | `ai_tokens.py` |
-| Entregar la respuesta de un reto | `badge_usb.py raw "FLAG …"` |
+| Entregar la respuesta de un reto | `badge_usb.py flag` |
 
 Los demás programas de esta carpeta son para el equipo de organización y de
-producción. No los necesitas.
+producción. No los necesitas (están listados en [Para el equipo](#para-el-equipo)).
 
 ## Palabras que conviene conocer
 
@@ -92,16 +92,21 @@ producción. No los necesitas.
 **Todos los comandos de esta guía se escriben en esa terminal**, dentro de la
 carpeta `badge-bugcon-2026`.
 
-### 4. Instala el complemento para hablar con el Badge
+### 4. Instala los complementos
 
-Los programas necesitan un complemento llamado **pyserial**. Escribe en la
-terminal:
+Los programas necesitan tres complementos: **pyserial** (hablar con el
+Badge), **Rich** (mensajes claros en la terminal) y **Pillow** (convertir tus
+imágenes). Una sola orden los instala:
 
-- **Windows:** `py -m pip install pyserial`
-- **macOS y Linux:** `python3 -m pip install pyserial`
+- **Windows:** `py -m pip install -r tools\requirements.txt`
+- **macOS y Linux:** `python3 -m pip install -r tools/requirements.txt`
 
-Si en Linux te dice que no puede instalarlo, usa el instalador de tu sistema,
-por ejemplo `sudo apt install python3-serial`.
+Si en Linux te dice `externally-managed-environment`, usa el instalador de tu
+sistema:
+
+```
+sudo apt install python3-serial python3-rich python3-pil
+```
 
 ### 5. Solo en Linux: permiso para usar el Badge
 
@@ -123,11 +128,8 @@ python3 tools/badge_usb.py info
 `\` en lugar de `/`:
 
 ```
-py tools\badge_usb.py -p COM3 info
+py tools\badge_usb.py info
 ```
-
-El `-p COM3` es el puerto de tu Badge; en la siguiente sección se explica
-cómo encontrarlo.
 
 ## Conecta tu Badge
 
@@ -137,16 +139,17 @@ cómo encontrarlo.
 3. **Cierra el configurador** si lo tienes abierto en el navegador. Solo un
    programa a la vez puede hablar con el Badge.
 
-### ¿Cuál es el puerto de mi Badge?
+### ¿Necesito escribir el puerto?
 
-| Sistema | Cómo encontrarlo | Ejemplo |
+**Normalmente no.** Los programas buscan solos tu Badge en cualquier sistema.
+Solo si tienes **dos Badges conectados** a la vez, te mostrarán la lista y
+tendrás que elegir uno con `-p`, justo después del nombre del programa:
+
+| Sistema | Cómo se ve el puerto | Dónde verlo |
 |---|---|---|
-| **Linux** | Casi siempre es el primero. No necesitas escribirlo. | `/dev/ttyACM0` |
-| **Windows** | Abre el **Administrador de dispositivos** › **Puertos (COM y LPT)**. Busca el que aparece al conectar el Badge. | `COM3` |
-| **macOS** | En la terminal escribe `ls /dev/cu.usbmodem*`. | `/dev/cu.usbmodem1101` |
-
-Si tu puerto no es `/dev/ttyACM0`, agrégalo a cada comando con `-p`, justo
-después del nombre del programa:
+| **Linux** | `/dev/ttyACM0` | Aparece en la lista que te muestra el programa. |
+| **Windows** | `COM3` | **Administrador de dispositivos** › **Puertos (COM y LPT)**. |
+| **macOS** | `/dev/cu.usbmodem1101` | En la terminal, `ls /dev/cu.usbmodem*`. |
 
 ```
 python3 tools/badge_usb.py -p /dev/cu.usbmodem1101 info
@@ -163,26 +166,20 @@ python3 tools/badge_usb.py info
 Si todo va bien, verás algo parecido a esto:
 
 ```
-fw=1.0.0
-no=127
-w=200
-h=200
-album=25
-total=400
-slots=4
-current=-1
-used=1000
+  Dorsal    127
+  Álbum     25/400  █░░░░░░░░░░░░░░░
+  Marco     0 ocupado · 1 libre · 2 libre · 3 libre
+  Versión   0.1.0
 ```
 
 Lo importante:
 
-- **no** es tu **dorsal**, el número único de tu Badge.
-- **album** y **total** son tu avance: en el ejemplo, 25 de 400 estampas.
-- **used** dice qué espacios de imagen del Marco están ocupados: un `1` por
-  espacio con imagen, empezando por el 0.
-- **fw** es la versión del programa interno del Badge.
+- **Dorsal** es el número único de tu Badge.
+- **Álbum** es tu avance: en el ejemplo, 25 de 400 estampas.
+- **Marco** dice cuáles de los 4 espacios de imagen tienen algo guardado.
+- **Versión** es la del programa interno del Badge.
 
-Las demás líneas puedes ignorarlas.
+Si necesitas los datos "en crudo" (`clave=valor`), usa `info --crudo`.
 
 ¿Salió un error? Revisa [Si algo no funciona](#si-algo-no-funciona).
 
@@ -196,7 +193,8 @@ Para ponerle la hora de tu computadora:
 python3 tools/badge_usb.py time
 ```
 
-Verás `OK`. La hora aparece en la barra de arriba del Badge.
+Verás algo como `Hora puesta: mié 20 nov 10:42.` El Badge no permite leer la
+hora de vuelta: compruébala en la barra de arriba del Badge.
 
 ## Personalizar tu estampa
 
@@ -210,8 +208,9 @@ python3 tools/badge_usb.py nick "Gol de Oro"
 ```
 
 - Pon el apodo **entre comillas** si lleva espacios.
-- Caben hasta 16 letras. Las letras con acento y la ñ ocupan el lugar de
-  dos. Si te pasas, el Badge corta lo que sobra.
+- Caben hasta 16 bytes: las letras normales ocupan 1, y las letras con
+  acento y la ñ ocupan 2 (ocho «ñ» llenan el apodo). Si te pasas, el programa
+  te lo dice y no cambia nada.
 
 ### Villa, posición, estadísticas y handle
 
@@ -252,13 +251,15 @@ python3 tools/badge_usb.py card --stats 60,40,70,30
 ```
 
 Cada una va de 0 a 99 y entre las cuatro suman como máximo 200. Si te pasas,
-el Badge no hace el cambio.
+el programa te dice por cuánto y no hace el cambio.
 
-**`--handle`: tu usuario de redes sociales.** Caben hasta 20 letras.
+**`--handle`: tu usuario de redes sociales.** Caben hasta 20 bytes (la ñ y los acentos cuentan doble).
 
 ```
 python3 tools/badge_usb.py card --handle @mi_usuario
 ```
+
+Al terminar, el programa te muestra un resumen de tu estampa.
 
 > **Importante:** si guardas tu handle de esta forma, **viaja con tu
 > estampa** en cada intercambio. Para quitarlo, escribe
@@ -267,10 +268,11 @@ python3 tools/badge_usb.py card --handle @mi_usuario
 ### Tu imagen (avatar)
 
 Tu estampa puede llevar una imagen en blanco y negro de **96 × 96** puntos.
-Necesitas un archivo `.pbm` de ese tamaño (abajo se explica cómo hacerlo):
+Pásale cualquier imagen (PNG, JPG, GIF, BMP o WebP); el programa la convierte
+solo. Mira cómo se verá en [Convertir tus imágenes](#convertir-tus-imágenes).
 
 ```
-python3 tools/badge_usb.py avatar cara.pbm
+python3 tools/badge_usb.py avatar cara.png
 ```
 
 Tu imagen solo se ve en tu Badge. No viaja a otros Badges al intercambiar.
@@ -283,11 +285,16 @@ completa. Tiene **4 espacios** para guardarlas, numerados del **0 al 3**.
 ### Guardar una imagen
 
 ```
-python3 tools/badge_usb.py upload 0 mi_foto.pbm
+python3 tools/badge_usb.py upload 0 mi_foto.jpg
 ```
 
-Esto guarda la imagen en el espacio 0 y la muestra en la pantalla. La imagen
-debe medir **200 × 200** puntos.
+Esto convierte la foto, la guarda en el espacio 0, la muestra en la pantalla
+y comprueba que quedó igual. Sirve cualquier imagen (PNG, JPG, GIF, BMP,
+WebP) y de cualquier tamaño; las fotos del teléfono se enderezan solas.
+
+Si el espacio ya tiene una imagen, el programa te pregunta antes de
+reemplazarla, porque **no se puede recuperar**. Con `--si` lo reemplaza sin
+preguntar.
 
 Otras acciones:
 
@@ -296,20 +303,34 @@ Otras acciones:
 | `show 1` | Muestra la imagen del espacio 1. |
 | `read 1 -o copia.pbm` | Guarda en tu computadora una copia de la imagen del espacio 1. |
 
-### Cómo preparar una imagen `.pbm`
+### Convertir tus imágenes
 
-Un archivo `.pbm` es una imagen de solo dos colores: blanco y negro. Puedes
-crearlo gratis con **GIMP**:
+El Badge solo muestra **blanco y negro**. Para que una foto se vea bien, el
+programa la ajusta a la pantalla (200 × 200 en el Marco, 96 × 96 en el
+avatar), sube el contraste y simula los grises con puntitos (tramado).
 
-1. Abre tu imagen en GIMP.
-2. **Imagen › Escalar la imagen:** pon 200 × 200 (o 96 × 96 para el avatar).
-3. **Imagen › Modo › Indexado:** elige **"Usar paleta en blanco y negro
-   (1 bit)"**.
-4. **Archivo › Exportar como:** ponle un nombre que termine en `.pbm`, por
-   ejemplo `mi_foto.pbm`, y elige el formato **"Raw"**.
+**Mira el resultado sin tocar el Badge:**
 
-> **Más fácil:** el configurador del navegador convierte cualquier foto y te
-> muestra cómo se verá antes de guardarla.
+```
+python3 tools/badge_usb.py upload 0 mi_foto.jpg --vista vista.png --solo-vista
+```
+
+Abre `vista.png` para ver cómo quedará (se guarda al doble de tamaño).
+`--solo-vista` evita enviar la imagen; si quitas esa opción, `--vista` guarda
+la vista y además envía la imagen al Badge.
+
+Opciones para afinar el resultado (valen también para `avatar`):
+
+| Opción | Qué hace |
+|---|---|
+| `--ajuste contener` | Por omisión: la imagen se ve entera, con bandas blancas si no es cuadrada. |
+| `--ajuste cubrir` | Llena toda la pantalla y recorta los bordes. |
+| `--tramado umbral --umbral 128` | Sin puntitos: cada punto es blanco o negro según su brillo (0 a 255). Bueno para logos y dibujos. |
+| `--invertir` | Cambia blanco por negro. |
+| `--ampliar` | Agranda una imagen más chica que la pantalla (por omisión se queda de su tamaño, centrada). |
+
+> **Alternativa:** el configurador del navegador también convierte fotos y
+> te muestra cómo se verán.
 
 ## Guardar una copia de tu álbum
 
@@ -413,19 +434,20 @@ Pinta las 6 luces del Badge del color que quieras. Es útil como semáforo: por
 ejemplo, rojo cuando estás en una llamada y verde cuando estás libre.
 
 ```
-python3 tools/badge_usb.py led ff0000
+python3 tools/badge_usb.py led rojo
 ```
 
-El color se escribe con 6 caracteres:
+Escribe el nombre del color, o cualquier color con 6 caracteres hex (con o
+sin `#`):
 
 | Color | Escribe |
 |---|---|
-| Rojo | `ff0000` |
-| Verde | `00ff00` |
-| Azul | `0000ff` |
-| Amarillo | `ffff00` |
-| Blanco | `ffffff` |
-| Apagar | `000000` |
+| Rojo | `rojo` (o `ff0000`) |
+| Verde | `verde` (o `00ff00`) |
+| Azul | `azul` (o `0000ff`) |
+| Amarillo | `amarillo` (o `ffff00`) |
+| Blanco | `blanco` (o `ffffff`) |
+| Apagar | `apagar` (o `000000`) |
 
 Las luces se apagan solas al desconectar el cable.
 
@@ -444,7 +466,7 @@ Funciona con **Claude Code** y **opencode**, si los usas en esa computadora.
    python3 tools/ai_tokens.py
    ```
 
-   En Windows y macOS agrega tu puerto: `--puerto COM3`.
+   Si tienes dos Badges conectados, elige uno con `--puerto`.
 3. En el Badge abre **Menú › Herramientas** y ve a la vista **Tokens**.
 4. Deja la terminal abierta. Cada 30 segundos el programa revisa si hay
    cifras nuevas y las envía.
@@ -482,31 +504,76 @@ En **Menú › Retos**, cada etapa que superas te da una estampa de reto. Cuando
 encuentres la respuesta secreta (la **flag**), entrégala así:
 
 ```
-python3 tools/badge_usb.py raw "FLAG tu_flag_aquí"
+python3 tools/badge_usb.py flag "tu_flag_aquí"
 ```
 
-| Respuesta | Qué significa |
+| El programa dice | Qué significa |
 |---|---|
-| `OK 1`, `OK 2`… | ¡Correcta! Superaste esa etapa y ganas su estampa. |
-| `ERR wrong` | La flag no es correcta. Revísala e intenta de nuevo. |
-| `ERR locked` | Primero tienes que superar la etapa anterior. |
+| "¡Correcta! Superaste la etapa N…" | Ganas la estampa de esa etapa. |
+| "La flag no es correcta…" | Revísala e intenta de nuevo. |
+| "Primero tienes que superar la etapa anterior." | Hazlas en orden. |
 
 ## Si algo no funciona
+
+Los programas explican el problema en español y casi siempre dicen qué hacer.
+Los códigos con los que terminan: `0` bien · `1` el Badge rechazó el comando ·
+`2` algo está mal escrito · `3` no hay conexión con el Badge.
 
 | Problema | Qué hacer |
 |---|---|
 | `python3` o `py` "no se reconoce" | Python no está instalado. En Windows, reinstálalo y marca **"Add Python to PATH"**. |
-| `No module named 'serial'` | Falta el complemento. Repite el paso 4 de [Antes de empezar](#antes-de-empezar-una-sola-vez). |
-| No encuentra el puerto o "could not open port" | Revisa que el Badge esté encendido con SW1 y que el cable sea de datos. Prueba otro cable o puerto USB. Revisa el nombre del puerto con `-p`. |
-| "Permission denied" en Linux | Haz el paso 5 de [Antes de empezar](#antes-de-empezar-una-sola-vez) y vuelve a iniciar sesión. |
-| "Resource busy" o el puerto está ocupado | Otro programa está usando el Badge. Cierra el configurador, detén `ai_tokens.py` con Ctrl + C y vuelve a intentar. |
-| `error: timeout` | El Badge puede estar dormido. Presiona un botón y repite el comando. |
-| `ERR badstats` | Tus estadísticas pasan de 99 o suman más de 200. |
-| `ERR badteam` o `ERR badpos` | El número de villa o de posición no está en la tabla. |
-| `ERR full` en Tokens | El Badge ya tiene 8 páginas. Presiona **RESET** en el Badge y vuelve a correr el programa. |
-| La imagen "mide…; el badge espera 200x200" | Cambia el tamaño de tu imagen a 200 × 200 (o 96 × 96 para el avatar). |
-| Después de usar estos programas, el configurador no recibe respuesta (Linux) | Escribe `stty -F /dev/ttyACM0 min 1` en la terminal y vuelve a conectar desde el configurador. |
+| `No module named 'serial'`, `'rich'` o `'PIL'` | Faltan complementos. Repite el paso 4 de [Antes de empezar](#antes-de-empezar-una-sola-vez). |
+| "No encuentro tu Badge" | Revisa que esté encendido con SW1, que el cable sea de datos y que el configurador esté cerrado. Prueba otro cable o puerto USB. |
+| "Hay más de un Badge conectado" | Elige uno con `-p` y el puerto de la lista. |
+| "No tienes permiso para usar…" (Linux) | Haz el paso 5 de [Antes de empezar](#antes-de-empezar-una-sola-vez) y vuelve a iniciar sesión. |
+| "…está ocupado por otro programa" | Cierra el configurador, detén `ai_tokens.py` con Ctrl + C y vuelve a intentar. |
+| "Ese puerto no es un Badge BugCON 2026" | El `-p` apunta a otro aparato. Quítalo para que se busque solo. |
+| "El Badge no contesta" | Puede estar dormido: presiona un botón y repite el comando. |
+| "El Badge no reconoce esa versión de estampa" | Tus herramientas son de otra versión que tu Badge. Descárgalas de nuevo. |
+| "Apodo no válido" / "Handle no válido" | El apodo no puede ir vacío; el handle cabe en 20 bytes. |
+| "Villa no válida" / "Posición no válida" | El número no está en las tablas de arriba. |
+| "Estadísticas no válidas" | Cada una va de 0 a 99 y la suma, hasta 200. |
+| "Hora no válida" | El reloj de tu computadora está mal. |
+| "Ese espacio del Marco no existe / está vacío" | Los espacios van del 0 al 3. Mira cuáles tienen imagen con `info`. |
+| "El Badge ya no tiene espacio" en Tokens | El Badge ya tiene 8 páginas. Presiona **RESET** en el Badge y vuelve a correr el programa. |
+| "El Badge no pudo guardarlo en su memoria" | Repite el comando. Si persiste, acércate a la mesa de soporte. |
+| La imagen "no se puede convertir" | Prueba con un PNG o JPG. Si es un `.pbm`, debe medir exactamente 200 × 200 (o 96 × 96). |
+| Después de usar estos programas, el configurador no recibe respuesta (Linux) | Escribe `stty -F /dev/ttyACM0 min 1` en la terminal (cambia el puerto si es otro) y vuelve a conectar desde el configurador. |
 | Sigues con dudas | Acércate a la mesa de soporte de BugCON 2026. |
+
+## Para el equipo
+
+Estos programas son del equipo de organización y de producción. No los
+necesitas para usar tu Badge.
+
+**Producción y organización**
+
+- `provision.py`: flashea cada Badge, le asigna dorsal y llave, corre la QA y registra en CSV.
+- `identity.py`: referencia de las cuentas HMAC (llave de dispositivo, firma, token, flag); necesita la llave maestra.
+- `verify_album.py`: verifica sin conexión un álbum exportado, con la llave maestra.
+- `challenges/generate.py`: genera la cadena de retos (privada hasta el evento).
+
+**Generadores del firmware** (convierten arte y datos en código)
+
+- `img2bitmap.py`: arte de `firmware/art` a `icons.cpp`.
+- `villa_logos.py`: logos de las villas a arte de 1 bit.
+- `fontgen.py`: fuentes PCF/PSF a fuentes del firmware.
+- `agenda.py`: `agenda.csv` a `agenda.cpp`.
+- `ir_codes.py`: base TV-Gone a C++.
+- `embed_page.py`: página del Wi-Fi a `wifi_page.h` comprimida.
+- `package_web.py`: empaqueta el configurador en un `.zip` (lo usa la CI).
+- `pc_stubs/Arduino.h`: para compilar en la PC las pruebas de C++.
+
+**Pruebas en vivo** (necesitan un Badge conectado; no son pruebas de la PC)
+
+- `fs_powercut.py`: 200 cortes de energía durante escrituras de la memoria.
+- `ir_aim.py`: aciertos de infrarrojo entre dos Badges.
+- `ui_walk.py`: recorre las pantallas y captura cada una.
+- `sdr/sdr_host_live.py`, `sdr/sdr_rx_live.py`, `sdr/sdr_viewer_live.py`: pruebas del SDR.
+
+**Pruebas de la PC** (sin Badge): los `test_*.py` de esta carpeta y los
+`sdr/test_*.c` (con su `Makefile`). Se corren con
+`for t in tools/test_*.py; do python3 "$t" || break; done`.
 
 ---
 
