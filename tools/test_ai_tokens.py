@@ -366,7 +366,7 @@ class Main(unittest.TestCase):
         data = {"claude-code": {"claude-opus-5-5": {today: [1, 2, 3, 4]}}}
         # El enlace de udev antes (ttyACM0) y después de reconectarse (ttyACM1)
         first, second = "/dev/serial/by-id/acm0", "/dev/serial/by-id/acm1"
-        with mock.patch.object(ai_tokens, "Badge", FakeBadge), \
+        with mock.patch.object(ai_tokens.badge_link, "connect", FakeBadge), \
                 mock.patch.object(ai_tokens, "read_sources",
                                   return_value=data), \
                 mock.patch.object(ai_tokens, "local_epoch", return_value=123), \
@@ -389,8 +389,10 @@ class Main(unittest.TestCase):
         self.assertEqual(cycles, [30] * 4)
 
     def test_find_port(self):
-        with mock.patch.object(ai_tokens.glob, "glob", return_value=[]):
-            self.assertEqual(ai_tokens.find_port(), "/dev/ttyACM0")
+        with mock.patch.object(ai_tokens.glob, "glob", return_value=[]), \
+                mock.patch.object(ai_tokens.badge_link, "find_badge",
+                                  return_value="COM3"):
+            self.assertEqual(ai_tokens.find_port(), "COM3")
         with mock.patch.object(ai_tokens.glob, "glob",
                                return_value=["/dev/serial/by-id/b",
                                              "/dev/serial/by-id/a"]):

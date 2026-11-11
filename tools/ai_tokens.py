@@ -35,9 +35,10 @@ No combine `api` con `claude-code` si Claude Code usa una clave de esa misma
 organización: serían las mismas respuestas en dos páginas. El día es el local
 de la PC (el mismo que `TIME`). Si el badge se reinicia, se le reenvía todo.
 
-Sin `--puerto`, en cada conexión busca el badge en /dev/serial/by-id (el
-primero si hay varios) y, si no está, usa /dev/ttyACM0. En Windows y macOS
-hay que pasar `--puerto` (COM3, /dev/cu.usbmodem…). Abre el puerto en
+Sin `--puerto`, en cada conexión busca el badge: en Linux por
+/dev/serial/by-id (el primero si hay varios; el enlace sigue al badge si se
+reconecta como ttyACM1) y, si no, por su VID:PID USB en cualquier sistema
+(con dos badges pide `--puerto`: COM3, /dev/cu.usbmodem…). Abre el puerto en
 exclusiva: mientras corre, `badge_usb.py`, las otras herramientas de Python
 y `arduino-cli upload` no pueden abrirlo (no se comprobó si el configurador
 del navegador lo respeta: no lo use con el script corriendo).
@@ -66,7 +67,8 @@ from pathlib import Path
 
 import serial
 
-from badge_usb import Badge, ProtocolError, local_epoch
+import badge_link
+from badge_usb import ProtocolError, local_epoch
 
 DAYS = 7  # total_7d = hoy + los 6 días anteriores
 FILE_DAYS = 8  # Transcripts tocados en este lapso (fecha de modificación)
@@ -87,14 +89,14 @@ SOURCES = {"claude-code": "Claude Code", "opencode": "opencode",
            "api": "API org"}
 # El enlace de udev del Hardware CDC del ESP32-S3 (lleva la MAC del badge)
 BY_ID = "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_*"
-DEFAULT_PORT = "/dev/ttyACM0"
 
 
 def find_port():
     """El badge por su enlace de udev. Si se reconecta mientras el script aún
-    tiene abierto el ttyACM0 viejo, sale como ttyACM1 y el enlace lo sigue."""
+    tiene abierto el ttyACM0 viejo, sale como ttyACM1 y el enlace lo sigue.
+    Sin enlace (Windows, macOS), por VID:PID; sin badge, BadgeConnectionError."""
     found = sorted(glob.glob(BY_ID))
-    return found[0] if found else DEFAULT_PORT
+    return found[0] if found else badge_link.find_badge()
 
 
 def parse_count(text):
@@ -380,8 +382,7 @@ def read_sources(sources, key, optional=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     parser.add_argument("-p", "--puerto",
-                        help="por omisión, el badge en /dev/serial/by-id "
-                        "(o /dev/ttyACM0)")
+                        help="por omisión, el badge que encuentre")
     parser.add_argument("--cada", type=int, default=30,
                         help="segundos entre lecturas (30; con api, ≥ 60)")
     parser.add_argument("--meta", type=parse_count, default=0,
@@ -395,13 +396,18 @@ def main():
                         "que existan)")
     args = parser.parse_args()
 
+    console = badge_link.console()
+
+    def say(message, style=None):  # Estado y errores: stderr, sin markup
+        console.print(message, style=style, markup=False)
+
     key = None
     every = max(1, args.cada)
     if args.fuente and "api" in args.fuente:
         key = os.environ.get(API_KEY_ENV)
         if not key:
-            print(f"error: falta la variable de entorno {API_KEY_ENV} "
-                  "(clave de administrador)", file=sys.stderr)
+            say(f"error: falta la variable de entorno {API_KEY_ENV} "
+                "(clave de administrador)", "bold red")
             return 1
         every = max(every, API_MIN_S)
 
@@ -411,10 +417,9 @@ def main():
 
     def drop(error):
         nonlocal badge
-        hint = ""
-        if str(error) == "timeout":
-            hint = " (si el badge está dormido, un botón lo despierta)"
-        print(f"\nbadge: {error}{hint}", file=sys.stderr)
+        text = (badge_link.explain(error) if isinstance(error, ProtocolError)
+                else error)
+        say(f"\nbadge: {text}", "red")
         if badge is not None:
             try:
                 badge.close()
@@ -434,7 +439,7 @@ def main():
                     # Un reset (RTS, botón) no reenumera el USB: solo se ve
                     # el arranque. Sus datos eran de RAM: TIME + TOKENS ya.
                     if BOOT_BANNER in logs:
-                        print("badge: se reinició", file=sys.stderr)
+                        say("badge: se reinició", "cyan")
                         sent.clear()
                         time.sleep(BOOT_S)
             # Sin --fuente se busca en cada ciclo: opencode puede llegar después
@@ -444,10 +449,10 @@ def main():
                                 datetime.date.today())
             except urllib.error.HTTPError as e:
                 current = None  # El cuerpo no lleva la clave; no se imprime
-                print(f"api: HTTP {e.code} {e.reason}", file=sys.stderr)
+                say(f"api: HTTP {e.code} {e.reason}", "red")
             except (OSError, ValueError, sqlite3.Error) as e:  # Red, JSON, DB
                 current = None
-                print(f"{','.join(sources)}: {e}", file=sys.stderr)
+                say(f"{','.join(sources)}: {e}", "red")
             if current is None:
                 if args.una_vez:
                     return 1
@@ -462,7 +467,7 @@ def main():
                 todo = [p for p in lines if due or sent.get(p[0]) != p[3]]
                 try:
                     if todo and badge is None:
-                        badge = Badge(args.puerto or find_port())
+                        badge = badge_link.connect(args.puerto or find_port())
                     if todo and not sent:  # Al conectarse o tras un reinicio
                         badge.expect_ok(f"TIME {local_epoch()}")
                     for name, counts, week, line in todo:
@@ -479,13 +484,14 @@ def main():
                             # El badge guarda 8 páginas en RAM y no borra
                             # ninguna: si ya tiene 8 de otra sesión, no cabe
                             # una más (reiniciar el badge las borra).
-                            print("ERR full: el badge ya tiene 8 páginas de "
-                                  "otra sesión; reinícialo o usa menos "
-                                  "fuentes", file=sys.stderr)
+                            say("ERR full: el badge ya tiene 8 páginas de "
+                                "otra sesión; reinícialo o usa menos "
+                                "fuentes", "yellow")
                         sent[name] = line
                     if todo and len(todo) == len(lines):
                         sent_at = time.time()
-                except (serial.SerialException, ProtocolError, OSError) as e:
+                except (serial.SerialException, ProtocolError, OSError,
+                        badge_link.BadgeConnectionError) as e:
                     drop(e)
                     if args.una_vez:
                         return 1
