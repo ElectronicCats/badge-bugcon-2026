@@ -58,8 +58,8 @@ INFO_RE = re.compile(
 # Tablas del README: villas (team), posiciones (pos) y colores del notificador.
 VILLAS = {
     0: "Hardware", 1: "RF", 2: "Rookie", 3: "OT", 4: "Payments",
-    5: "BugBounty", 6: "WoSec", 7: "APT", 8: "Chaviza",
-    9: "Nación Hacker", 10: "Live Hacking",
+    5: "BugBounty", 6: "WoSec", 7: "APT",
+    8: "Nación Hacker", 9: "Live Hacking",
 }
 POSICIONES = {
     0: "Portero", 1: "Defensa", 2: "Medio", 3: "Delantero", 4: "Pentester",
@@ -294,7 +294,7 @@ def validate_stats(stats):
 
 def validate_team(team):
     if team != -1 and team not in VILLAS:
-        raise ValueError(f"la villa va de -1 (ninguna) a 10; {team} no existe")
+        raise ValueError(f"la villa va de -1 (ninguna) a {len(VILLAS) - 1}; {team} no existe")
     return team
 
 
@@ -555,7 +555,7 @@ def _parser():
     sub.add_parser("nick", help="cambia tu apodo").add_argument("text")
     cd = sub.add_parser("card", help="cambia solo los campos indicados")
     cd.add_argument("--nick")
-    cd.add_argument("--team", type=int, help="-1 = ninguna (0 a 10)")
+    cd.add_argument("--team", type=int, help=f"-1 = ninguna (0 a {len(VILLAS) - 1})")
     cd.add_argument("--pos", type=int, help="-1 = ninguna (0 a 4)")
     cd.add_argument("--stats", type=lambda s: [int(v) for v in s.split(",")],
                     help="ataque,defensa,hack,suerte (0-99, suma <= 200)")

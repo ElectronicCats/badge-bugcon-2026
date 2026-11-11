@@ -83,13 +83,13 @@ class Stats(unittest.TestCase):
 class TeamAndPos(unittest.TestCase):
     def test_valid_range(self):
         self.assertEqual(badge_usb.validate_team(-1), -1)
-        self.assertEqual(badge_usb.validate_team(10), 10)
+        self.assertEqual(badge_usb.validate_team(9), 9)
         self.assertEqual(badge_usb.validate_pos(-1), -1)
         self.assertEqual(badge_usb.validate_pos(4), 4)
 
     def test_out_of_range(self):
         with self.assertRaisesRegex(ValueError, "villa"):
-            badge_usb.validate_team(11)
+            badge_usb.validate_team(10)
         with self.assertRaisesRegex(ValueError, "posición"):
             badge_usb.validate_pos(5)
 
