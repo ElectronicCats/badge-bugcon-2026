@@ -7,7 +7,9 @@ el CSV (MAC ↔ dorsal ↔ resultado).
 Pasos, con un badge conectado por USB:
   1. Lee la MAC con esptool.
   2. Dorsal: el que ya tenga esa MAC en el CSV o el menor libre de 1..400
-     (--no lo fija). Se reserva en el CSV antes de seguir.
+     (--no lo fija; --villa V da MASTER_FIRST + V). Se reserva en el CSV
+     antes de seguir. El dorsal de un maestro lo comparte su repuesto (otra
+     MAC); verify_album.py prueba todas.
   3. Graba el merged.bin hasta el final de la app (sin el relleno 0xFF: los
      8 MB completos tardan ~90 s) y borra la partición littlefs, así que el
      badge arranca en blanco: sin identidad (NVS), álbum, estampa ni récords.
@@ -19,7 +21,9 @@ Pasos, con un badge conectado por USB:
      dorsal, id de la clave y MAC.
   5. `QA` y espera `RESULT qa PASS|FAIL …`; el operador sigue las
      instrucciones que se imprimen. Necesita el badge dorado (`QA GOLD`).
-  6. Con PASS reinicia el badge (arranca en el gafete, sin la QA ni su hold
+  6. Con --villa V (maestro de villa): con PASS, `CARD` deja en su estampa
+     team = V y el nombre de la villa como nickname.
+  7. Con PASS reinicia el badge (arranca en el gafete, sin la QA ni su hold
      de energía); con FAIL deja el FAIL en la pantalla para apartarlo. Los
      botones de la QA no dan "Debut" (services/specials).
 
@@ -33,6 +37,7 @@ escribirlo).
 Uso (pyserial; esptool del core de Arduino o del PATH):
   ./tools/provision.py -p /dev/ttyACM0 --master HEX --vestidor DIR
   ./tools/provision.py -p /dev/ttyACM1 --master HEX --no 17 --no-flash
+  ./tools/provision.py --master HEX --vestidor DIR --villa 3   # OT Village
   # DevKit con el puente IO18 -> IO17, que es probado y dorado a la vez:
   ./tools/provision.py --master HEX --before "ir carrier 0" --before "QA GOLD"
 Sale con 0 solo con QA PASS.
@@ -60,6 +65,12 @@ TOOLS = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_BIN = os.path.join(TOOLS, "..", "firmware", "build",
                            "badge_bugcon_2026.ino.merged.bin")
 ATTENDEES = 400  # cfg::album::ATTENDEES: dorsales con hueco en el álbum
+MASTER_FIRST = 901  # cfg::villa::MASTER_FIRST: maestro de la villa v
+# Nickname de cada maestro, en el orden de TEAMS[] (services/card.cpp); el
+# nickname tiene 16 B de UTF-8 y "Live Hacking Villa" no cabe.
+VILLA_NICKS = ["Hardware", "RF Village MX", "Rookie Village",
+               "OT Village CDMX", "PaySec LATAM", "BugBounty", "WoSEC México",
+               "APT", "Nación Hacker", "Live Hacking"]
 CSV_FIELDS = ["no", "mac", "fecha", "puerto", "resultado", "segundos",
               "detalle"]
 PARTITION_TABLE = 0x8000  # Tabla de particiones dentro del merged.bin
@@ -106,9 +117,13 @@ def assign(rows, mac, wanted=None):
         raise Failure(f"no quedan dorsales libres en 1..{ATTENDEES}")
     if not 1 <= no <= 0xFFFF:
         raise Failure(f"dorsal {no} fuera de 1..65535")
-    if owner.get(no, mac) != mac:
+    if owner.get(no, mac) != mac and not is_master(no):
         raise Failure(f"el dorsal {no} ya es de {owner[no]}")
     return no
+
+
+def is_master(no):
+    return MASTER_FIRST <= no < MASTER_FIRST + len(VILLA_NICKS)
 
 
 def log(path, row, pick=None):
@@ -221,6 +236,13 @@ def provision(badge, no, key, mac):
         raise Failure(f"`id` no coincide: {reply}")
 
 
+def set_villa(badge, villa):
+    """Estampa del maestro: su villa y el nombre de la villa de nickname."""
+    payload = badge_usb.card_fields(badge.my_card(), nick=VILLA_NICKS[villa],
+                                    team=villa)
+    badge.expect_ok("CARD", payload)
+
+
 def run_qa(badge, show=print):
     """Corre la QA y regresa su línea final; show() recibe cada línea de
     instrucciones (QA …) y de resultados (RESULT …)."""
@@ -252,7 +274,12 @@ def main():
                         help="K_master en hex")
     parser.add_argument("--csv", default="provision.csv")
     parser.add_argument("--bin", default=DEFAULT_BIN, help="merged.bin")
-    parser.add_argument("--no", type=int, help="fija el dorsal")
+    which = parser.add_mutually_exclusive_group()
+    which.add_argument("--no", type=int, help="fija el dorsal")
+    which.add_argument("--villa", type=int,
+                       choices=range(len(VILLA_NICKS)), metavar="V",
+                       help="maestro de la villa V (0..9, orden de TEAMS[]): "
+                       f"dorsal {MASTER_FIRST} + V")
     parser.add_argument("--no-flash", action="store_true",
                         help="no graba: solo provisión y QA")
     parser.add_argument("--before", action="append", default=[],
@@ -262,6 +289,8 @@ def main():
                         help="imágenes vestidor-NNN.bin del reto N3")
     args = parser.parse_args()
     args.esptool = args.esptool or find_esptool()
+    if args.villa is not None:
+        args.no = MASTER_FIRST + args.villa
 
     image = open(args.bin, "rb").read()
     littlefs = partition(image, "littlefs")
@@ -301,6 +330,9 @@ def main():
             badge.expect_ok(line)
         result = run_qa(badge)
         passed = result.startswith("RESULT qa PASS")
+        if passed and args.villa is not None:
+            set_villa(badge, args.villa)
+            print(f"Maestro de {VILLA_NICKS[args.villa]}")
         if passed:
             reset(badge)
         record("PASS" if passed else "FAIL", result)
