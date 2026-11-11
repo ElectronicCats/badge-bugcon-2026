@@ -548,9 +548,9 @@ necesitas para usar tu Badge.
 
 **Producción y organización**
 
-- `provision.py`: flashea cada Badge, le asigna dorsal y llave, corre la QA y registra en CSV.
+- `provision.py`: flashea cada Badge, le asigna dorsal y llave, corre la QA y registra en CSV. Con `--villa V` (0..9) provisiona el badge maestro de esa villa (o su repuesto): dorsal 901 + V y el nombre de la villa en su estampa.
 - `identity.py`: referencia de las cuentas HMAC (llave de dispositivo, firma, token, flag); necesita la llave maestra.
-- `verify_album.py`: verifica sin conexión un álbum exportado, con la llave maestra.
+- `verify_album.py`: verifica sin conexión un álbum exportado, con la llave maestra. La línea `villas: n/10 verificadas` dice cuántos maestros de villa tienen firma y token válidos; la especial "Gira de villas" solo es válida con 10/10.
 - `challenges/generate.py`: genera la cadena de retos (privada hasta el evento).
 
 **Generadores del firmware** (convierten arte y datos en código)
