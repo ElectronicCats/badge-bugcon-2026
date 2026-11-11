@@ -8,7 +8,9 @@ mientras refresca.
 Con --keys se presionan botones antes de capturar (`key <botón>`, el mismo
 camino que un botón real), para llegar a una pantalla sin tocar el badge.
 
-Requiere pyserial. Uso:
+Requiere pyserial y Rich. Sin -p busca el badge solo. Códigos de salida:
+0 bien · 1 el badge rechazó el botón o no mandó la captura · 2 uso ·
+3 conexión. Uso:
   ./tools/ui_shot.py                              # captura.png
   ./tools/ui_shot.py -o menu.png --keys "a right" # abre el menú y avanza
   ./tools/ui_shot.py -p /dev/ttyACM1 --scale 2
@@ -19,15 +21,12 @@ import sys
 import time
 import zlib
 
-import serial
-
-from badge_usb import restore_vmin
-
 OPEN_WAIT_S = 0.3  # La consola descarta lo que llega en los primeros 200 ms
 KEY_WAIT_S = 0.3  # Entre botones: la app ya cambió su estado
 # Tras el último botón: el cuadro nuevo se dibuja cuando termina el refresco
 # en curso (parcial 0.64 s, completo 1.52 s en el DevKit).
 SHOT_WAIT_S = 1.6
+KEYS = ("up", "down", "left", "right", "a", "b")  # Botones de `key`
 
 
 def command(port, text, until="OK", timeout=5):
@@ -37,8 +36,14 @@ def command(port, text, until="OK", timeout=5):
     deadline = time.time() + timeout
     while time.time() < deadline:
         out += port.read(4096)
-        if f"\n{until}".encode() in out or out.startswith(until.encode()):
+        # Un ERR también cierra la espera: el llamador lee el motivo
+        if any(f"\n{w}".encode() in out or out.startswith(w.encode())
+               for w in (until, "ERR")):
             break
+    else:
+        seen = out.decode(errors="replace").strip()
+        raise TimeoutError(f"sin respuesta a '{text}'" +
+                           (f": {seen[-200:]}" if seen else ""))
     return out.decode(errors="replace")
 
 
@@ -75,33 +80,45 @@ def write_png(path, width, height, rows, scale):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
-    parser.add_argument("-p", "--port", default="/dev/ttyACM0")
+    parser.add_argument("-p", "--port",
+                        help="por omisión, el badge que encuentre")
     parser.add_argument("-o", "--output", default="captura.png")
     parser.add_argument("-k", "--keys", default="",
                         help='botones antes de capturar, p. ej. "a right"')
     parser.add_argument("--scale", type=int, default=4)
     args = parser.parse_args()
+    keys = args.keys.split()
+    unknown = [k for k in keys if k not in KEYS]
+    if unknown:
+        parser.error(f"botón desconocido: {' '.join(unknown)} "
+                     f"(usa {' '.join(KEYS)})")
 
-    # Apertura normal: fijar DTR/RTS en bajo antes de abrir reinicia el
-    # ESP32-S3 (lo mismo que hace esptool).
-    port = serial.Serial(args.port, 115200, timeout=0.1)
-    time.sleep(OPEN_WAIT_S)
-    for key in args.keys.split():
-        reply = command(port, f"key {key}")
-        if "OK" not in reply:
-            sys.exit(f"key {key}: {reply.strip()}")
-        time.sleep(KEY_WAIT_S)
-    if args.keys.split():
-        time.sleep(SHOT_WAIT_S)
+    import badge_link
+    console = badge_link.console()
     try:
-        width, height, rows = parse_shot(command(port, "ui shot"))
-    except (StopIteration, ValueError) as error:
-        sys.exit(f"no llegó la captura: {error or 'sin SHOT'}")
-    write_png(args.output, width, height, rows, args.scale)
+        # Apertura normal, sin tocar DTR/RTS: fijarlos en bajo antes de abrir
+        # reinicia el ESP32-S3. Al salir, el gestor deja el tty en VMIN=1.
+        with badge_link.connect(args.port) as badge:
+            port = badge.port
+            for key in keys:
+                reply = command(port, f"key {key}")
+                if "OK" not in reply:
+                    raise badge_link.ProtocolError(f"key {key}: {reply.strip()}")
+                time.sleep(KEY_WAIT_S)
+            if keys:
+                time.sleep(SHOT_WAIT_S)
+            try:
+                width, height, rows = parse_shot(command(port, "ui shot"))
+            except (StopIteration, ValueError, IndexError) as error:
+                raise badge_link.ProtocolError(
+                    f"no llegó la captura: {error or 'sin SHOT'}") from None
+        write_png(args.output, width, height, rows, args.scale)
+    except (badge_link.BadgeConnectionError, badge_link.ProtocolError,
+            OSError) as error:
+        return badge_link.report(console, error)
     print(f"{args.output}: {width}x{height}")
-    restore_vmin(port)  # Si no, el configurador en Chrome/Brave no lee
-    port.close()
+    return badge_link.EXIT_OK
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
