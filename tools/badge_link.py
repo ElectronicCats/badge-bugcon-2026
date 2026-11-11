@@ -12,6 +12,8 @@ Los mensajes son texto plano: la presentación es asunto de cada script.
   connect(port=None)     -> Badge ya saludado; quien lo pide lo cierra
   call(badge, línea, payload=None)  -> respuesta OK, con un reintento
   explain(error)         -> texto en español de un ProtocolError
+  console()              -> Console de Rich para los mensajes (stderr)
+  report(console, exc)   -> imprime el error de una herramienta y da su código
 
 Códigos de salida que usan las herramientas:
   0 bien · 1 el Badge rechazó el comando (ERR) · 2 uso · 3 conexión
@@ -166,3 +168,32 @@ def call(badge, line, payload=None):
         if str(exc) == "timeout":
             raise BadgeConnectionError(ASLEEP) from None
         raise
+
+
+def console():
+    """Console de Rich para los mensajes (stderr). Sin Rich sale con el código
+    de uso: el módulo de protocolo no lo necesita, las herramientas sí."""
+    c = badge_usb._console()
+    if c is None:
+        print("Falta Rich: pip install -r tools/requirements.txt",
+              file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+    return c
+
+
+def report(console, exc):
+    """Imprime `error: …` para una excepción de una herramienta y devuelve su
+    código de salida: ERR del Badge 1, conexión (o cable que se cae, o
+    silencio) 3, lo demás (archivo, argumentos) 2."""
+    if isinstance(exc, ProtocolError):
+        code, text = EXIT_REJECTED, explain(exc)
+    elif isinstance(exc, BadgeConnectionError):
+        code, text = EXIT_CONNECTION, str(exc)
+    elif isinstance(exc, serial.SerialException):
+        code, text = EXIT_CONNECTION, f"Se perdió la conexión con el Badge: {exc}"
+    elif isinstance(exc, TimeoutError):
+        code, text = EXIT_CONNECTION, f"{exc}. {ASLEEP}"
+    else:
+        code, text = EXIT_USAGE, str(exc)
+    console.print(f"error: {text}", style="bold red", markup=False)
+    return code
