@@ -5,7 +5,7 @@ Only the two SDR modes are used: host mode (which also serves spectrum mode)
 and burst capture. The script dumps the actual port exchange in hexadecimal
 to inspect the format of each packet.
 
-    usage: test_esdr_wire.py <port>
+    usage: sdr/esdr_wire_live.py <port>
 """
 import os
 import re
@@ -20,7 +20,7 @@ import zlib
 class Wire:
     """Raw serial port without touching DTR/RTS (some USB stacks stall on it)."""
 
-    def __init__(self, port, baud=115200):
+    def __init__(self, port, baud=termios.B115200):
         self.fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
         tty.setraw(self.fd)
         attrs = termios.tcgetattr(self.fd)
