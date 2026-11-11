@@ -11,26 +11,28 @@ PBM binario (P4, 1 = negro: se invierte) o como .bin crudo.
 
 El avatar (AVTR) va en el mismo formato, de AVATAR_W x AVATAR_H.
 
-Requiere pyserial. Uso:
-  ./tools/badge_usb.py info
-  ./tools/badge_usb.py upload 0 gafete.pbm      # guarda el slot 0 y lo muestra
-  ./tools/badge_usb.py show 0
-  ./tools/badge_usb.py read 0 -o slot0.pbm
-  ./tools/badge_usb.py clr
-  ./tools/badge_usb.py dbg
+Requiere pyserial; para las tablas y los colores, Rich (requirements.txt).
+Uso:
+  ./tools/badge_usb.py info                       # dorsal, álbum y espacios
+  ./tools/badge_usb.py time                       # reloj con la hora de la PC
   ./tools/badge_usb.py nick "Ñandú 10"
   ./tools/badge_usb.py card --team 2 --pos 4 --stats 60,40,70,30 --handle @yo
-  ./tools/badge_usb.py avatar cara.pbm           # 96x96
-  ./tools/badge_usb.py album -o album.bin        # luego tools/verify_album.py
-  ./tools/badge_usb.py album -o album_42.json    # el .json de "Guardar .json"
-  ./tools/badge_usb.py pwr                       # energía
-  ./tools/badge_usb.py time                      # reloj con la hora de la PC
-  ./tools/badge_usb.py led ff0000                # notificador (000000 apaga)
+  ./tools/badge_usb.py avatar cara.png            # 96x96, se convierte sola
+  ./tools/badge_usb.py upload 0 mi_foto.png       # Marco, se convierte sola
+  ./tools/badge_usb.py show 0
+  ./tools/badge_usb.py read 0 -o slot0.pbm
+  ./tools/badge_usb.py album -o album.json        # copia del álbum
+  ./tools/badge_usb.py flag bandera{secreta}      # entrega la flag de un reto
+  ./tools/badge_usb.py led rojo                   # notificador (apagar lo apaga)
+  ./tools/badge_usb.py clr
+  ./tools/badge_usb.py pwr                        # energía (desarrollo)
+  ./tools/badge_usb.py dbg                        # consola de desarrollo
   ./tools/badge_usb.py tokens 1200 3400 500000 20000 9000000 2000000
                        # tokens de IA: entrada salida caché_lect
                        # caché_escr total_7d meta (0 = sin meta);
                        # --nombre "Claude Code" elige la página
-  ./tools/badge_usb.py -p /dev/ttyACM1 raw "INFO"
+  ./tools/badge_usb.py campeon                    # estampa de campeón
+  ./tools/badge_usb.py -p /dev/ttyACM1 raw "INFO"  # desarrollo
 """
 import argparse
 import re
@@ -53,6 +55,22 @@ INFO_RE = re.compile(
     r"album=(?P<album>\d+)/(?P<total>\d+) slots=(?P<slots>\d+) "
     r"current=(?P<current>-?\d+) used=(?P<used>[01]+)$"
 )
+# Tablas del README: villas (team), posiciones (pos) y colores del notificador.
+VILLAS = {
+    0: "Hardware", 1: "RF", 2: "Rookie", 3: "OT", 4: "Payments",
+    5: "BugBounty", 6: "WoSec", 7: "APT", 8: "Chaviza",
+    9: "Nación Hacker", 10: "Live Hacking",
+}
+POSICIONES = {
+    0: "Portero", 1: "Defensa", 2: "Medio", 3: "Delantero", 4: "Pentester",
+}
+LED_NAMES = {
+    "rojo": "ff0000", "verde": "00ff00", "azul": "0000ff",
+    "amarillo": "ffff00", "blanco": "ffffff", "apagar": "000000",
+}
+DIAS = ("lun", "mar", "mié", "jue", "vie", "sáb", "dom")
+MESES = ("ene", "feb", "mar", "abr", "may", "jun",
+         "jul", "ago", "sep", "oct", "nov", "dic")
 
 
 class ProtocolError(Exception):
@@ -106,6 +124,13 @@ class Badge:
         restore_vmin(self.port)
         self.port.close()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+        return False
+
     def read_line(self, timeout=REPLY_TIMEOUT_S):
         deadline = time.time() + timeout
         line = b""
@@ -123,13 +148,6 @@ class Badge:
             line = self.read_line(max(0.01, deadline - time.time()))
             if line.startswith("OK") or line.startswith("ERR"):
                 return line
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        self.close()
-        return False
 
     def command(self, line, payload=None):
         self.port.reset_input_buffer()
@@ -259,109 +277,353 @@ def local_epoch(now=None):
     return int(now) + time.localtime(now).tm_gmtoff
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
-    parser.add_argument("-p", "--port", default="/dev/ttyACM0")
+def validate_stats(stats):
+    """Las 4 estadísticas: cada una 0-99 y la suma no pasa de 200."""
+    if len(stats) != 4:
+        raise ValueError("las estadísticas son 4 números separados por comas: "
+                         "ataque, defensa, hack y suerte")
+    for value in stats:
+        if not 0 <= value <= 99:
+            raise ValueError(f"cada estadística va de 0 a 99; {value} no sirve")
+    total = sum(stats)
+    if total > 200:
+        raise ValueError(f"las estadísticas suman {total}; el máximo es 200 "
+                         f"(te pasas por {total - 200})")
+    return stats
+
+
+def validate_team(team):
+    if team != -1 and team not in VILLAS:
+        raise ValueError(f"la villa va de -1 (ninguna) a 10; {team} no existe")
+    return team
+
+
+def validate_pos(pos):
+    if pos != -1 and pos not in POSICIONES:
+        raise ValueError(f"la posición va de -1 (ninguna) a 4; {pos} no existe")
+    return pos
+
+
+def validate_sticker_text(text, size, name):
+    """Texto de la estampa: hasta `size` B de UTF-8 y sin caracteres de control."""
+    for char in text:
+        if ord(char) < 32 or ord(char) == 127:
+            raise ValueError(f"el {name} no puede llevar caracteres de control "
+                             "(saltos de línea, tabulaciones…)")
+    data = text.encode()
+    if len(data) > size:
+        raise ValueError(f"el {name} mide {len(data)} B de UTF-8 y caben {size}; "
+                         "la ñ y las letras con acento cuentan doble")
+    return data
+
+
+def validate_led(color):
+    """Color del notificador: nombre del README o hex (con o sin #) -> rrggbb."""
+    text = color.strip().lower()
+    if text.startswith("#"):
+        text = text[1:]
+    if text in LED_NAMES:
+        return LED_NAMES[text]
+    if len(text) != 6 or any(c not in "0123456789abcdef" for c in text):
+        raise ValueError(f"'{color}' no es un color: escribe seis dígitos hex "
+                         f"(como ff0000) o un nombre: {', '.join(LED_NAMES)}")
+    return text
+
+
+def validate_flag(text):
+    """La flag de un reto: no vacía, sin espacios en las orillas ni controles."""
+    if not text or text.strip() != text:
+        raise ValueError("la flag no puede ir vacía ni llevar espacios al "
+                         "principio o al final")
+    for char in text:
+        if ord(char) < 32 or ord(char) == 127:
+            raise ValueError("la flag no puede llevar caracteres de control "
+                             "(saltos de línea, tabulaciones…)")
+    return text
+
+
+def _bar(album, total, width=16):
+    if total <= 0:
+        return ""
+    filled = min(width, round(album * width / total))
+    return "█" * filled + "░" * (width - filled)
+
+
+def _slots_text(info):
+    return " · ".join(f"{i} {'ocupado' if bit == '1' else 'libre'}"
+                      for i, bit in enumerate(info["used"]))
+
+
+def _villa_name(team):
+    return "Sin villa" if team == 0xFF else VILLAS.get(team, f"villa {team}")
+
+
+def _pos_name(pos):
+    return "Sin posición" if pos == 0xFF else POSICIONES.get(pos, f"posición {pos}")
+
+
+def _sticker_summary(card):
+    """Líneas (dato, valor) de la estampa, para contar qué quedó."""
+    f = CARD_FIELDS.unpack(card[: CARD_FIELDS.size])
+    nick = f[3].rstrip(b"\0").decode(errors="replace")
+    handle = f[9].rstrip(b"\0").decode(errors="replace")
+    return [
+        ("Apodo", nick or "(vacío)"),
+        ("Villa", _villa_name(f[4])),
+        ("Posición", _pos_name(f[5])),
+        ("Estadísticas", "/".join(str(b) for b in f[6])),
+        ("Handle", handle or "(sin handle)"),
+    ]
+
+
+def _print_info(console, info):
+    from rich import box
+    from rich.table import Table
+
+    table = Table(box=box.SIMPLE_HEAD, show_header=False, padding=(0, 1))
+    table.add_column("Dato", style="bold")
+    table.add_column("Valor")
+    table.add_row("Dorsal", str(info["no"]))
+    table.add_row("Álbum", f"{info['album']}/{info['total']}  "
+                           f"{_bar(info['album'], info['total'])}")
+    table.add_row("Marco", _slots_text(info))
+    table.add_row("Versión", info["fw"])
+    console.print(table)
+
+
+def _console():
+    """Console de Rich para los mensajes (stderr); None si falta Rich."""
+    try:
+        from rich.console import Console
+    except ImportError:
+        return None
+    return Console(stderr=True, highlight=False)
+
+
+def _run_command(badge, args, console):
+    """Un comando sobre un Badge ya conectado; -> código de salida."""
+    import badge_link
+
+    def say(message):
+        console.print(message, markup=False)
+
+    _validate_args(args)  # idempotente: main() ya lo corrió antes de abrir el puerto
+    if args.cmd == "info":
+        info = badge.info()
+        if args.crudo:
+            for key, value in info.items():
+                print(f"{key}={value}")
+        else:
+            _print_info(console, info)
+        return badge_link.EXIT_OK
+    if args.cmd == "show":
+        badge_link.call(badge, f"SHOW {args.slot}")
+        say(f"Mostrando el espacio {args.slot} en la pantalla.")
+        return badge_link.EXIT_OK
+    if args.cmd == "read":
+        info = badge.info()
+        image = badge.read(args.slot)
+        if args.output.endswith(".pbm"):
+            write_pbm(args.output, info["w"], info["h"], image)
+        else:
+            with open(args.output, "wb") as f:
+                f.write(image)
+        say(f"Guardados {len(image)} B del espacio {args.slot} en {args.output}.")
+        return badge_link.EXIT_OK
+    if args.cmd == "clr":
+        badge_link.call(badge, "CLR")
+        say("Pantalla en blanco. Las imágenes guardadas no se borraron.")
+        return badge_link.EXIT_OK
+    if args.cmd == "dbg":
+        say(badge_link.call(badge, "DBG"))
+        return badge_link.EXIT_OK
+    if args.cmd == "raw":
+        say(badge.command(args.line))
+        return badge_link.EXIT_OK
+    if args.cmd == "nick":
+        badge_link.call(badge, f"NICK {args.text}")
+        say(f"Apodo puesto: {args.text}")
+        return badge_link.EXIT_OK
+    if args.cmd == "card":
+        payload = card_fields(badge.my_card(), args.nick, args.team,
+                              args.pos, args.stats, args.handle)
+        badge_link.call(badge, "CARD", payload)
+        say("Estampa actualizada:")
+        for label, value in _sticker_summary(payload):
+            say(f"  {label}: {value}")
+        return badge_link.EXIT_OK
+    if args.cmd == "pwr":
+        for key, value in badge.power().items():
+            print(f"{key}={value}")
+        return badge_link.EXIT_OK
+    if args.cmd == "time":
+        epoch = local_epoch()
+        badge_link.call(badge, f"TIME {epoch}")
+        t = time.localtime(epoch)
+        say(f"Hora puesta: {DIAS[t.tm_wday]} {t.tm_mday} "
+            f"{MESES[t.tm_mon - 1]} {t.tm_hour:02d}:{t.tm_min:02d}.")
+        say("El Badge no permite leer la hora de vuelta; revisa la barra de "
+            "arriba.")
+        return badge_link.EXIT_OK
+    if args.cmd == "led":
+        color = validate_led(args.rgb)
+        badge_link.call(badge, f"LED {color}")
+        say(f"Luces en #{color}.")
+        return badge_link.EXIT_OK
+    if args.cmd == "tokens":
+        name = f" {args.nombre}" if args.nombre else ""
+        badge_link.call(badge, "TOKENS " + " ".join(map(str, args.n)) + name)
+        say("Tokens enviados a la vista del Badge.")
+        return badge_link.EXIT_OK
+    if args.cmd == "campeon":
+        say(badge_link.call(badge, "CAMPEON"))
+        return badge_link.EXIT_OK
+    if args.cmd == "flag":
+        text = validate_flag(args.text)
+        reply = badge_link.call(badge, f"FLAG {text}")
+        parts = reply.split()
+        stage = parts[1] if len(parts) > 1 else "?"
+        say(f"¡Correcta! Superaste la etapa {stage} y ganaste su estampa.")
+        return badge_link.EXIT_OK
+    if args.cmd == "album":
+        say("Aviso: este archivo tiene apodos y handles de otras personas. "
+            "Guárdalo con cuidado y no lo publiques.")
+        data = badge.album()
+        if args.output.endswith(".json"):  # el de "Guardar .json" (bb26-album)
+            import datetime
+
+            import verify_album
+
+            now = datetime.datetime.now(datetime.timezone.utc)
+            with open(args.output, "w") as f:
+                f.write(verify_album.to_json(
+                    data, badge.info()["fw"],
+                    now.isoformat(timespec="seconds").replace("+00:00", "Z")))
+        else:
+            with open(args.output, "wb") as f:
+                f.write(data)
+        count = (len(data) - ALBUM_HEADER_BYTES) // 80
+        say(f"OK {len(data)} B, {count} estampas -> {args.output}")
+        return badge_link.EXIT_OK
+    raise ValueError(f"comando desconocido: {args.cmd}")
+
+
+def _validate_args(args):
+    """Revisa en la PC lo que el Badge rechazaría, antes de abrir el puerto."""
+    if args.cmd == "nick":
+        validate_sticker_text(args.text, 16, "apodo")
+    elif args.cmd == "card":
+        if args.team is not None:
+            validate_team(args.team)
+        if args.pos is not None:
+            validate_pos(args.pos)
+        if args.stats is not None:
+            validate_stats(args.stats)
+        if args.nick is not None:
+            validate_sticker_text(args.nick, 16, "apodo")
+        if args.handle is not None:
+            validate_sticker_text(args.handle, 20, "handle")
+    elif args.cmd == "led":
+        validate_led(args.rgb)
+    elif args.cmd == "flag":
+        validate_flag(args.text)
+
+
+def _parser():
+    parser = argparse.ArgumentParser(
+        description=__doc__.split("\n")[1],
+        epilog="Códigos de salida: 0 bien · 1 el Badge rechazó el comando · "
+               "2 uso · 3 conexión.")
+    parser.add_argument("-p", "--port", default=None,
+                        help="puerto del Badge (si no, se busca solo)")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("info")
-    up = sub.add_parser("upload")
+    info = sub.add_parser("info", help="dorsal, álbum y espacios del Marco")
+    info.add_argument("--crudo", action="store_true",
+                      help="clave=valor, como antes")
+    up = sub.add_parser("upload", help="guarda una imagen en el Marco")
     up.add_argument("slot", type=int)
-    up.add_argument("file", help=".pbm (P4) o .bin crudo")
-    sub.add_parser("show").add_argument("slot", type=int)
-    rd = sub.add_parser("read")
+    up.add_argument("file", help="cualquier imagen; se convierte al tamaño del Marco")
+    sub.add_parser("show", help="muestra un espacio en la pantalla").add_argument(
+        "slot", type=int)
+    rd = sub.add_parser("read", help="guarda una copia de un espacio")
     rd.add_argument("slot", type=int)
     rd.add_argument("-o", "--output", required=True, help=".pbm o .bin")
-    sub.add_parser("clr")
-    sub.add_parser("dbg")
-    sub.add_parser("raw").add_argument("line")
-    sub.add_parser("nick").add_argument("text")
+    sub.add_parser("clr", help="pantalla en blanco (desarrollo)")
+    sub.add_parser("dbg", help="consola de desarrollo")
+    sub.add_parser("raw", help="manda una línea tal cual (desarrollo)").add_argument(
+        "line")
+    sub.add_parser("nick", help="cambia tu apodo").add_argument("text")
     cd = sub.add_parser("card", help="cambia solo los campos indicados")
     cd.add_argument("--nick")
-    cd.add_argument("--team", type=int, help="-1 = ninguna")
-    cd.add_argument("--pos", type=int, help="-1 = ninguna")
+    cd.add_argument("--team", type=int, help="-1 = ninguna (0 a 10)")
+    cd.add_argument("--pos", type=int, help="-1 = ninguna (0 a 4)")
     cd.add_argument("--stats", type=lambda s: [int(v) for v in s.split(",")],
-                    help="ATK,DEF,HAX,SUERTE")
-    cd.add_argument("--handle")
-    sub.add_parser("avatar").add_argument("file", help=".pbm (P4) o .bin")
-    sub.add_parser("album").add_argument("-o", "--output", required=True)
-    sub.add_parser("pwr")
+                    help="ataque,defensa,hack,suerte (0-99, suma <= 200)")
+    cd.add_argument("--handle", help="hasta 20 bytes de UTF-8")
+    av = sub.add_parser("avatar", help="pon tu imagen (96x96)")
+    av.add_argument("file", help="cualquier imagen; se convierte a 96x96")
+    al = sub.add_parser("album", help="guarda una copia de tu álbum")
+    al.add_argument("-o", "--output", required=True, help=".bin o .json")
+    sub.add_parser("pwr", help="energía (desarrollo)")
     sub.add_parser("time", help="fija el reloj con la hora local de la PC")
-    sub.add_parser("led").add_argument("rgb", help="rrggbb en hex; 000000 apaga")
-    tk = sub.add_parser("tokens", help="tokens de IA (vista del escritorio)")
+    sub.add_parser("led", help="color de las luces (nombre o hex)").add_argument(
+        "rgb")
+    tk = sub.add_parser("tokens", help="tokens de IA (desarrollo)")
     tk.add_argument("n", nargs=6, type=int,
                     help="entrada salida caché_lect caché_escr total_7d meta")
     tk.add_argument("--nombre", help="página (herramienta o modelo; Total)")
-    sub.add_parser("campeon", help="estampa de campeón (cierre del evento)")
-    args = parser.parse_args()
+    sub.add_parser("campeon", help="estampa de campeón (desarrollo)")
+    sub.add_parser("flag", help="entrega la flag de un reto").add_argument("text")
 
-    badge = Badge(args.port)
+    import badge_upload  # opciones de conversión y vista previa
+
+    badge_upload.add_options(up)
+    badge_upload.add_options(av, slot=False)
+    return parser
+
+
+def main():
+    args = _parser().parse_args()
+
+    import badge_link
+
+    if args.cmd in ("upload", "avatar"):
+        import badge_upload
+
+        return badge_upload.run(args, args.cmd)
+
+    console = _console()
+    if console is None:
+        print("Falta Rich: pip install -r tools/requirements.txt", file=sys.stderr)
+        return badge_link.EXIT_USAGE
+
     try:
-        if args.cmd == "info":
-            for key, value in badge.info().items():
-                print(f"{key}={value}")
-        elif args.cmd == "upload":
-            image = load_image(args.file, badge.info())
-            print(badge.upload(args.slot, image))
-        elif args.cmd == "show":
-            print(badge.expect_ok(f"SHOW {args.slot}"))
-        elif args.cmd == "read":
-            info = badge.info()
-            image = badge.read(args.slot)
-            if args.output.endswith(".pbm"):
-                write_pbm(args.output, info["w"], info["h"], image)
-            else:
-                open(args.output, "wb").write(image)
-            print(f"OK {len(image)} B -> {args.output}")
-        elif args.cmd == "clr":
-            print(badge.expect_ok("CLR"))
-        elif args.cmd == "dbg":
-            print(badge.expect_ok("DBG"))
-        elif args.cmd == "raw":
-            print(badge.command(args.line))
-        elif args.cmd == "nick":
-            print(badge.expect_ok(f"NICK {args.text}"))
-        elif args.cmd == "card":
-            fields = card_fields(badge.my_card(), args.nick, args.team,
-                                 args.pos, args.stats, args.handle)
-            print(badge.expect_ok("CARD", fields))
-        elif args.cmd == "avatar":
-            image = load_image(args.file, {"w": AVATAR_W, "h": AVATAR_H})
-            if len(image) != AVATAR_BYTES:
-                raise ValueError(f"el avatar mide {AVATAR_BYTES} B")
-            print(badge.expect_ok("AVTR", image))
-        elif args.cmd == "pwr":
-            for key, value in badge.power().items():
-                print(f"{key}={value}")
-        elif args.cmd == "time":
-            print(badge.expect_ok(f"TIME {local_epoch()}"))
-        elif args.cmd == "led":
-            print(badge.expect_ok(f"LED {args.rgb}"))
-        elif args.cmd == "tokens":
-            name = f" {args.nombre}" if args.nombre else ""
-            print(badge.expect_ok("TOKENS " + " ".join(map(str, args.n)) + name))
-        elif args.cmd == "campeon":
-            print(badge.expect_ok("CAMPEON"))
-        elif args.cmd == "album":
-            data = badge.album()
-            if args.output.endswith(".json"):  # el de "Guardar .json" (bb26-album)
-                import datetime
+        _validate_args(args)
+    except ValueError as e:
+        console.print(f"error: {e}", style="bold red", markup=False)
+        return badge_link.EXIT_USAGE
 
-                import verify_album
+    try:
+        badge = badge_link.connect(args.port)
+    except badge_link.BadgeConnectionError as e:
+        console.print(f"error: {e}", style="bold red", markup=False)
+        return badge_link.EXIT_CONNECTION
 
-                now = datetime.datetime.now(datetime.timezone.utc)
-                open(args.output, "w").write(verify_album.to_json(
-                    data, badge.info()["fw"],
-                    now.isoformat(timespec="seconds").replace("+00:00", "Z")))
-            else:
-                open(args.output, "wb").write(data)
-            count = (len(data) - ALBUM_HEADER_BYTES) // 80
-            print(f"OK {len(data)} B, {count} estampas -> {args.output}")
-    except (ProtocolError, ValueError) as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 1
+    try:
+        return _run_command(badge, args, console)
+    except badge_link.ProtocolError as e:
+        console.print(f"error: {badge_link.explain(e)}", style="bold red",
+                      markup=False)
+        return badge_link.EXIT_REJECTED
+    except ValueError as e:
+        console.print(f"error: {e}", style="bold red", markup=False)
+        return badge_link.EXIT_USAGE
+    except OSError as e:  # no se pudo escribir el archivo de -o
+        console.print(f"error: no pude guardar el archivo: {e.strerror}: "
+                      f"{e.filename}", style="bold red", markup=False)
+        return badge_link.EXIT_USAGE
     finally:
         badge.close()
-    return 0
 
 
 if __name__ == "__main__":

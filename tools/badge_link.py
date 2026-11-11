@@ -25,6 +25,10 @@ from serial.tools import list_ports
 
 import badge_usb
 
+# La clase de error del protocolo: quien ejecuta badge_usb.py como script tiene
+# una copia distinta en __main__, así que captura la de badge_link.
+ProtocolError = badge_usb.ProtocolError
+
 VID, PID = 0x303A, 0x1001  # USB Serial/JTAG del ESP32-S3
 GREET_TIMEOUT_S = 3  # INFO de saludo; la respuesta normal tarda milisegundos
 PAYLOAD_WAIT_S = 3.5  # Más que PAYLOAD_TIMEOUT_MS (3 s): el badge ya soltó el payload
