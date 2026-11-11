@@ -12,7 +12,8 @@ la comunidad) hacia y desde el control remoto del badge, por la consola USB.
           frecuencia no se guarda; el aviso sale en la lista).
   export: imprime una marca (`ir export <b>`) como `.ir`.
 
-Solo biblioteca estándar y pyserial (venv del proyecto). Uso:
+Requiere pyserial y Rich (venv del proyecto). Sin -p busca el badge solo.
+Códigos de salida: 0 bien · 2 uso o archivo no válido · 3 conexión. Uso:
   ./tools/ir_import.py import TV.ir [--brand "Mi TV"] [-p /dev/ttyACM0]
   ./tools/ir_import.py import TV.ir --dry-run
   ./tools/ir_import.py export 12 -o mi_tv.ir
@@ -22,6 +23,8 @@ import re
 import sys
 import time
 from pathlib import Path
+
+import badge_link
 
 BUTTONS = ["Encender", "Vol+", "Vol-", "Silencio", "Canal+", "Canal-",
            "Entrada", "Menú", "Arriba", "Abajo", "Izquierda", "Derecha",
@@ -50,6 +53,7 @@ MAX_DURATIONS = 1024  # cfg::remote::MAX_DURATIONS
 CARRIER_MIN, CARRIER_MAX = 10_000, 1_000_000  # cfg::ir::CARRIER_MIN/MAX_HZ
 RAW_CARRIER = 38_000  # A la que sale un crudo
 NAME_BYTES = 16  # ir_remote::NAME_BYTES
+USER_BRANDS = 8  # cfg::remote::USER_BRANDS
 CHUNK = 40  # Tiempos por línea `ir import data` (la consola corta en 320 B)
 
 
@@ -136,15 +140,12 @@ def raw_commands(k, s, notes):
 
 class Console:
     def __init__(self, port):
-        import serial
-        from badge_usb import restore_vmin
-        self.port = serial.Serial(port, 115200, timeout=0.1)
-        self._restore = restore_vmin
-        time.sleep(0.4)  # La consola descarta los primeros 200 ms
+        # Conexión común: busca el badge, abre en exclusiva y lo saluda
+        self.badge = badge_link.connect(port)
+        self.port = self.badge.port
 
     def close(self):
-        self._restore(self.port)
-        self.port.close()
+        self.badge.close()  # También deja el tty en VMIN=1
 
     def run(self, line, until=("OK", "ERR"), timeout=5):
         """Las líneas de la respuesta hasta la que empieza con `until`."""
@@ -157,7 +158,7 @@ class Console:
             out += [l.decode(errors="replace").strip() for l in lines]
             if any(l.startswith(until) for l in out):
                 return out
-        raise IrError(f"sin respuesta a '{line}'")
+        raise TimeoutError(f"sin respuesta a '{line}'")
 
 
 def check(lines, what=""):
@@ -166,37 +167,75 @@ def check(lines, what=""):
         raise IrError(f"{what}: {last}" if what else last)
 
 
-def do_import(args):
-    commands, skipped, notes = plan(parse_ir(Path(args.file).read_text()))
-    for name, why in skipped:
-        print(f"omitido  {name}: {why}")
-    for note in notes:
-        print(f"aviso    {note}")
+def brand_name(text):
+    """El nombre de la marca, o IrError si el badge no lo guardaría tal cual."""
+    size = len(text.encode())
+    if size > NAME_BYTES:
+        raise IrError(f"el nombre de la marca '{text}' mide {size} bytes; el "
+                      f"máximo es {NAME_BYTES} (sobran {size - NAME_BYTES}; "
+                      "la ñ y los acentos cuentan doble). Usa --brand con un "
+                      "nombre más corto")
+    if not text.strip() or any(c < " " or c == "\x7f" for c in text):
+        raise IrError("el nombre de la marca no puede estar vacío ni tener "
+                      "caracteres de control")
+    return text.strip()
+
+
+def show(console, rows):
+    """Tabla de resultados: (estado, señal, detalle)."""
+    from rich.table import Table
+    from rich.text import Text
+    styles = {"cargado": "green", "listo": "green", "omitido": "yellow",
+              "aviso": "cyan"}
+    table = Table(show_header=True, header_style="bold")
+    for column in ("Estado", "Señal", "Detalle"):
+        table.add_column(column)
+    for state, name, detail in rows:  # Text: el archivo puede traer corchetes
+        table.add_row(Text(state, style=styles[state]), Text(name),
+                      Text(detail))
+    console.print(table)
+
+
+def do_import(args, console):
+    brand = brand_name(args.brand or Path(args.file).stem)
+    text = Path(args.file).read_text(encoding="utf-8-sig")  # Con o sin BOM
+    commands, skipped, notes = plan(parse_ir(text))
+    rows = [("omitido", name, why) for name, why in skipped]
+    rows += [("aviso", "", note) for note in notes]
     if args.dry_run:
-        for name, k, cmd in commands:
-            print(f"{name} -> {BUTTONS[k]}: {len(cmd)} órdenes")
-        return
-    brand = args.brand or Path(args.file).stem
-    brand = brand.encode()[:NAME_BYTES].decode(errors="ignore")
+        rows += [("listo", name, f"{BUTTONS[k]}: {len(cmd)} órdenes")
+                 for name, k, cmd in commands]
+        return show(console, rows)
+    from rich.progress import track
     con = Console(args.port)
     try:
         lines = con.run(f"ir brand add {brand}")
-        check(lines, f"marca '{brand}'")
-        number = next(re.match(r"BRAND (\d+)", l).group(1) for l in lines
-                      if l.startswith("BRAND "))
-        for name, k, cmd in commands:
+        try:
+            check(lines)
+        except IrError:  # El badge no distingue el motivo
+            raise IrError(f"el Badge no creó la marca '{brand}': el nombre ya "
+                          f"existe o ya tienes {USER_BRANDS} marcas propias "
+                          "(borra una desde el Badge)") from None
+        found = next((re.match(r"BRAND (\d+)", l) for l in lines
+                      if l.startswith("BRAND ")), None)
+        if not found:
+            raise IrError("el Badge no dijo qué número tiene la marca nueva")
+        number = found.group(1)
+        for name, k, cmd in track(commands, description="Cargando botones",
+                                  console=console):
             try:
                 for line in cmd:
                     check(con.run(line.replace("{b}", number)))
-                print(f"cargado  {name} -> {BUTTONS[k]}")
+                rows.append(("cargado", name, BUTTONS[k]))
             except IrError as e:
-                print(f"omitido  {name}: {e}")
-        print(f"Marca '{brand}' = {number}")
+                rows.append(("omitido", name, str(e)))
     finally:
         con.close()
+    show(console, rows)
+    console.print(f"Marca '{brand}' = {number}", markup=False)
 
 
-def do_export(args):
+def do_export(args, console):
     con = Console(args.port)
     try:
         lines = con.run(f"ir export {args.brand}")
@@ -208,12 +247,15 @@ def do_export(args):
         r"#$|(Filetype|Version|name|type|protocol|address|command|frequency|"
         r"duty_cycle|data):", l)]
     text = "\n".join(ir) + "\n#\n"
-    Path(args.output).write_text(text) if args.output else print(text, end="")
+    if args.output:
+        Path(args.output).write_text(text, encoding="utf-8")
+    else:
+        print(text, end="")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("-p", "--port", default="/dev/ttyACM0")
+    ap.add_argument("-p", "--port", help="por omisión, el badge que encuentre")
     sub = ap.add_subparsers(dest="cmd", required=True)
     imp = sub.add_parser("import")
     imp.add_argument("file")
@@ -223,11 +265,14 @@ def main():
     exp.add_argument("brand", type=int)
     exp.add_argument("-o", "--output")
     args = ap.parse_args()
+    console = badge_link.console()
     try:
-        (do_import if args.cmd == "import" else do_export)(args)
-    except (IrError, OSError) as e:
-        sys.exit(f"ERROR: {e}")
+        (do_import if args.cmd == "import" else do_export)(args, console)
+    except (IrError, OSError, ValueError, badge_link.BadgeConnectionError,
+            badge_link.ProtocolError) as e:  # ValueError: .ir que no es UTF-8
+        return badge_link.report(console, e)
+    return badge_link.EXIT_OK
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
