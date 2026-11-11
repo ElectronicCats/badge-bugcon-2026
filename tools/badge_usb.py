@@ -124,6 +124,13 @@ class Badge:
             if line.startswith("OK") or line.startswith("ERR"):
                 return line
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+        return False
+
     def command(self, line, payload=None):
         self.port.reset_input_buffer()
         self.port.write((line + "\n").encode())
