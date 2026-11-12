@@ -1804,7 +1804,7 @@ async function readPayloadReply(expected) {
   return readBytesExact(+m[1], 5000);
 }
 
-const INFO_RE = /^OK BB26 (\S+) no=(\d+) panel=(\d+)x(\d+) album=(\d+)\/(\d+) slots=(\d+) current=(-?\d+) used=([01]+)(?: home=(-?\d+))?$/;
+const INFO_RE = /^OK BB26 (\S+) no=(\d+) panel=(\d+)x(\d+) album=(\d+)\/(\d+) slots=(\d+) current=(-?\d+) used=([01]+)(?: home=(-?\d+))?(?: .*)?$/;   // campos nuevos al final de INFO no deben romper la conexión
 
 async function refreshInfo(keepStatus) {
   if (!port) return false;
