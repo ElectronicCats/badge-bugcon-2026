@@ -190,6 +190,18 @@ canvas.px {
 /* aviso: la operación ocurrió, pero hay algo que mirar (la clase sigue siendo "err") */
 #status[data-tone=warn] { color: var(--warn); background: var(--warn-bg); }
 #waitHint { font-size: var(--fs-sm); color: var(--muted); }
+.state { font-size: var(--fs-sm); color: var(--muted); }
+.state[data-state=dirty] { color: var(--warn); }
+.state[data-state=saved] { color: var(--ok); }
+/* resultado de la última operación, 2 s junto al botón que la pidió */
+.flash { font-size: var(--fs-sm); padding: 2px var(--s2); border-radius: var(--r-sm); }
+.flash.ok { color: var(--ok); background: var(--ok-bg); }
+.flash.err { color: var(--err); background: var(--err-bg); }
+.flash.warn { color: var(--warn); background: var(--warn-bg); }
+@media (prefers-reduced-motion: no-preference) {
+  .flash:not([hidden]) { animation: flashIn 0.25s ease-out; }
+}
+@keyframes flashIn { from { opacity: 0; } to { opacity: 1; } }
 #statusLog summary { font-size: var(--fs-sm); color: var(--muted); cursor: pointer; }
 #statusLog ol { list-style: none; margin: var(--s1) 0 0; padding: 0; max-height: 9em; overflow-y: auto; font-size: var(--fs-sm); color: var(--muted); }
 #statusLog li { padding: 2px 0; }
@@ -310,6 +322,8 @@ header .hint { margin-top: 0; }
     <div class="row">
       <button id="readCardBtn" disabled>Leer del badge</button>
       <button id="saveCardBtn" class="primary" disabled>Guardar estampa</button>
+      <span id="cardState" class="state" hidden></span>
+      <span id="cardFlash" class="flash" aria-hidden="true" hidden></span>
     </div>
     <p class="hint needconn" id="needStamp"></p>
 
@@ -323,11 +337,13 @@ header .hint { margin-top: 0; }
     <div class="row">
       <button id="tplSendBtn" disabled>Enviar plantilla al slot</button>
       <select id="tplSlot" aria-label="Slot de destino de la plantilla"></select>
+      <span id="tplFlash" class="flash" aria-hidden="true" hidden></span>
     </div>
 
     <h3>Álbum</h3>
     <div class="row">
       <button id="jsonBtn" disabled>Guardar .json</button>
+      <span id="jsonFlash" class="flash" aria-hidden="true" hidden></span>
     </div>
     <p class="hint">Guarda en tu computadora tu estampa y las de tu álbum; no se envía a
     ningún lado. Incluye el nickname y el handle que cada quien compartió en su estampa.</p>
@@ -416,7 +432,9 @@ header .hint { margin-top: 0; }
     <p class="hint">Lo que ves es exactamente lo que recibe el badge.</p>
 
     <div id="avatarCtl">
-      <div class="row"><button id="avatarBtn" class="primary" disabled>Enviar avatar</button></div>
+      <div class="row"><button id="avatarBtn" class="primary" disabled>Enviar avatar</button>
+        <span id="avatarState" class="state" hidden></span>
+        <span id="avatarFlash" class="flash" aria-hidden="true" hidden></span></div>
       <p class="hint needconn" id="needAvatar"></p>
     </div>
     <div id="slotCtl" hidden>
@@ -445,6 +463,7 @@ header .hint { margin-top: 0; }
         <button id="sendBtn" class="primary" disabled>Enviar al slot 0</button>
         <button id="loadSlotBtn" disabled>Abrir en el editor</button>
         <button id="testBtn" disabled>Patrón de prueba</button>
+        <span id="slotFlash" class="flash" aria-hidden="true" hidden></span>
       </div>
       <h3>En el badge</h3>
       <div class="row">
@@ -1424,14 +1443,18 @@ for (const ev of ["dragover", "dragenter"]) {
 for (const ev of ["dragleave", "drop"]) {
   document.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); });
 }
+const NOT_IMAGE = "Ese archivo no es una imagen.";
 document.addEventListener("drop", e => {
   const f = e.dataTransfer && e.dataTransfer.files[0];
-  if (f && f.type.startsWith("image/")) loadBlob(f);
+  if (!f) return;
+  if (f.type.startsWith("image/")) loadBlob(f);
+  else setStatus(NOT_IMAGE, "err");
 });
 document.addEventListener("paste", e => {
   for (const item of e.clipboardData.items) {
     if (item.type.startsWith("image/")) { loadBlob(item.getAsFile()); return; }
   }
+  if (e.clipboardData.files.length) setStatus(NOT_IMAGE, "err");   // un archivo, no texto
 });
 
 // cámara
@@ -1557,8 +1580,36 @@ function renderTemplate() {
   drawGafete(fb, editedCard(), avatarBits);
   tplBits = fb.px;
   drawBits(tplCtx, tplBits, w, h);
+  paintDirty();
 }
 
+// Qué falta guardar: solo lee (myCard, badgeAvatar) y pinta.
+const sameBytes = (a, b) => !!a && !!b && a.length === b.length && a.every((v, i) => v === b[i]);
+function paintDirty() {
+  const card = $("cardState"), av = $("avatarState");
+  card.hidden = !port || !myCard;
+  if (!card.hidden) {
+    const c = editedCard();
+    const saved = !cardErrors(c).length && sameBytes(packCardFields(c), myCard.subarray(0, CARD_FIELDS_BYTES));
+    card.dataset.state = saved ? "saved" : "dirty";
+    card.textContent = saved ? "Guardada en el badge" : "Sin guardar";
+  }
+  av.hidden = !port || !avatarBits || sameBytes(avatarBits, badgeAvatar);
+  av.dataset.state = "dirty";
+  av.textContent = "Sin enviar";
+}
+
+// Resultado de la operación que acaba de terminar (lo que dejó #status), 2 s junto a su botón.
+const flashTimers = {};
+function flashResult(id) {
+  const el = $(id), st = $("status");
+  const tone = st.dataset.tone || st.className;
+  el.className = "flash " + (tone || "ok");
+  el.textContent = tone === "err" ? "No se completó" : tone === "warn" ? "Revisa el aviso" : "Listo";
+  el.hidden = false;
+  clearTimeout(flashTimers[id]);
+  flashTimers[id] = setTimeout(() => { el.hidden = true; }, 2000);
+}
 /* ---------------- transporte: Web Serial ---------------- */
 
 // Web Serial solo existe en Chromium de escritorio (Chrome, Edge, Brave)
@@ -1669,6 +1720,7 @@ function paintConn() {
       else $(b).removeAttribute("aria-describedby");
     }
   }
+  paintDirty();
 }
 
 const DEVICE_BUTTONS = ["sendBtn", "loadSlotBtn", "showBtn", "clrBtn", "delBtn", "testBtn", "avatarBtn",
@@ -2051,16 +2103,17 @@ async function uploadSlot(n, bits, what, asHome) {
 
 $("sendBtn").addEventListener("click", () => {
   if (!lastBits) { setStatus("Carga una imagen primero.", "err"); return; }
-  uploadSlot(selectedSlot(), lastBits, "Imagen", true);
+  uploadSlot(selectedSlot(), lastBits, "Imagen", true).then(() => flashResult("slotFlash"));
 });
 
 $("testBtn").addEventListener("click", () =>
-  uploadSlot(selectedSlot(), testPatternBits(panel.w, panel.h), "Patrón de prueba"));
+  uploadSlot(selectedSlot(), testPatternBits(panel.w, panel.h), "Patrón de prueba")
+    .then(() => flashResult("slotFlash")));
 
 $("tplSendBtn").addEventListener("click", () => {
   const errs = cardErrors(editedCard());
   if (errs.length) { setStatus("Revisa la estampa: " + errs.join("; ") + ".", "err"); return; }
-  uploadSlot(+$("tplSlot").value, tplBits, "Plantilla");
+  uploadSlot(+$("tplSlot").value, tplBits, "Plantilla").then(() => flashResult("tplFlash"));
 });
 
 $("showBtn").addEventListener("click", async () => {
@@ -2133,6 +2186,8 @@ $("avatarBtn").addEventListener("click", async () => {
   if (await command("AVTR", packBits(avatarBits, AVATAR_W, AVATAR_H), () => expectOk("Avatar"))) {
     badgeAvatar = avatarBits;
   }
+  paintDirty();
+  flashResult("avatarFlash");
 });
 
 // Mi estampa firmada: bytes 16..80 de la cabecera de ALBM
@@ -2176,16 +2231,20 @@ function showBadgeAvatar() {
   if (target === "avatar" && avatarBits) drawBits(pvCtx, avatarBits, W, H);
   renderTemplate();
 }
-$("readCardBtn").addEventListener("click", () => readCard(false));
+$("readCardBtn").addEventListener("click", () => {
+  setStatus("Leyendo el álbum…", "");
+  readCard(false);
+});
 
 $("saveCardBtn").addEventListener("click", async () => {
   const c = editedCard(), errs = cardErrors(c);
   if (errs.length) { setStatus("Revisa la estampa: " + errs.join("; ") + ".", "err"); return; }
   setStatus("Guardando la estampa…", "");
   const ok = await command("CARD", packCardFields(c), () => expectOk("Estampa"), "Guardar la estampa");
-  if (!ok) return;
+  if (!ok) { flashResult("cardFlash"); return; }
   await readCard(true);   // lo que quedó en el badge (normalizado y firmado)
   setStatus("Estampa guardada y firmada por el badge.", "ok");
+  flashResult("cardFlash");
 });
 
 /* ---------------- exportación local del álbum ----------------
@@ -2225,11 +2284,14 @@ function download(text, name) {
 }
 
 $("jsonBtn").addEventListener("click", async () => {
+  setStatus("Leyendo el álbum…", "");
   const data = await fetchAlbum();
-  if (!data) return;
-  const s = albumSummary(data), name = "album_" + s.badge_no + ".json";
-  download(albumJson(data), name);
-  setStatus("Se guardó " + name + " (" + s.count + " estampas).", "ok");
+  if (data) {
+    const s = albumSummary(data), name = "album_" + s.badge_no + ".json";
+    download(albumJson(data), name);
+    setStatus("Se guardó " + name + " (" + s.count + " estampas).", "ok");
+  }
+  flashResult("jsonFlash");
 });
 
 drawSource();
