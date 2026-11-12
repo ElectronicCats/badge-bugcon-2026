@@ -92,10 +92,20 @@ function tabsRun() {
   ok.no_stale_bits = lastBits === null;
   // estampa y avatar fijos: las idas y vueltas no tocan la plantilla
   refRun();
-  tab("avatar"); // la imagen fuente es compartida: se re-renderiza el avatar con la última
+  tab("avatar"); // cada pestaña conserva su imagen: vuelve el avatar de refRun
   const tpl = tplBits.join(), av = avatarBits.join();
   for (let i = 0; i < 10; i++) { tab("slot"); tab("avatar"); }
   ok.round_trips_keep_template = tpl === tplBits.join() && av === avatarBits.join();
+  // una imagen propia en Pantalla completa no se vuelve el avatar, y cada pestaña conserva la suya
+  const c = document.createElement("canvas");
+  c.width = 400; c.height = 200;
+  c.getContext("2d").fillRect(0, 0, 400, 100);
+  tab("slot"); setSource(c);
+  const full = lastBits.join();
+  tab("avatar");
+  ok.full_image_not_avatar = tpl === tplBits.join() && av === avatarBits.join();
+  tab("slot");
+  ok.full_image_kept = baseImage === c && full === lastBits.join();
   // texto fuera de cuadro se recorta al cambiar de destino
   tab("slot");
   textRows[0].x.value = 150; textRows[0].y.value = 180;
