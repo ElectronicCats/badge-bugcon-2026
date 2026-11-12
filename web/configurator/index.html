@@ -31,7 +31,9 @@
   --ok-bg: #293739;
   --err-bg: #372f37;
   --warn-bg: #363535;
-  --border: #333845;
+  --border: #333845;       /* tarjetas y separadores */
+  --border-ctl: #707888;   /* borde de controles: ≥ 3:1 sobre --card y --card2 */
+  --disabled: #7d8492;     /* texto deshabilitado: ≥ 3:1 sobre --card2 */
   /* espaciado, texto y radios */
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
   --fs-sm: 12px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 18px;
@@ -91,33 +93,39 @@ main {
 button {
   background: var(--card2);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-ctl);
   border-radius: var(--r-md);
   padding: var(--s2) var(--s3);
+  min-height: 32px;
   font: inherit;
   cursor: pointer;
 }
 button:hover:not(:disabled) { border-color: var(--accent); }
-button:disabled { opacity: 0.45; cursor: default; }
 /* tres variantes: principal (una por bloque), secundario (el de arriba) y destructivo */
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 button.danger { color: var(--err); border-color: var(--err); }
 button.danger:hover:not(:disabled) { background: var(--err-bg); border-color: var(--err); }
+/* deshabilitado: mismo aspecto en las tres variantes, texto legible (no solo opacidad) */
+button:disabled, button.primary:disabled, button.danger:disabled {
+  background: var(--card2); border-color: var(--border); color: var(--disabled); cursor: not-allowed;
+}
 .row { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; margin-bottom: var(--s2); }
-.row > label { display: inline-flex; align-items: center; gap: var(--s2); cursor: pointer; }
+.row > label, label:has(> input[type=checkbox]) { display: inline-flex; align-items: center; gap: var(--s2); cursor: pointer; min-height: 24px; }   /* área de clic ≥ 24×24 */
 .ctl { display: grid; grid-template-columns: 92px 1fr 44px; align-items: center; gap: var(--s2); margin-bottom: var(--s2); }
 .ctl label { color: var(--muted); }
 .ctl output { text-align: right; font-variant-numeric: tabular-nums; }
-input[type=range] { width: 100%; accent-color: var(--accent); }
+input[type=range] { width: 100%; min-height: 24px; accent-color: var(--accent); }
+input[type=checkbox] { width: 16px; height: 16px; }
 select, input[type=text], input[type=number] {
   background: var(--card2);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-ctl);
   border-radius: var(--r-md);
   padding: var(--s2);
+  min-height: 32px;
   font: inherit;
 }
-input:disabled, select:disabled { opacity: 0.5; }
+input:disabled, select:disabled { color: var(--disabled); border-color: var(--border); cursor: not-allowed; }
 /* min-width: 0 para que el control no empuje al contador fuera de la tarjeta */
 .ctl > input, .field > input, .field > select { width: 100%; min-width: 0; }
 .field { display: grid; grid-template-columns: 92px 1fr 60px; align-items: center; gap: var(--s2); margin-bottom: var(--s2); }
@@ -125,7 +133,7 @@ input:disabled, select:disabled { opacity: 0.5; }
 .field output { text-align: right; font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
 .field output.bad { color: var(--err); }
 #drop {
-  border: 2px dashed var(--border);
+  border: 2px dashed var(--border-ctl);
   border-radius: var(--r-lg);
   padding: var(--s4);
   text-align: center;
@@ -145,7 +153,7 @@ canvas.px {
   display: block;
   margin: 0 auto var(--s3);
 }
-#tabs { display: flex; gap: var(--s2); overflow-x: auto; padding-bottom: var(--s2); margin-bottom: var(--s3); max-width: 1600px; }
+#tabs { display: flex; gap: var(--s2); overflow-x: auto; padding: var(--s1) var(--s1) var(--s2);   /* holgura para el contorno de foco */ margin-bottom: var(--s3); max-width: 1600px; }
 #tabs button { white-space: nowrap; flex: none; }
 #tabs button[aria-selected=true] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .slots { display: flex; gap: var(--s2); margin-bottom: var(--s3); }
@@ -155,7 +163,7 @@ canvas.px {
   text-align: center;
   padding: var(--s2) 0;
   background: var(--card2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-ctl);
   border-radius: var(--r-md);
   cursor: pointer;
   color: var(--muted);
