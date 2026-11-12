@@ -180,6 +180,7 @@ const NICK_BYTES = 16, HANDLE_BYTES = 20;
 const CARD_BYTES = 64, ALBUM_HEADER_BYTES = 80, ENTRY_BYTES = 80;
 const ATTENDEE = 0, CHALLENGE = 1, FLAG_HANDLE = 0x02;
 const ATTENDEES = 400;   // cfg::album::ATTENDEES
+const MASTER_FIRST = 901; // cfg::villa::MASTER_FIRST: maestros de villa, uno por TEAMS
 const EXPORT_FORMAT = "bb26-album", EXPORT_VERSION = 1;
 const MAX_FILE_BYTES = 256 * 1024;   // el álbum lleno mide ≈ 52 KB en .json
 // Ruta del QR (album::qrText): bitmap de 50 B y tag de 8 B en base32.
@@ -188,6 +189,8 @@ const QR_RE = /\/A\/(\d{1,5})\/([A-Z2-7]{80})\/([A-Z2-7]{13})\/?$/i;
 const $ = id => document.getElementById(id);
 const utf8 = new TextEncoder();
 const inRange = n => n >= 1 && n <= ATTENDEES;
+const isMaster = c => c.type === ATTENDEE && c.badgeNo >= MASTER_FIRST &&
+                      c.badgeNo < MASTER_FIRST + TEAMS.length;
 
 let album = null;   // { no, mine, entries, numbers, source }
 let tab = 0;
@@ -317,8 +320,10 @@ function vcard(cards) {
     "END:VCARD"].map(vFold).join("\r\n") + "\r\n").join("");
 }
 
-// Contactos: asistentes que compartieron su handle (opt-in, FLAG_HANDLE)
-const hasHandle = c => c.type === ATTENDEE && (c.flags & FLAG_HANDLE) && c.handle !== "";
+// Contactos: asistentes que compartieron su handle (opt-in, FLAG_HANDLE). Los
+// maestros de villa no: su handle es el pedazo del reto de villas.
+const hasHandle = c => c.type === ATTENDEE && (c.flags & FLAG_HANDLE) && c.handle !== "" &&
+                       !isMaster(c);
 const contacts = () => album.entries.map(e => e.card).filter(hasHandle);
 
 function download(text, name) {
@@ -431,6 +436,7 @@ function showDetail(c, order) {
   }));
   const shared = hasHandle(c);
   $("dHandle").textContent = shared ? "Contacto: " + c.handle :
+    isMaster(c) && c.handle ? "Pedazo: " + c.handle.match(/.{1,4}/g).join(" ") :
     c.type !== ATTENDEE ? c.handle : "";
   $("dVcf").hidden = !shared || c.badgeNo === album.no;
   $("dVcf").onclick = () => download(vcard([c]), "bugcon_" + c.badgeNo + ".vcf");
