@@ -390,9 +390,11 @@ header .hint { margin-top: 0; }
       <div class="row">
         <button id="showBtn" disabled>Mostrar slot 0</button>
         <button id="clrBtn" disabled>Pantalla en blanco</button>
+        <button id="delBtn" disabled>Vaciar slot 0</button>
       </div>
       <p class="hint">«Enviar» y «Mostrar» abren la imagen a pantalla completa en el badge. Ahí, B la
-      cierra; sin tocar botones, el badge vuelve solo al inicio al minuto.</p>
+      cierra; sin tocar botones, el badge vuelve solo al inicio al minuto. «Vaciar slot» borra la imagen
+      del badge y deja el slot sin nada (si era el inicio, el badge vuelve al gafete).</p>
     </div>
   </section>
 
@@ -1558,7 +1560,7 @@ function setStatus(msg, cls) {
   $("status").className = cls || "";
 }
 
-const DEVICE_BUTTONS = ["sendBtn", "loadSlotBtn", "showBtn", "clrBtn", "testBtn", "avatarBtn",
+const DEVICE_BUTTONS = ["sendBtn", "loadSlotBtn", "showBtn", "clrBtn", "delBtn", "testBtn", "avatarBtn",
                         "readCardBtn", "saveCardBtn", "tplSendBtn", "tplSlot", "jsonBtn"];
 function deviceButtons(enabled) {
   for (const id of DEVICE_BUTTONS) $(id).disabled = !enabled;
@@ -1854,6 +1856,7 @@ function updateHomeUi() {
     info.home + " en lugar de este gafete.";
   $("sendBtn").textContent = "Enviar al slot " + n;
   $("showBtn").textContent = "Mostrar slot " + n;
+  $("delBtn").textContent = "Vaciar slot " + n;
   updateFullHint();
   render();
 }
@@ -1929,6 +1932,16 @@ $("showBtn").addEventListener("click", async () => {
 });
 
 $("loadSlotBtn").addEventListener("click", () => readSlot(selectedSlot()));
+
+// Deja el slot sin imagen (DEL): no queda en blanco, queda vacío. Si era el inicio, el badge vuelve al gafete.
+$("delBtn").addEventListener("click", async () => {
+  const n = selectedSlot();
+  if (!confirm("¿Vaciar el slot " + n + "? Se borra su imagen del badge y no se puede deshacer.")) return;
+  setStatus("Vaciando el slot " + n + "…", "");
+  if (!await command("DEL " + n, null, () => expectOk("Slot " + n + " vacío"))) return;
+  if (slotSource) clearSource();   // el editor tenía la imagen de este slot (elegirlo la lee)
+  await refreshInfo(true);
+});
 
 async function readSlot(n) {
   if (!port || busy) return;
