@@ -101,6 +101,18 @@ class CatalogTest(unittest.TestCase):
                     self.assertIn(phrase, text)
 
 
+class TabsTest(unittest.TestCase):
+    def test_default_tab_is_template(self):
+        # Al abrir la página la pestaña activa es la plantilla; "Pantalla
+        # completa" existe pero no está seleccionada.
+        html = PAGES["configurator"]
+        self.assertIn('role="tablist"', html)
+        tabs = dict(re.findall(
+            r'<button role="tab"[^>]*data-target="(\w+)"[^>]*'
+            r'aria-selected="(\w+)"', html))
+        self.assertEqual(tabs, {"avatar": "true", "slot": "false"})
+
+
 class PhonePageTest(unittest.TestCase):
     def test_embedded_page_is_current(self):
         header = (SRC / "services/wifi_page.h").read_text(encoding="utf-8")
