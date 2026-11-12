@@ -22,7 +22,9 @@ Pasos, con un badge conectado por USB:
   5. `QA` y espera `RESULT qa PASS|FAIL …`; el operador sigue las
      instrucciones que se imprimen. Necesita el badge dorado (`QA GOLD`).
   6. Con --villa V (maestro de villa): con PASS, `CARD` deja en su estampa
-     team = V y el nombre de la villa como nickname.
+     team = V, el nombre de la villa como nickname y de handle su pedazo del
+     reto de villas (villa_shares[V] de DIR/secrets.json; --villa exige
+     --vestidor DIR y sin secrets.json falla antes de grabar).
   7. Con PASS reinicia el badge (arranca en el gafete, sin la QA ni su hold
      de energía); con FAIL deja el FAIL en la pantalla para apartarlo. Los
      botones de la QA no dan "Debut" (services/specials).
@@ -47,6 +49,7 @@ import csv
 import datetime
 import fcntl
 import glob
+import json
 import os
 import re
 import shutil
@@ -236,10 +239,25 @@ def provision(badge, no, key, mac):
         raise Failure(f"`id` no coincide: {reply}")
 
 
-def set_villa(badge, villa):
-    """Estampa del maestro: su villa y el nombre de la villa de nickname."""
+def villa_share(folder, villa):
+    """Pedazo (20 hex) del reto de villas de la villa `villa`."""
+    path = os.path.join(folder, "secrets.json")
+    try:
+        with open(path) as f:
+            share = json.load(f)["villa_shares"][villa]
+    except (OSError, ValueError, KeyError, IndexError) as e:
+        raise Failure(f"{path}: sin el pedazo de la villa {villa} ({e})")
+    if not re.fullmatch(r"[0-9a-f]{20}", share):
+        raise Failure(f"{path}: pedazo de la villa {villa} inválido: "
+                      f"{share!r}")
+    return share
+
+
+def set_villa(badge, villa, handle):
+    """Estampa del maestro: su villa, el nombre de la villa de nickname y su
+    pedazo del reto de villas de handle."""
     payload = badge_usb.card_fields(badge.my_card(), nick=VILLA_NICKS[villa],
-                                    team=villa)
+                                    team=villa, handle=handle)
     badge.expect_ok("CARD", payload)
 
 
@@ -291,6 +309,12 @@ def main():
     args.esptool = args.esptool or find_esptool()
     if args.villa is not None:
         args.no = MASTER_FIRST + args.villa
+        if not args.vestidor:
+            parser.error("--villa necesita --vestidor DIR (secrets.json)")
+        try:
+            share = villa_share(args.vestidor, args.villa)
+        except Failure as e:
+            parser.error(str(e))
 
     image = open(args.bin, "rb").read()
     littlefs = partition(image, "littlefs")
@@ -331,7 +355,7 @@ def main():
         result = run_qa(badge)
         passed = result.startswith("RESULT qa PASS")
         if passed and args.villa is not None:
-            set_villa(badge, args.villa)
+            set_villa(badge, args.villa, share)
             print(f"Maestro de {VILLA_NICKS[args.villa]}")
         if passed:
             reset(badge)
