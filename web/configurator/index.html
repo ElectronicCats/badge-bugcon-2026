@@ -203,6 +203,19 @@ footer.hint { margin-top: var(--s5); }
 header .hint { margin-top: 0; }
 #howto, #nowebserial { flex-basis: 100%; }
 #nowebserial { color: var(--err); }
+/* pastilla de conexión: punto de color Y texto (el color solo no basta) */
+.pill {
+  display: inline-flex; align-items: center; gap: var(--s2);
+  padding: var(--s1) var(--s3); border-radius: 999px;
+  border: 1px solid var(--border-ctl); background: var(--card2);
+}
+.pill::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.pill[data-state=busy], .pill[data-state=warn] { background: var(--warn-bg); }
+.pill[data-state=busy]::before, .pill[data-state=warn]::before { background: var(--warn); }
+.pill[data-state=on]   { background: var(--ok-bg); }   .pill[data-state=on]::before   { background: var(--ok); }
+.pill[data-state=err]  { background: var(--err-bg); }  .pill[data-state=err]::before  { background: var(--err); }
+/* por qué los botones del badge están deshabilitados */
+.needconn { color: var(--warn); }
 /* pegada arriba: la respuesta del badge se ve aunque el botón quede abajo */
 #statusBar {
   position: sticky; top: 0; z-index: 1;
@@ -217,7 +230,8 @@ header .hint { margin-top: 0; }
 <header>
   <h1>Copa BugCon 2026 · Configurador</h1>
   <button id="connectBtn" class="primary">Conectar</button>
-  <span id="connState" class="hint">sin conexión</span>
+  <span id="connState" class="pill" data-state="off"><span id="connLabel">Sin conexión</span></span>
+  <span id="connInfo" class="hint" hidden></span>
   <p id="howto" class="hint">Abre este archivo en Chrome, Edge o Brave de una computadora y conecta el badge con un cable USB de datos.</p>
   <p id="nowebserial" hidden></p>
 </header>
@@ -282,6 +296,7 @@ header .hint { margin-top: 0; }
       <button id="readCardBtn" disabled>Leer del badge</button>
       <button id="saveCardBtn" class="primary" disabled>Guardar estampa</button>
     </div>
+    <p class="hint needconn" id="needStamp"></p>
 
     <h3>Plantilla Copa BugCon</h3>
     <canvas id="tpl" class="px" width="200" height="200"></canvas>
@@ -387,8 +402,10 @@ header .hint { margin-top: 0; }
 
     <div id="avatarCtl">
       <div class="row"><button id="avatarBtn" class="primary" disabled>Enviar avatar</button></div>
+      <p class="hint needconn" id="needAvatar"></p>
     </div>
     <div id="slotCtl" hidden>
+      <p class="hint needconn" id="needSlot"></p>
       <p class="hint" id="fullHint"></p>
       <div class="slots" id="slots"></div>
       <p class="hint">Elige el slot de destino. Si el editor está vacío, se carga la imagen del slot;
@@ -1588,11 +1605,47 @@ function setStatus(msg, cls) {
   $("status").className = cls || "";
 }
 
+// Pastilla de conexión y avisos "por qué está deshabilitado". Solo pinta: el modo lo
+// fijan la conexión, refreshInfo y disconnect en los mismos puntos donde ya cambiaban el texto.
+// off | opening | reading | on | lost | noserial
+let connMode = hasSerial ? "off" : "noserial";
+const NEEDS = {   // aviso -> botones del badge que describe
+  needStamp:  ["readCardBtn", "saveCardBtn", "tplSendBtn", "tplSlot", "jsonBtn"],
+  needAvatar: ["avatarBtn"],
+  needSlot:   ["sendBtn", "loadSlotBtn", "testBtn", "showBtn", "clrBtn", "delBtn"],
+};
+function paintConn() {
+  const mode = connMode, on = mode === "on";
+  const [state, label] = {
+    off: ["off", "Sin conexión"], opening: ["busy", "Conectando…"], reading: ["busy", "Leyendo el badge…"],
+    lost: ["err", "Conexión perdida"], noserial: ["err", "Sin Web Serial"],
+    on: info ? ["on", "Conectado · Badge #" + info.no] : ["warn", "Conectado · sin identificar"],
+  }[mode];
+  $("connState").dataset.state = state;
+  $("connLabel").textContent = label;
+  const detail = info ? "fw " + info.fw + " · panel " + info.w + "x" + info.h +
+                        " · álbum " + info.album + "/" + info.total : "";
+  $("connInfo").textContent = detail;
+  $("connInfo").hidden = !detail;
+  const offline = mode === "off" || mode === "lost" || mode === "noserial";
+  const why = mode === "noserial" ? "Sin Web Serial no se puede conectar el badge: mira el aviso de arriba."
+                                  : "Conecta el badge para guardar, enviar o leer.";
+  for (const [id, btns] of Object.entries(NEEDS)) {
+    $(id).hidden = !offline;
+    $(id).textContent = why;
+    for (const b of btns) {
+      if (offline) $(b).setAttribute("aria-describedby", id);
+      else $(b).removeAttribute("aria-describedby");
+    }
+  }
+}
+
 const DEVICE_BUTTONS = ["sendBtn", "loadSlotBtn", "showBtn", "clrBtn", "delBtn", "testBtn", "avatarBtn",
                         "readCardBtn", "saveCardBtn", "tplSendBtn", "tplSlot", "jsonBtn"];
 function deviceButtons(enabled) {
   for (const id of DEVICE_BUTTONS) $(id).disabled = !enabled;
 }
+paintConn();
 
 async function readerLoop(rd) {
   let lost = null;
@@ -1664,12 +1717,14 @@ async function readLine(timeoutMs) {
 
 $("connectBtn").addEventListener("click", async () => {
   if (port) { await disconnect(); return; }
+  connMode = "opening"; paintConn();
   try {
     // Solo el badge en la lista: en Linux salen también /dev/ttyS* y otros USB.
     port = await navigator.serial.requestPort({ filters: [{ usbVendorId: BADGE_USB_VENDOR }] });
     await port.open({ baudRate: 115200 });
   } catch (err) {
     port = null;
+    connMode = "off"; paintConn();
     setStatus(connectError(err), "err");
     return;
   }
@@ -1680,13 +1735,14 @@ $("connectBtn").addEventListener("click", async () => {
   readerLoopDone = readerLoop(reader);
   port.addEventListener("disconnect", disconnect);
   $("connectBtn").textContent = "Desconectar";
-  $("connState").textContent = "conectado";
+  connMode = "reading"; paintConn();
   setStatus("Conectado.", "ok");
   await sleep(OPEN_WAIT_MS);
   if (!port) return;   // se perdió en la espera (readerLoop ya avisó)
   deviceButtons(true);
   if (await refreshInfo()) await readCard(true);
   await showSelectedSlot();
+  if (port) { connMode = "on"; paintConn(); }
 });
 
 async function disconnect(ev) {
@@ -1696,7 +1752,8 @@ async function disconnect(ev) {
   info = null;
   updateHomeUi();
   $("connectBtn").textContent = "Conectar";
-  $("connState").textContent = "sin conexión";
+  connMode = ev ? "lost" : "off";   // ev = el cable se salió o falló la lectura
+  paintConn();
   deviceButtons(false);
   // ev = evento "disconnect" del puerto o error de lectura (readerLoop)
   // En Linux el VMIN=0 sobrevive a desconectar el cable (cdc_acm guarda el
@@ -1819,8 +1876,7 @@ async function refreshInfo(keepStatus) {
   info = { fw: m[1], no: +m[2], w: +m[3], h: +m[4], album: +m[5], total: +m[6],
            slots: +m[7], current: +m[8], used: m[9],
            home: m[10] === undefined ? null : +m[10] };   // null = firmware sin imagen de inicio
-  $("connState").textContent = "fw " + info.fw + " · #" + info.no + " · panel " +
-    info.w + "x" + info.h + " · álbum " + info.album + "/" + info.total;
+  paintConn();
   if (info.w !== panel.w || info.h !== panel.h || info.slots !== numSlots) {
     panel = { w: info.w, h: info.h };
     numSlots = info.slots;
