@@ -187,6 +187,16 @@ canvas.px {
 }
 #status.ok { color: var(--ok); background: var(--ok-bg); }
 #status.err { color: var(--err); background: var(--err-bg); }
+/* aviso: la operación ocurrió, pero hay algo que mirar (la clase sigue siendo "err") */
+#status[data-tone=warn] { color: var(--warn); background: var(--warn-bg); }
+#waitHint { font-size: var(--fs-sm); color: var(--muted); }
+#statusLog summary { font-size: var(--fs-sm); color: var(--muted); cursor: pointer; }
+#statusLog ol { list-style: none; margin: var(--s1) 0 0; padding: 0; max-height: 9em; overflow-y: auto; font-size: var(--fs-sm); color: var(--muted); }
+#statusLog li { padding: 2px 0; }
+#statusLog li time { margin-right: var(--s2); }
+#statusLog li.ok { color: var(--ok); }
+#statusLog li.err { color: var(--err); }
+#statusLog li.warn { color: var(--warn); }
 #prog { width: 100%; accent-color: var(--accent); }
 .textline { margin-bottom: var(--s3); }
 .textmain { display: flex; gap: var(--s2); margin-bottom: var(--s1); }
@@ -242,6 +252,8 @@ header .hint { margin-top: 0; }
 <div id="statusBar">
   <div id="status" role="status">Listo.</div>
   <progress id="prog" max="1" value="0" hidden></progress>
+  <span id="waitHint" hidden>Esperando al badge…</span>
+  <details id="statusLog"><summary>Últimos mensajes</summary><ol></ol></details>
 </div>
 
 <nav id="tabs" role="tablist" aria-label="Qué vas a preparar">
@@ -1603,9 +1615,22 @@ let port = null, writer = null, reader = null, readerLoopDone = null;
 let rxChunks = [], rxNotify = null;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// El aviso de panel lento (expectOk) llega como "err"; aquí se ve como aviso sin cambiar la clase.
+const SLOW_RE = /^.*: se mostró, pero el panel tardó/;
 function setStatus(msg, cls) {
+  const tone = cls === "err" && SLOW_RE.test(msg) ? "warn" : (cls || "");
   $("status").textContent = msg;
   $("status").className = cls || "";
+  $("status").dataset.tone = tone;
+  // historial: los últimos 10, el más nuevo arriba
+  const ol = $("statusLog").querySelector("ol");
+  const li = document.createElement("li");
+  li.className = tone;
+  const t = document.createElement("time");
+  t.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  li.append(t, msg);
+  ol.prepend(li);
+  while (ol.children.length > 10) ol.lastChild.remove();
 }
 
 // Pastilla de conexión y avisos "por qué está deshabilitado". Solo pinta: el modo lo
@@ -1650,6 +1675,30 @@ const DEVICE_BUTTONS = ["sendBtn", "loadSlotBtn", "showBtn", "clrBtn", "delBtn",
                         "readCardBtn", "saveCardBtn", "tplSendBtn", "tplSlot", "jsonBtn"];
 function deviceButtons(enabled) {
   for (const id of DEVICE_BUTTONS) $(id).disabled = !enabled;
+  paintBusy();
+}
+
+// Ocupado: command() ya llama a deviceButtons() al empezar y al terminar, así que aquí se
+// pinta sin tocarlo. sendPayload mueve la barra mientras manda bytes; en cuanto llega al
+// final (o no hay payload) pasa a indeterminada, y a los ~2 s aparece "Esperando al badge…".
+let busyTimer = null, busySince = 0;
+function paintBusy() {
+  $("tabpanel").setAttribute("aria-busy", busy);
+  if (!busy) {
+    clearInterval(busyTimer); busyTimer = null;
+    $("waitHint").hidden = true;
+    return;
+  }
+  if (busyTimer) return;
+  busySince = Date.now();
+  busyTimer = setInterval(() => {
+    const p = $("prog");
+    if (p.hidden || (p.hasAttribute("value") && p.value >= p.max)) {
+      p.removeAttribute("value");
+      p.hidden = false;
+    }
+    $("waitHint").hidden = Date.now() - busySince < 2000 || p.hasAttribute("value");
+  }, 150);
 }
 paintConn();
 
