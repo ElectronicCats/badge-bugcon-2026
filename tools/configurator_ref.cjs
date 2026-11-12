@@ -73,7 +73,7 @@ function pageRun() {
   return out;
 }
 
-(async () => {
+if (require.main === module) (async () => {
   const browser = await puppeteer.launch({ executablePath: BROWSER, headless: true });
   try {
     const page = await browser.newPage();
@@ -92,3 +92,5 @@ function pageRun() {
     await browser.close();
   }
 })().catch(e => { console.error(e.message); process.exit(1); });
+
+module.exports = { pageRun };
