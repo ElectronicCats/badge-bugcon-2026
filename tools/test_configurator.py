@@ -22,6 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
+import embed_gfx  # noqa: E402
 import package_web  # noqa: E402
 from embed_page import from_header  # noqa: E402
 
@@ -105,6 +106,11 @@ class PhonePageTest(unittest.TestCase):
         header = (SRC / "services/wifi_page.h").read_text(encoding="utf-8")
         self.assertEqual(gzip.decompress(from_header(header)).decode("utf-8"),
                          PAGES["phone"], "corre tools/embed_page.py")
+
+    def test_badge_gfx_is_current(self):
+        # Fuentes, escudos y textos del gafete iguales a los del firmware
+        self.assertEqual(embed_gfx.current(PAGES["configurator"]),
+                         embed_gfx.block(), "corre tools/embed_gfx.py")
 
     def test_no_external_resources(self):
         # Sin Internet en el AP: todo va en el HTML o se pide al badge.
