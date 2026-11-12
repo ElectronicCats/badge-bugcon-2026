@@ -311,6 +311,9 @@ Es una lista con secciones:
 - **Todas:** un lugar para cada uno de los 400 Badges del evento.
 - **Una sección por villa**, con cuántas tienes de cada una.
 - **Especiales:** las estampas que ganas por logros.
+- **Villas:** las 10 villas del evento y cuáles ya visitaste ("Sí"). En una
+  visitada, **A (Ver)** muestra el pedazo que te dio su villa: lo vas a
+  necesitar.
 
 ### Las páginas
 
