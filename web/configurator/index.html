@@ -57,7 +57,7 @@ h2 {
   color: var(--muted);
   margin-bottom: 10px;
 }
-.card > h2:not(:first-child) { margin-top: 18px; }
+.card h2:not(:first-child) { margin-top: 18px; }
 main {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -144,8 +144,10 @@ canvas.px {
 .slots label:hover { border-color: var(--accent); }
 .slots label:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
 .slots label:has(:checked) { border-color: var(--accent); }
+.slots label { min-width: 0; }
 .slots label.used { color: var(--text); }
-.slots label.used::after { content: " ●"; color: var(--ok); font-size: 10px; vertical-align: middle; }
+.slots small { display: block; font-size: 11px; color: var(--muted); }   /* vacío / imagen · inicio */
+.slots label.home small { color: var(--ok); }
 .slots input:checked + span { color: var(--accent); font-weight: 700; }
 #status {
   padding: 8px 10px;
@@ -256,6 +258,10 @@ header .hint { margin-top: 0; }
     <h2>Plantilla Copa BugCon</h2>
     <canvas id="tpl" class="px" width="200" height="200"></canvas>
     <p class="hint">Así se ve tu gafete en el badge. También puedes ponerlo en un slot.</p>
+    <div class="row" id="tplHomeNote" hidden>
+      <span class="hint" id="tplHomeText"></span>
+      <button class="homeOffBtn">Volver al gafete</button>
+    </div>
     <div class="row">
       <button id="tplSendBtn" disabled>Enviar plantilla al slot</button>
       <select id="tplSlot" aria-label="Slot de destino de la plantilla"></select>
@@ -357,23 +363,34 @@ header .hint { margin-top: 0; }
     <div id="slotCtl" hidden>
       <p class="hint" id="fullHint"></p>
       <div class="slots" id="slots"></div>
-      <p class="hint">Al elegir un slot se carga su imagen en el editor.</p>
+      <p class="hint">Elige el slot de destino. Si el editor está vacío, se carga la imagen del slot;
+      si ya tienes una, no se pierde: usa «Abrir en el editor».</p>
       <div id="homeCtl" hidden>
-        <label><input type="checkbox" id="homeUse"> Usar como inicio</label>
+        <div class="row">
+          <label><input type="checkbox" id="homeUse"> Usar como inicio</label>
+          <span id="homeState" class="hint"></span>
+          <button class="homeOffBtn" hidden>Volver al gafete</button>
+        </div>
         <p class="hint">La imagen reemplaza al gafete en la pantalla de reposo, con la franja de la
-        selección arriba y el pie abajo encima. Se apaga aquí o en el badge, en Ajustes &gt; Pantalla
-        de inicio. La estampa de campeón la reemplaza al cierre del evento.</p>
+        selección arriba y el pie abajo encima. Se apaga con «Volver al gafete» o en el badge, en
+        Ajustes &gt; Pantalla de inicio. La estampa de campeón la reemplaza al cierre del evento.</p>
       </div>
       <label><input type="checkbox" id="guides"> Mostrar guías</label>
       <p class="hint">La línea roja marca la franja de abajo que tapan «Luz» y «Salir» al entrar al Marco
       hasta que pulsas un botón. Con «Usar como inicio» marca también la de arriba: son las que tapan
       la selección y el pie. Es solo una guía: no se envía.</p>
       <div class="row">
-        <button id="sendBtn" class="primary" disabled>Enviar</button>
-        <button id="showBtn" disabled>Mostrar slot</button>
-        <button id="clrBtn" disabled>Limpiar pantalla</button>
+        <button id="sendBtn" class="primary" disabled>Enviar al slot 0</button>
+        <button id="loadSlotBtn" disabled>Abrir en el editor</button>
         <button id="testBtn" disabled>Patrón de prueba</button>
       </div>
+      <h2>En el badge</h2>
+      <div class="row">
+        <button id="showBtn" disabled>Mostrar slot 0</button>
+        <button id="clrBtn" disabled>Pantalla en blanco</button>
+      </div>
+      <p class="hint">«Enviar» y «Mostrar» abren la imagen a pantalla completa en el badge. Ahí, B la
+      cierra; sin tocar botones, el badge vuelve solo al inicio al minuto.</p>
     </div>
   </section>
 
@@ -955,8 +972,9 @@ function fitCanvas(cnv, w, h) {
 
 function updateFullHint() {
   $("fullHint").textContent = "Imagen para toda la pantalla (" + panel.w + " × " + panel.h +
-    "). Se guarda en un slot; la ves en Herramientas > Escritorio > Marco" +
-    (info && info.home !== null ? ", o como pantalla de inicio si marcas «Usar como inicio»." : ".");
+    "). «Enviar» la guarda en el slot elegido y la abre en el badge; después la ves con «Mostrar» " +
+    "o en Herramientas > Escritorio > Marco" +
+    (info && info.home !== null ? ". Para dejarla fija en el badge, marca «Usar como inicio»." : ".");
 }
 
 function setTarget(t) {
@@ -1512,7 +1530,7 @@ function setStatus(msg, cls) {
   $("status").className = cls || "";
 }
 
-const DEVICE_BUTTONS = ["sendBtn", "showBtn", "clrBtn", "testBtn", "avatarBtn",
+const DEVICE_BUTTONS = ["sendBtn", "loadSlotBtn", "showBtn", "clrBtn", "testBtn", "avatarBtn",
                         "readCardBtn", "saveCardBtn", "tplSendBtn", "tplSlot", "jsonBtn"];
 function deviceButtons(enabled) {
   for (const id of DEVICE_BUTTONS) $(id).disabled = !enabled;
@@ -1757,7 +1775,8 @@ async function refreshInfo(keepStatus) {
   return true;
 }
 
-/* selector de slot: al elegirlo también se lee al editor */
+/* selector de slot: con el editor vacío también se lee al editor; con una imagen
+   cargada no la pisa (para eso está «Abrir en el editor») */
 let slotLabels = [];
 function buildSlots() {
   $("slots").innerHTML = "";
@@ -1766,31 +1785,60 @@ function buildSlots() {
   for (let i = 0; i < numSlots; i++) {
     const label = document.createElement("label");
     label.innerHTML = '<input type="radio" name="slot" value="' + i + '"' +
-      (i === 0 ? " checked" : "") + '><span>Slot ' + i + '</span>';
+      (i === 0 ? " checked" : "") + '><span>Slot ' + i + '</span><small></small>';
     $("slots").appendChild(label);
-    label.querySelector("input").addEventListener("click", () => { updateHomeUi(); readSlot(i); });
+    label.querySelector("input").addEventListener("click", () => {
+      updateHomeUi();
+      if (!oriented) readSlot(i);
+    });
     slotLabels.push(label);
     $("tplSlot").add(new Option("Slot " + i, i));
   }
+  updateHomeUi();
 }
 buildSlots();
 
 function updateSlotUi(used, current) {
   for (let i = 0; i < slotLabels.length; i++) {
+    const home = !!info && i === info.home;
     slotLabels[i].classList.toggle("used", used[i] === "1");
+    slotLabels[i].classList.toggle("home", home);
+    slotLabels[i].querySelector("small").textContent =
+      (used[i] === "1" ? "imagen" : "vacío") + (home ? " · inicio" : "");
     $("tplSlot").options[i].text = "Slot " + i + (used[i] === "1" ? " ●" : "");
     slotLabels[i].title = (used[i] === "1" ? "ocupado" : "vacío") +
-      (i === current ? ", en pantalla" : "") + (info && i === info.home ? ", imagen de inicio" : "");
+      (i === current ? ", en pantalla" : "") + (home ? ", imagen de inicio" : "");
   }
 }
 
-/* «Usar como inicio»: refleja si el slot elegido es la imagen de inicio del badge */
+/* al cambiar de slot o de INFO: «Usar como inicio» refleja si el slot elegido es el
+   inicio del badge, los botones nombran el slot y las dos pestañas dicen qué hay de inicio */
 function updateHomeUi() {
-  const supported = !!info && info.home !== null;
+  const supported = !!info && info.home !== null, n = selectedSlot();
+  const home = supported && info.home >= 0;
   $("homeCtl").hidden = !supported;
-  $("homeUse").checked = supported && info.home === selectedSlot();
+  $("homeUse").checked = supported && info.home === n;
+  $("homeState").textContent = home ? "Inicio actual: slot " + info.home : "Inicio actual: el gafete";
+  for (const b of document.querySelectorAll(".homeOffBtn")) b.hidden = !home;
+  $("tplHomeNote").hidden = !home;
+  if (home) $("tplHomeText").textContent = "Ahora el inicio del badge muestra la imagen del slot " +
+    info.home + " en lugar de este gafete.";
+  $("sendBtn").textContent = "Enviar al slot " + n;
+  $("showBtn").textContent = "Mostrar slot " + n;
   updateFullHint();
   render();
+}
+
+for (const b of document.querySelectorAll(".homeOffBtn")) {
+  b.addEventListener("click", async () => {
+    if (await command("HOME OFF", null, () => expectOk("Inicio: el gafete"))) await refreshInfo(true);
+  });
+}
+
+// Tras abrir un slot en el badge: cómo se sale de ahí
+function shownMsg(n) {
+  return "Se ve en la pantalla del badge. B cierra la imagen" +
+    (info && info.home === n ? " y queda como inicio." : "; sin tocar botones vuelve al inicio al minuto.");
 }
 
 /* marcar o desmarcar con el slot ya guardado cambia el inicio al momento; con el slot vacío
@@ -1823,7 +1871,9 @@ async function uploadSlot(n, bits, what, asHome) {
       await command("HOME OFF", null, () => expectOk("Inicio: el gafete"));
     }
   }
-  if (ok) await refreshInfo(true);
+  if (!ok) return;
+  await refreshInfo(true);
+  if ($("status").className === "ok") setStatus(what + " en el slot " + n + ". " + shownMsg(n), "ok");   // no tapa un aviso de panel lento
 }
 
 $("sendBtn").addEventListener("click", () => {
@@ -1844,8 +1894,12 @@ $("showBtn").addEventListener("click", async () => {
   const n = selectedSlot();
   setStatus("Mostrando el slot " + n + "…", "");
   const ok = await command("SHOW " + n, null, () => expectOk("Mostrar slot " + n));
-  if (ok) await refreshInfo(true);
+  if (!ok) return;
+  await refreshInfo(true);
+  if ($("status").className === "ok") setStatus("Slot " + n + ". " + shownMsg(n), "ok");
 });
+
+$("loadSlotBtn").addEventListener("click", () => readSlot(selectedSlot()));
 
 async function readSlot(n) {
   if (!port || busy) return;
@@ -1872,7 +1926,7 @@ async function readSlot(n) {
 
 $("clrBtn").addEventListener("click", () => {
   setStatus("Limpiando…", "");
-  command("CLR", null, () => expectOk("Limpiar"));
+  command("CLR", null, () => expectOk("Pantalla del badge en blanco (B o un minuto sin botones la cierra)"));
 });
 
 $("avatarBtn").addEventListener("click", async () => {
