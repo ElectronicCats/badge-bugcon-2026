@@ -561,6 +561,7 @@ necesitas para usar tu Badge.
 - `agenda.py`: `agenda.csv` a `agenda.cpp`.
 - `ir_codes.py`: base TV-Gone a C++.
 - `embed_page.py`: página del Wi-Fi a `wifi_page.h` comprimida.
+- `embed_gfx.py`: fuentes, escudos y textos del gafete al configurador web, para que su plantilla "Copa BugCon" sea la pantalla del badge.
 - `package_web.py`: empaqueta el configurador en un `.zip` (lo usa la CI).
 - `pc_stubs/Arduino.h`: para compilar en la PC las pruebas de C++.
 
