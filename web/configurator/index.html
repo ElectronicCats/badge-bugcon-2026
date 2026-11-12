@@ -965,6 +965,13 @@ function setTarget(t) {
   $("pvTitle").textContent = "Vista previa (" + W + " × " + H + ")";
   fitCanvas(preview, W, H);
   work.width = W; work.height = H;
+  // El texto no puede quedar fuera del destino (el avatar es más chico que el panel)
+  for (const r of textRows) {
+    for (const [el, max] of [[r.x, W - 1], [r.y, H - 1]]) {
+      el.max = max;
+      if (+el.value > max) el.value = max;
+    }
+  }
   lastBits = null;
   pvCtx.fillStyle = "#fff";
   pvCtx.fillRect(0, 0, W, H);
