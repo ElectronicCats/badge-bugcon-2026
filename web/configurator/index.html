@@ -358,9 +358,16 @@ header .hint { margin-top: 0; }
       <p class="hint" id="fullHint"></p>
       <div class="slots" id="slots"></div>
       <p class="hint">Al elegir un slot se carga su imagen en el editor.</p>
+      <div id="homeCtl" hidden>
+        <label><input type="checkbox" id="homeUse"> Usar como inicio</label>
+        <p class="hint">La imagen reemplaza al gafete en la pantalla de reposo, con la franja de la
+        selección arriba y el pie abajo encima. Se apaga aquí o en el badge, en Ajustes &gt; Pantalla
+        de inicio. La estampa de campeón la reemplaza al cierre del evento.</p>
+      </div>
       <label><input type="checkbox" id="guides"> Mostrar guías</label>
       <p class="hint">La línea roja marca la franja de abajo que tapan «Luz» y «Salir» al entrar al Marco
-      hasta que pulsas un botón. Es solo una guía: no se envía.</p>
+      hasta que pulsas un botón. Con «Usar como inicio» marca también la de arriba: son las que tapan
+      la selección y el pie. Es solo una guía: no se envía.</p>
       <div class="row">
         <button id="sendBtn" class="primary" disabled>Enviar</button>
         <button id="showBtn" disabled>Mostrar slot</button>
@@ -946,6 +953,12 @@ function fitCanvas(cnv, w, h) {
   cnv.style.width = w * s + "px";
 }
 
+function updateFullHint() {
+  $("fullHint").textContent = "Imagen para toda la pantalla (" + panel.w + " × " + panel.h +
+    "). Se guarda en un slot; la ves en Herramientas > Escritorio > Marco" +
+    (info && info.home !== null ? ", o como pantalla de inicio si marcas «Usar como inicio»." : ".");
+}
+
 function setTarget(t) {
   target = t;
   [W, H] = t === "avatar" ? [AVATAR_W, AVATAR_H] : [panel.w, panel.h];
@@ -960,8 +973,7 @@ function setTarget(t) {
     b.tabIndex = on ? 0 : -1;
     if (on) $("tabpanel").setAttribute("aria-labelledby", b.id);
   }
-  $("fullHint").textContent = "Imagen para toda la pantalla (" + panel.w + " × " + panel.h +
-    "). Se guarda en un slot; la ves en Herramientas > Escritorio > Marco.";
+  updateFullHint();
   $("pvTitle").textContent = "Vista previa (" + W + " × " + H + ")";
   fitCanvas(preview, W, H);
   work.width = W; work.height = H;
@@ -1053,6 +1065,7 @@ function refit() {
 $("fit").addEventListener("change", () => { $("bandWrap").hidden = !fitting(); refit(); });
 $("band").addEventListener("change", render);
 $("guides").addEventListener("change", render);
+$("homeUse").addEventListener("change", () => { render(); applyHome(); });
 
 function updateCropFromSlider() {
   if (!oriented) return;
@@ -1212,6 +1225,10 @@ function render() {
     pvCtx.beginPath();
     pvCtx.moveTo(0, H - BAR_HEIGHT + 0.5);
     pvCtx.lineTo(W, H - BAR_HEIGHT + 0.5);
+    if ($("homeUse").checked) {   // como imagen de inicio también tapan la franja de arriba
+      pvCtx.moveTo(0, BAR_HEIGHT - 0.5);
+      pvCtx.lineTo(W, BAR_HEIGHT - 0.5);
+    }
     pvCtx.stroke();
     pvCtx.setLineDash([]);
   }
@@ -1600,6 +1617,7 @@ async function disconnect(ev) {
   const p = port;
   port = null;
   info = null;
+  updateHomeUi();
   $("connectBtn").textContent = "Conectar";
   $("connState").textContent = "sin conexión";
   deviceButtons(false);
@@ -1709,7 +1727,7 @@ async function readPayloadReply(expected) {
   return readBytesExact(+m[1], 5000);
 }
 
-const INFO_RE = /^OK BB26 (\S+) no=(\d+) panel=(\d+)x(\d+) album=(\d+)\/(\d+) slots=(\d+) current=(-?\d+) used=([01]+)$/;
+const INFO_RE = /^OK BB26 (\S+) no=(\d+) panel=(\d+)x(\d+) album=(\d+)\/(\d+) slots=(\d+) current=(-?\d+) used=([01]+)(?: home=(-?\d+))?$/;
 
 async function refreshInfo(keepStatus) {
   if (!port) return false;
@@ -1722,7 +1740,8 @@ async function refreshInfo(keepStatus) {
     return false;
   }
   info = { fw: m[1], no: +m[2], w: +m[3], h: +m[4], album: +m[5], total: +m[6],
-           slots: +m[7], current: +m[8], used: m[9] };
+           slots: +m[7], current: +m[8], used: m[9],
+           home: m[10] === undefined ? null : +m[10] };   // null = firmware sin imagen de inicio
   $("connState").textContent = "fw " + info.fw + " · #" + info.no + " · panel " +
     info.w + "x" + info.h + " · álbum " + info.album + "/" + info.total;
   if (info.w !== panel.w || info.h !== panel.h || info.slots !== numSlots) {
@@ -1732,6 +1751,7 @@ async function refreshInfo(keepStatus) {
     if (target === "slot") setTarget("slot");
   }
   updateSlotUi(info.used, info.current);
+  updateHomeUi();
   renderTemplate();
   if (!keepStatus) setStatus("Badge #" + info.no + ", firmware " + info.fw + ".", "ok");
   return true;
@@ -1748,7 +1768,7 @@ function buildSlots() {
     label.innerHTML = '<input type="radio" name="slot" value="' + i + '"' +
       (i === 0 ? " checked" : "") + '><span>Slot ' + i + '</span>';
     $("slots").appendChild(label);
-    label.querySelector("input").addEventListener("click", () => readSlot(i));
+    label.querySelector("input").addEventListener("click", () => { updateHomeUi(); readSlot(i); });
     slotLabels.push(label);
     $("tplSlot").add(new Option("Slot " + i, i));
   }
@@ -1760,8 +1780,29 @@ function updateSlotUi(used, current) {
     slotLabels[i].classList.toggle("used", used[i] === "1");
     $("tplSlot").options[i].text = "Slot " + i + (used[i] === "1" ? " ●" : "");
     slotLabels[i].title = (used[i] === "1" ? "ocupado" : "vacío") +
-      (i === current ? ", en pantalla" : "");
+      (i === current ? ", en pantalla" : "") + (info && i === info.home ? ", imagen de inicio" : "");
   }
+}
+
+/* «Usar como inicio»: refleja si el slot elegido es la imagen de inicio del badge */
+function updateHomeUi() {
+  const supported = !!info && info.home !== null;
+  $("homeCtl").hidden = !supported;
+  $("homeUse").checked = supported && info.home === selectedSlot();
+  updateFullHint();
+  render();
+}
+
+/* marcar o desmarcar con el slot ya guardado cambia el inicio al momento; con el slot vacío
+   se aplica al enviar la imagen (sendBtn) */
+async function applyHome() {
+  if (!port || !info || info.home === null) return;
+  const n = selectedSlot(), on = $("homeUse").checked;
+  if (info.used[n] !== "1" || (on ? info.home === n : info.home !== n)) return;
+  const ok = await command(on ? "HOME " + n : "HOME OFF", null,
+    () => expectOk(on ? "Inicio: slot " + n : "Inicio: el gafete"));
+  if (ok) await refreshInfo(true);
+  else updateHomeUi();
 }
 
 function selectedSlot() {
@@ -1770,16 +1811,24 @@ function selectedSlot() {
 
 const panelBytes = () => ((panel.w + 7) >> 3) * panel.h;
 
-async function uploadSlot(n, bits, what) {
+// asHome: con «Usar como inicio» marcada o desmarcada, deja el slot (o el gafete) como inicio
+async function uploadSlot(n, bits, what, asHome) {
   setStatus("Enviando " + what + " al slot " + n + "…", "");
   const ok = await command("UPLD " + n, packBits(bits, panel.w, panel.h),
     () => expectOk(what + " al slot " + n));
+  if (ok && asHome && info && info.home !== null) {
+    if ($("homeUse").checked) {
+      await command("HOME " + n, null, () => expectOk("Inicio: slot " + n));
+    } else if (info.home === n) {
+      await command("HOME OFF", null, () => expectOk("Inicio: el gafete"));
+    }
+  }
   if (ok) await refreshInfo(true);
 }
 
 $("sendBtn").addEventListener("click", () => {
   if (!lastBits) { setStatus("Carga una imagen primero.", "err"); return; }
-  uploadSlot(selectedSlot(), lastBits, "Imagen");
+  uploadSlot(selectedSlot(), lastBits, "Imagen", true);
 });
 
 $("testBtn").addEventListener("click", () =>
