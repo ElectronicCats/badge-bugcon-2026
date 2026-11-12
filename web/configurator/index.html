@@ -201,7 +201,9 @@ footer.hint { margin-top: var(--s5); }
 #glossary dt { font-weight: 700; color: var(--text); }
 #glossary dd { margin: 0 0 var(--s2); }
 header .hint { margin-top: 0; }
-#howto, #nowebserial { flex-basis: 100%; }
+#howto, #nowebserial, #lostNotice { flex-basis: 100%; }
+#lostNotice { margin: 0; padding: var(--s2) var(--s3); border-radius: var(--r-md); color: var(--err); background: var(--err-bg); }
+#lostNotice button { margin-left: var(--s2); }
 #nowebserial { color: var(--err); }
 /* pastilla de conexión: punto de color Y texto (el color solo no basta) */
 .pill {
@@ -232,6 +234,7 @@ header .hint { margin-top: 0; }
   <button id="connectBtn" class="primary">Conectar</button>
   <span id="connState" class="pill" data-state="off"><span id="connLabel">Sin conexión</span></span>
   <span id="connInfo" class="hint" hidden></span>
+  <p id="lostNotice" role="alert" hidden><span id="lostText"></span> <button id="lostClose" type="button">Cerrar</button></p>
   <p id="howto" class="hint">Abre este archivo en Chrome, Edge o Brave de una computadora y conecta el badge con un cable USB de datos.</p>
   <p id="nowebserial" hidden></p>
 </header>
@@ -1609,6 +1612,7 @@ function setStatus(msg, cls) {
 // fijan la conexión, refreshInfo y disconnect en los mismos puntos donde ya cambiaban el texto.
 // off | opening | reading | on | lost | noserial
 let connMode = hasSerial ? "off" : "noserial";
+let lostMsg = "";   // aviso fijo junto a «Conectar» tras perder la conexión (el mismo texto de #status)
 const NEEDS = {   // aviso -> botones del badge que describe
   needStamp:  ["readCardBtn", "saveCardBtn", "tplSendBtn", "tplSlot", "jsonBtn"],
   needAvatar: ["avatarBtn"],
@@ -1627,6 +1631,8 @@ function paintConn() {
                         " · álbum " + info.album + "/" + info.total : "";
   $("connInfo").textContent = detail;
   $("connInfo").hidden = !detail;
+  $("lostText").textContent = lostMsg;
+  $("lostNotice").hidden = mode !== "lost";
   const offline = mode === "off" || mode === "lost" || mode === "noserial";
   const why = mode === "noserial" ? "Sin Web Serial no se puede conectar el badge: mira el aviso de arriba."
                                   : "Conecta el badge para guardar, enviar o leer.";
@@ -1745,6 +1751,8 @@ $("connectBtn").addEventListener("click", async () => {
   if (port) { connMode = "on"; paintConn(); }
 });
 
+$("lostClose").addEventListener("click", () => { connMode = "off"; paintConn(); });
+
 async function disconnect(ev) {
   if (ev instanceof Event && ev.target !== port) return;   // un puerto que ya se cerró
   const p = port;
@@ -1753,16 +1761,16 @@ async function disconnect(ev) {
   updateHomeUi();
   $("connectBtn").textContent = "Conectar";
   connMode = ev ? "lost" : "off";   // ev = el cable se salió o falló la lectura
-  paintConn();
   deviceButtons(false);
   // ev = evento "disconnect" del puerto o error de lectura (readerLoop)
   // En Linux el VMIN=0 sobrevive a desconectar el cable (cdc_acm guarda el
   // termios de cada ttyACMn): solo stty lo regresa a 1.
-  if (ev) setStatus("Se perdió la conexión con el badge: revisa el cable y pulsa Conectar." +
+  if (ev) setStatus(lostMsg = "Se perdió la conexión con el badge: revisa el cable y pulsa Conectar." +
                     (IS_LINUX ? " Si pasa en cuanto conectas, otro programa (esptool, pyserial) " +
                     "dejó el puerto en un modo que el navegador no lee: ejecuta " +
                     "stty -F /dev/ttyACM0 min 1 (con el ttyACM de tu badge) y vuelve a conectar." : ""), "err");
   else setStatus("Desconectado.", "");
+  paintConn();
   if (!p) return;
   try { if (writer) { writer.releaseLock(); } } catch (e) {}
   // readable.cancel() rechaza con el reader puesto: se cancela el reader
