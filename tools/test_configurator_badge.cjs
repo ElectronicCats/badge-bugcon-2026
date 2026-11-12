@@ -76,7 +76,7 @@ async function until(page, expr, what, ms = 15000) {
     });
     const sent = await page.evaluate(() => Array.from(packBits(lastBits, panel.w, panel.h)));
     await page.evaluate(() => $("sendBtn").click());
-    await until(page, "!busy && /^Imagen al slot \\d+: OK/.test($('status').textContent)", "UPLD", 45000);
+    await until(page, "!busy && /^Imagen en el slot \\d+\\. Se ve en la pantalla/.test($('status').textContent)", "UPLD", 45000);
     const back = await page.evaluate(() =>
       command("READ " + selectedSlot(), null, () => readPayloadReply(panelBytes()))
         .then(b => Array.from(b)));
