@@ -926,6 +926,7 @@ function setTarget(t) {
   for (const b of $("tabs").children) {
     const on = b.dataset.target === t;
     b.setAttribute("aria-selected", on);
+    b.tabIndex = on ? 0 : -1;
     if (on) $("tabpanel").setAttribute("aria-labelledby", b.id);
   }
   $("fullHint").textContent = "Imagen para toda la pantalla (" + panel.w + " × " + panel.h +
@@ -942,6 +943,15 @@ function setTarget(t) {
 for (const b of $("tabs").children) {
   b.addEventListener("click", () => setTarget(b.dataset.target));
 }
+// ←/→ pasan a la otra pestaña (patrón WAI-ARIA de tabs)
+$("tabs").addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  e.preventDefault();
+  const tabs = [...$("tabs").children];
+  const next = tabs[(tabs.indexOf(document.activeElement) + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+  setTarget(next.dataset.target);
+  next.focus();
+});
 
 /* ---------------- UI: fuente, recorte y orientación ---------------- */
 
