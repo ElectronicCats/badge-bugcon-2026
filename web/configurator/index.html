@@ -125,8 +125,9 @@ canvas.px {
   display: block;
   margin: 0 auto 10px;
 }
-.targets { display: flex; gap: 14px; margin-bottom: 10px; color: var(--muted); }
-.targets label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+#tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 10px; max-width: 1600px; }
+#tabs button { white-space: nowrap; flex: none; }
+#tabs button[aria-selected=true] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .slots { display: flex; gap: 8px; margin-bottom: 10px; }
 .slots label {
   position: relative;
@@ -196,8 +197,13 @@ header .hint { margin-top: 0; }
   <progress id="prog" max="1" value="0" hidden></progress>
 </div>
 
-<main>
-  <section class="card">
+<nav id="tabs" role="tablist" aria-label="Qué vas a preparar">
+  <button role="tab" id="tabAvatar" data-target="avatar" aria-controls="tabpanel" aria-selected="true">Plantilla Copa BugCon</button>
+  <button role="tab" id="tabSlot" data-target="slot" aria-controls="tabpanel" aria-selected="false">Pantalla completa</button>
+</nav>
+
+<main id="tabpanel" role="tabpanel" aria-labelledby="tabAvatar">
+  <section class="card" id="stampCard">
     <h2>Mi estampa</h2>
     <div class="field">
       <label for="nick">Nickname</label>
@@ -323,10 +329,6 @@ header .hint { margin-top: 0; }
 
   <section class="card">
     <h2 id="pvTitle">Vista previa</h2>
-    <div class="targets">
-      <label><input type="radio" name="target" value="avatar" checked> Avatar de la estampa</label>
-      <label><input type="radio" name="target" value="slot"> Gafete (slot)</label>
-    </div>
     <canvas id="preview" class="px" width="96" height="96"></canvas>
     <p class="hint">Lo que ves es exactamente lo que recibe el badge.</p>
 
@@ -334,6 +336,7 @@ header .hint { margin-top: 0; }
       <div class="row"><button id="avatarBtn" class="primary" disabled>Enviar avatar</button></div>
     </div>
     <div id="slotCtl" hidden>
+      <p class="hint" id="fullHint"></p>
       <div class="slots" id="slots"></div>
       <p class="hint">Al elegir un slot se carga su imagen en el editor.</p>
       <div class="row">
@@ -918,6 +921,14 @@ function setTarget(t) {
   [W, H] = t === "avatar" ? [AVATAR_W, AVATAR_H] : [panel.w, panel.h];
   $("avatarCtl").hidden = t !== "avatar";
   $("slotCtl").hidden = t === "avatar";
+  $("stampCard").hidden = t !== "avatar";
+  for (const b of $("tabs").children) {
+    const on = b.dataset.target === t;
+    b.setAttribute("aria-selected", on);
+    if (on) $("tabpanel").setAttribute("aria-labelledby", b.id);
+  }
+  $("fullHint").textContent = "Imagen para toda la pantalla (" + panel.w + " × " + panel.h +
+    "). Se guarda en un slot; la ves en Herramientas > Escritorio > Marco.";
   $("pvTitle").textContent = "Vista previa (" + W + " × " + H + ")";
   fitCanvas(preview, W, H);
   work.width = W; work.height = H;
@@ -927,8 +938,8 @@ function setTarget(t) {
   rebuildOriented(false);
 }
 
-for (const r of document.querySelectorAll("input[name=target]")) {
-  r.addEventListener("change", () => setTarget(r.value));
+for (const b of $("tabs").children) {
+  b.addEventListener("click", () => setTarget(b.dataset.target));
 }
 
 /* ---------------- UI: fuente, recorte y orientación ---------------- */
@@ -1704,10 +1715,7 @@ async function readSlot(n) {
   const cnv = document.createElement("canvas");
   cnv.width = panel.w; cnv.height = panel.h;
   drawBits(cnv.getContext("2d"), unpackBytes(bytes, panel.w, panel.h), panel.w, panel.h);
-  if (target !== "slot") {
-    document.querySelector("input[name=target][value=slot]").checked = true;
-    setTarget("slot");
-  }
+  if (target !== "slot") setTarget("slot");
   setSource(cnv);
   setStatus("Slot " + n + " cargado en el editor.", "ok");
 }
