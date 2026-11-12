@@ -453,6 +453,7 @@ let W = AVATAR_W, H = AVATAR_H;   // tamaño del destino actual
 
 let baseImage = null;      // original como canvas
 let oriented = null;       // baseImage con giro y espejo aplicados
+let slotSource = false;    // baseImage se leyó de un slot: no es una imagen de la persona ni su avatar
 let rot = 0, flipH = false, flipV = false;
 let crop = { cx: 0, cy: 0, size: 0 };   // centro + alto, en coordenadas de `oriented`
 let lastBits = null;       // Uint8Array(W*H), 1 = blanco, resultado de render()
@@ -980,7 +981,20 @@ function updateFullHint() {
     (info && info.home !== null ? ". Para dejarla fija en el badge, marca «Usar como inicio»." : ".");
 }
 
+// Cada pestaña tiene su propia imagen, con su giro, espejo y recorte: el avatar y la
+// imagen de pantalla completa son trabajos distintos. Los ajustes y el texto se comparten.
+const tabImage = {};
+function swapImage(from, to) {
+  tabImage[from] = { baseImage, oriented, rot, flipH, flipV, crop, slotSource, cropPct: $("cropSize").value };
+  const s = tabImage[to] || { baseImage: null, oriented: null, rot: 0, flipH: false, flipV: false,
+                              crop: { cx: 0, cy: 0, size: 0 }, slotSource: false, cropPct: "100" };
+  ({ baseImage, oriented, rot, flipH, flipV, crop, slotSource } = s);
+  $("cropSize").value = s.cropPct; $("cropSizeV").textContent = s.cropPct;
+}
+
 function setTarget(t) {
+  const swap = t !== target;
+  if (swap) swapImage(target, t);
   target = t;
   [W, H] = t === "avatar" ? [AVATAR_W, AVATAR_H] : [panel.w, panel.h];
   $("avatarCtl").hidden = t !== "avatar";
@@ -1008,9 +1022,16 @@ function setTarget(t) {
   lastBits = null;
   pvCtx.fillStyle = "#fff";
   pvCtx.fillRect(0, 0, W, H);
-  if (oriented) updateCropFromSlider();   // el tamaño máximo cambia con el encuadre
+  if (oriented && !swap) updateCropFromSlider();   // el tamaño máximo cambia con el panel
+  drawSource();
   rebuildOriented(false);
   showBadgeAvatar();
+  showSelectedSlot();
+}
+
+// Con el editor vacío, Pantalla completa muestra lo que tiene el slot ya marcado
+function showSelectedSlot() {
+  if (target === "slot" && !oriented) return readSlot(selectedSlot());
 }
 
 for (const b of $("tabs").children) {
@@ -1030,6 +1051,7 @@ $("tabs").addEventListener("keydown", (e) => {
 
 function setSource(canvas) {
   baseImage = canvas;
+  slotSource = false;
   rot = 0; flipH = false; flipV = false;
   rebuildOriented(true);
 }
@@ -1632,6 +1654,7 @@ $("connectBtn").addEventListener("click", async () => {
   if (!port) return;   // se perdió en la espera (readerLoop ya avisó)
   deviceButtons(true);
   if (await refreshInfo()) await readCard(true);
+  await showSelectedSlot();
 });
 
 async function disconnect(ev) {
@@ -1779,8 +1802,8 @@ async function refreshInfo(keepStatus) {
   return true;
 }
 
-/* selector de slot: con el editor vacío también se lee al editor; con una imagen
-   cargada no la pisa (para eso está «Abrir en el editor») */
+/* selector de slot: con el editor vacío o con otro slot leído, se lee al editor; con una
+   imagen de la persona no la pisa (para eso está «Abrir en el editor») */
 let slotLabels = [];
 function buildSlots() {
   $("slots").innerHTML = "";
@@ -1793,7 +1816,7 @@ function buildSlots() {
     $("slots").appendChild(label);
     label.querySelector("input").addEventListener("click", () => {
       updateHomeUi();
-      if (!oriented) readSlot(i);
+      if (!oriented || slotSource) readSlot(i);
     });
     slotLabels.push(label);
     $("tplSlot").add(new Option("Slot " + i, i));
@@ -1917,6 +1940,7 @@ async function readSlot(n) {
   });
   if (!bytes) return;
   if (bytes === "empty") {
+    if (slotSource) clearSource();   // no dejar en la vista previa la imagen de otro slot
     setStatus("El slot " + n + " está vacío.", "");
     return;
   }
@@ -1925,7 +1949,18 @@ async function readSlot(n) {
   drawBits(cnv.getContext("2d"), unpackBytes(bytes, panel.w, panel.h), panel.w, panel.h);
   if (target !== "slot") setTarget("slot");
   setSource(cnv);
+  slotSource = true;
   setStatus("Slot " + n + " cargado en el editor.", "ok");
+}
+
+// vacía el editor (sin imagen fuente)
+function clearSource() {
+  baseImage = oriented = null;
+  slotSource = false;
+  lastBits = null;
+  drawSource();
+  pvCtx.fillStyle = "#fff";
+  pvCtx.fillRect(0, 0, W, H);
 }
 
 $("clrBtn").addEventListener("click", () => {
@@ -1974,10 +2009,10 @@ async function readCard(quiet) {
   if (!quiet) setStatus("Estampa leída del badge" + (badgeAvatar ? ", con su avatar." : "."), "ok");
 }
 
-// Sin imagen en el editor, la plantilla y la vista previa del avatar muestran el del badge;
+// Sin imagen propia en la pestaña Plantilla, la plantilla y la vista previa muestran el avatar del badge;
 // con una imagen cargada manda el editor (es lo que enviaría «Enviar avatar»)
 function showBadgeAvatar() {
-  if (oriented) return;
+  if (target === "avatar" ? oriented : tabImage.avatar && tabImage.avatar.oriented) return;
   avatarBits = badgeAvatar;
   if (target === "avatar" && avatarBits) drawBits(pvCtx, avatarBits, W, H);
   renderTemplate();
