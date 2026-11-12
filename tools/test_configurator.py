@@ -76,6 +76,8 @@ class CatalogTest(unittest.TestCase):
                     self.assertEqual(number(html, web), number(source, fw))
         self.assertEqual(number(PAGES["album"], "ATTENDEES"),
                          number(CONFIG, "ATTENDEES"))
+        self.assertEqual(number(PAGES["album"], "MASTER_FIRST"),
+                         number(CONFIG, "MASTER_FIRST"))
 
     def test_privacy_notice(self):
         # El aviso de privacidad va en las tres páginas y en el LEEME del .zip.
