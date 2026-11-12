@@ -211,7 +211,15 @@ class Commands(unittest.TestCase):
         badge, _ = make_badge(lambda line: (INFO_REPLY + "\n").encode())
         self.assertEqual(badge.info(), {
             "fw": "1.0.0", "no": 42, "w": 200, "h": 200, "album": 25,
-            "total": 400, "slots": 4, "current": 1, "used": "1010"})
+            "total": 400, "slots": 4, "current": 1, "used": "1010",
+            "home": None})
+
+    def test_info_home(self):
+        # El firmware con imagen de inicio la reporta al final de INFO
+        badge, _ = make_badge(lambda line: (INFO_REPLY + " home=2\n").encode())
+        self.assertEqual(badge.info()["home"], 2)
+        badge, _ = make_badge(lambda line: (INFO_REPLY + " home=-1\n").encode())
+        self.assertEqual(badge.info()["home"], -1)
 
     def test_info_current_can_be_negative(self):
         badge, _ = make_badge(lambda line: (

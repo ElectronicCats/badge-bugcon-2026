@@ -53,7 +53,7 @@ ALBUM_HEADER_BYTES = 80  # Cabecera de ALBM; mi estampa va en 16..80
 INFO_RE = re.compile(
     r"^OK BB26 (?P<fw>\S+) no=(?P<no>\d+) panel=(?P<w>\d+)x(?P<h>\d+) "
     r"album=(?P<album>\d+)/(?P<total>\d+) slots=(?P<slots>\d+) "
-    r"current=(?P<current>-?\d+) used=(?P<used>[01]+)$"
+    r"current=(?P<current>-?\d+) used=(?P<used>[01]+)(?: home=(?P<home>-?\d+))?$"
 )
 # Tablas del README: villas (team), posiciones (pos) y colores del notificador.
 VILLAS = {
@@ -170,6 +170,8 @@ class Badge:
         info = m.groupdict()
         for key in ("no", "w", "h", "album", "total", "slots", "current"):
             info[key] = int(info[key])
+        # home solo lo reporta el firmware con imagen de inicio
+        info["home"] = None if info["home"] is None else int(info["home"])
         return info
 
     def upload(self, slot, image):
