@@ -435,6 +435,8 @@ const STATS = ["ATK", "DEF", "HAX", "SUE"];
 const STAT_LABELS = ["Ataque", "Defensa", "Hack", "Suerte"];
 const STAT_MAX = 99, STAT_BUDGET = 200;
 const AVATAR_W = 96, AVATAR_H = 96;
+const AVATAR_BYTES = ((AVATAR_W + 7) >> 3) * AVATAR_H;
+const CARD_FLAG_AVATAR = 0x01;   // card::FLAG_AVATAR: el badge tiene avatar (AVRD lo devuelve)
 const NICK_BYTES = 16, HANDLE_BYTES = 20, NONE = 0xFF;
 const CARD_VERSION = 1, CARD_FIELDS_BYTES = 48, CARD_BYTES = 64;
 const ALBUM_HEADER_BYTES = 80;
@@ -455,6 +457,7 @@ let rot = 0, flipH = false, flipV = false;
 let crop = { cx: 0, cy: 0, size: 0 };   // centro + alto, en coordenadas de `oriented`
 let lastBits = null;       // Uint8Array(W*H), 1 = blanco, resultado de render()
 let avatarBits = null;     // último render del avatar, para la plantilla
+let badgeAvatar = null;    // el avatar guardado en el badge (AVRD); null = no tiene
 
 let myCard = null;         // 64 B de la estampa leída del badge (ALBM)
 let info = null;           // último INFO
@@ -1007,6 +1010,7 @@ function setTarget(t) {
   pvCtx.fillRect(0, 0, W, H);
   if (oriented) updateCropFromSlider();   // el tamaño máximo cambia con el encuadre
   rebuildOriented(false);
+  showBadgeAvatar();
 }
 
 for (const b of $("tabs").children) {
@@ -1932,8 +1936,9 @@ $("clrBtn").addEventListener("click", () => {
 $("avatarBtn").addEventListener("click", async () => {
   if (!avatarBits) { setStatus("Carga una imagen para el avatar primero.", "err"); return; }
   setStatus("Enviando el avatar…", "");
-  await command("AVTR", packBits(avatarBits, AVATAR_W, AVATAR_H),
-    () => expectOk("Avatar"));
+  if (await command("AVTR", packBits(avatarBits, AVATAR_W, AVATAR_H), () => expectOk("Avatar"))) {
+    badgeAvatar = avatarBits;
+  }
 });
 
 // Mi estampa firmada: bytes 16..80 de la cabecera de ALBM
@@ -1957,8 +1962,25 @@ async function readCard(quiet) {
   const data = await fetchAlbum();
   if (!data) return;
   myCard = data.slice(16, 16 + CARD_BYTES);
-  showCard(parseCard(myCard));
-  if (!quiet) setStatus("Estampa leída del badge.", "ok");
+  const c = parseCard(myCard);
+  badgeAvatar = null;
+  if (c.flags & CARD_FLAG_AVATAR) {
+    // Firmware sin AVRD (badcmd) o avatar dañado: la plantilla sale sin avatar, como antes
+    const bytes = await command("AVRD", null, () => readPayloadReply(AVATAR_BYTES).catch(() => null));
+    if (bytes) badgeAvatar = unpackBytes(bytes, AVATAR_W, AVATAR_H);
+  }
+  showCard(c);
+  showBadgeAvatar();
+  if (!quiet) setStatus("Estampa leída del badge" + (badgeAvatar ? ", con su avatar." : "."), "ok");
+}
+
+// Sin imagen en el editor, la plantilla y la vista previa del avatar muestran el del badge;
+// con una imagen cargada manda el editor (es lo que enviaría «Enviar avatar»)
+function showBadgeAvatar() {
+  if (oriented) return;
+  avatarBits = badgeAvatar;
+  if (target === "avatar" && avatarBits) drawBits(pvCtx, avatarBits, W, H);
+  renderTemplate();
 }
 $("readCardBtn").addEventListener("click", () => readCard(false));
 
