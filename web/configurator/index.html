@@ -99,7 +99,10 @@ button {
 }
 button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: 0.45; cursor: default; }
+/* tres variantes: principal (una por bloque), secundario (el de arriba) y destructivo */
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+button.danger { color: var(--err); border-color: var(--err); }
+button.danger:hover:not(:disabled) { background: var(--err-bg); border-color: var(--err); }
 .row { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; margin-bottom: var(--s2); }
 .row > label { display: inline-flex; align-items: center; gap: var(--s2); cursor: pointer; }
 .ctl { display: grid; grid-template-columns: 92px 1fr 44px; align-items: center; gap: var(--s2); margin-bottom: var(--s2); }
@@ -286,7 +289,7 @@ header .hint { margin-top: 0; }
 
     <h3>Álbum</h3>
     <div class="row">
-      <button id="jsonBtn" class="primary" disabled>Guardar .json</button>
+      <button id="jsonBtn" disabled>Guardar .json</button>
     </div>
     <p class="hint">Guarda en tu computadora tu estampa y las de tu álbum; no se envía a
     ningún lado. Incluye el nickname y el handle que cada quien compartió en su estampa.</p>
@@ -407,7 +410,7 @@ header .hint { margin-top: 0; }
       <div class="row">
         <button id="showBtn" disabled>Mostrar slot 0</button>
         <button id="clrBtn" disabled>Pantalla en blanco</button>
-        <button id="delBtn" disabled>Vaciar slot 0</button>
+        <button id="delBtn" class="danger" disabled>Vaciar slot 0</button>
       </div>
       <p class="hint">«Enviar» y «Mostrar» abren la imagen a pantalla completa en el badge. Ahí, B la
       cierra; sin tocar botones, el badge vuelve solo al inicio al minuto. «Vaciar slot» borra la imagen
