@@ -1944,7 +1944,10 @@ $("delBtn").addEventListener("click", async () => {
 });
 
 async function readSlot(n) {
-  if (!port || busy) return;
+  // un clic en otro slot mientras el badge termina algo (p. ej. refresca la pantalla tras
+  // enviar o vaciar un slot) espera su turno en vez de perderse
+  while (busy) await sleep(100);
+  if (!port || n !== selectedSlot()) return;   // desconectado, o ya eligieron otro slot
   const bytes = await command("READ " + n, null, async () => {
     try {
       return await readPayloadReply(panelBytes());
