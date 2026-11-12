@@ -288,6 +288,24 @@ header .hint { margin-top: 0; }
       <input type="range" id="cropSize" min="10" max="100" value="100">
       <output id="cropSizeV">100</output>
     </div>
+    <div id="fitCtl" hidden>
+      <div class="row">
+        <label for="fit">Encuadre</label>
+        <select id="fit">
+          <option value="fill" selected>Rellenar (recorta)</option>
+          <option value="fit">Encajar completa</option>
+        </select>
+        <span id="bandWrap" hidden>
+          <label for="band">Bandas</label>
+          <select id="band">
+            <option value="white" selected>Blanco</option>
+            <option value="black">Negro</option>
+          </select>
+        </span>
+      </div>
+      <p class="hint">Rellenar llena la pantalla y corta lo que sobra; Encajar muestra la imagen entera y deja bandas.
+      Con Invertir, las bandas se invierten igual que la imagen.</p>
+    </div>
     <div class="row">
       <button id="rotBtn">Girar 90°</button>
       <button id="flipHBtn">Espejo H</button>
@@ -340,6 +358,9 @@ header .hint { margin-top: 0; }
       <p class="hint" id="fullHint"></p>
       <div class="slots" id="slots"></div>
       <p class="hint">Al elegir un slot se carga su imagen en el editor.</p>
+      <label><input type="checkbox" id="guides"> Mostrar guías</label>
+      <p class="hint">La línea roja marca la franja de abajo que tapan «Luz» y «Salir» al entrar al Marco
+      hasta que pulsas un botón. Es solo una guía: no se envía.</p>
       <div class="row">
         <button id="sendBtn" class="primary" disabled>Enviar</button>
         <button id="showBtn" disabled>Mostrar slot</button>
@@ -676,7 +697,15 @@ function onControl(id) {
 
 $("autoBtn").addEventListener("click", () => {
   if (!oriented) return;
-  const g = toGray(cropToTarget().getImageData(0, 0, W, H));
+  let g = toGray(cropToTarget().getImageData(0, 0, W, H));
+  const r = imageRect();   // en Encajar, el histograma es solo de la imagen
+  if (r) {
+    const x0 = Math.max(0, Math.ceil(r.x)), x1 = Math.min(W, Math.floor(r.x + r.w));
+    const y0 = Math.max(0, Math.ceil(r.y)), y1 = Math.min(H, Math.floor(r.y + r.h));
+    const inner = [];
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) inner.push(g[y * W + x]);
+    if (inner.length) g = inner;
+  }
   const [lo, hi] = autoLevels(g);
   $("bp").value = lo; $("bpV").textContent = lo;
   $("wp").value = hi; $("wpV").textContent = hi;
@@ -923,6 +952,8 @@ function setTarget(t) {
   $("avatarCtl").hidden = t !== "avatar";
   $("slotCtl").hidden = t === "avatar";
   $("stampCard").hidden = t !== "avatar";
+  $("fitCtl").hidden = t === "avatar";
+  $("bandWrap").hidden = !fitting();
   for (const b of $("tabs").children) {
     const on = b.dataset.target === t;
     b.setAttribute("aria-selected", on);
@@ -937,6 +968,7 @@ function setTarget(t) {
   lastBits = null;
   pvCtx.fillStyle = "#fff";
   pvCtx.fillRect(0, 0, W, H);
+  if (oriented) updateCropFromSlider();   // el tamaño máximo cambia con el encuadre
   rebuildOriented(false);
 }
 
@@ -962,7 +994,11 @@ function setSource(canvas) {
 }
 
 const aspect = () => W / H;   // ancho/alto del recorte = el del destino
-const maxCropH = () => Math.min(oriented.height, oriented.width / aspect());
+// Encajar solo existe en Pantalla completa; en la plantilla el avatar siempre rellena
+const fitting = () => target === "slot" && $("fit").value === "fit";
+const maxCropH = () => fitting()
+  ? Math.max(oriented.height, oriented.width / aspect())   // el recuadro contiene toda la imagen
+  : Math.min(oriented.height, oriented.width / aspect());
 
 function rebuildOriented(resetCrop) {
   if (!baseImage) return;
@@ -995,9 +1031,21 @@ $("flipVBtn").addEventListener("click", () => { flipV = !flipV; rebuildOriented(
 function clampCrop() {
   if (!oriented) return;
   const hw = crop.size * aspect() / 2, hh = crop.size / 2;
-  crop.cx = Math.min(oriented.width - hw, Math.max(hw, crop.cx));
-  crop.cy = Math.min(oriented.height - hh, Math.max(hh, crop.cy));
+  // si el recuadro es más grande que la imagen en un eje, se centra en él
+  const lim = (c, half, len) => half * 2 >= len ? len / 2 : Math.min(len - half, Math.max(half, c));
+  crop.cx = lim(crop.cx, hw, oriented.width);
+  crop.cy = lim(crop.cy, hh, oriented.height);
 }
+
+function refit() {
+  if (!oriented) return;
+  updateCropFromSlider();
+  drawSource();
+  render();
+}
+$("fit").addEventListener("change", () => { $("bandWrap").hidden = !fitting(); refit(); });
+$("band").addEventListener("change", render);
+$("guides").addEventListener("change", render);
 
 function updateCropFromSlider() {
   if (!oriented) return;
@@ -1024,6 +1072,15 @@ function drawSource() {
   const s = srcScale();
   const dw = oriented.width * s, dh = oriented.height * s;
   const ox = (srcCanvas.width - dw) / 2, oy = (srcCanvas.height - dh) / 2;
+  // en Encajar, lo que el recuadro tiene fuera de la imagen son las bandas
+  const cw = crop.size * aspect();
+  const rx = ox + (crop.cx - cw / 2) * s;
+  const ry = oy + (crop.cy - crop.size / 2) * s;
+  const rw = cw * s, rh = crop.size * s;
+  if (fitting()) {
+    srcCtx.fillStyle = bandColor();
+    srcCtx.fillRect(rx, ry, rw, rh);
+  }
   // tablero de fondo para que se vea lo transparente y lo negro
   // (el pipeline pinta lo transparente de blanco)
   for (let y = 0; y < dh; y += 12) {
@@ -1035,10 +1092,6 @@ function drawSource() {
   srcCanvas.style.cursor = "move";
   srcCtx.drawImage(oriented, ox, oy, dw, dh);
   // oscurecer fuera del recorte
-  const cw = crop.size * aspect();
-  const rx = ox + (crop.cx - cw / 2) * s;
-  const ry = oy + (crop.cy - crop.size / 2) * s;
-  const rw = cw * s, rh = crop.size * s;
   srcCtx.fillStyle = "rgba(0,0,0,0.55)";
   srcCtx.fillRect(0, 0, srcCanvas.width, ry);
   srcCtx.fillRect(0, ry + rh, srcCanvas.width, srcCanvas.height - ry - rh);
@@ -1096,11 +1149,26 @@ function srcToImage(e) {
 const work = document.createElement("canvas");
 const workCtx = work.getContext("2d", { willReadFrequently: true });
 
+const bandColor = () => fitting() && $("band").value === "black" ? "#000" : "#fff";
+
+// Rectángulo (px del destino) que ocupa la imagen en Encajar; null en Rellenar
+function imageRect() {
+  if (!fitting()) return null;
+  const cw = crop.size * aspect(), k = W / cw;
+  const x0 = (cw / 2 - crop.cx) * k, y0 = (crop.size / 2 - crop.cy) * k;
+  return { x: x0, y: y0, w: oriented.width * k, h: oriented.height * k };
+}
+
 function cropToTarget() {
   workCtx.imageSmoothingEnabled = true;
   workCtx.imageSmoothingQuality = "high";
-  workCtx.fillStyle = "#fff";
+  workCtx.fillStyle = bandColor();
   workCtx.fillRect(0, 0, W, H);
+  const r = imageRect();
+  if (r && bandColor() === "#000") {   // lo transparente de la imagen sigue siendo blanco
+    workCtx.fillStyle = "#fff";
+    workCtx.fillRect(r.x, r.y, r.w, r.h);
+  }
   const cw = crop.size * aspect();
   workCtx.drawImage(oriented,
     crop.cx - cw / 2, crop.cy - crop.size / 2, cw, crop.size,
@@ -1128,6 +1196,18 @@ function render() {
   bits = overlayText(bits, textLines());
   lastBits = bits;
   drawBits(pvCtx, bits, W, H);
+  if (target === "slot" && $("guides").checked) {
+    // franja que tapan «Luz»/«Salir» al entrar al Marco: cfg::ui::BAR_HEIGHT del firmware
+    const BAR_HEIGHT = 14;
+    pvCtx.strokeStyle = "#e33";
+    pvCtx.lineWidth = 1;
+    pvCtx.setLineDash([4, 3]);
+    pvCtx.beginPath();
+    pvCtx.moveTo(0, H - BAR_HEIGHT + 0.5);
+    pvCtx.lineTo(W, H - BAR_HEIGHT + 0.5);
+    pvCtx.stroke();
+    pvCtx.setLineDash([]);
+  }
   if (target === "avatar") {
     avatarBits = bits;
     renderTemplate();
