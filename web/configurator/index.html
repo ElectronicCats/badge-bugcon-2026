@@ -258,6 +258,7 @@ header .hint { margin-top: 0; }
     <p class="hint">Así se ve tu gafete en el badge. También puedes ponerlo en un slot.</p>
     <div class="row">
       <button id="tplSendBtn" disabled>Enviar plantilla al slot</button>
+      <select id="tplSlot" aria-label="Slot de destino de la plantilla"></select>
     </div>
 
     <h2>Álbum</h2>
@@ -1398,7 +1399,7 @@ function setStatus(msg, cls) {
 }
 
 const DEVICE_BUTTONS = ["sendBtn", "showBtn", "clrBtn", "testBtn", "avatarBtn",
-                        "readCardBtn", "saveCardBtn", "tplSendBtn", "jsonBtn"];
+                        "readCardBtn", "saveCardBtn", "tplSendBtn", "tplSlot", "jsonBtn"];
 function deviceButtons(enabled) {
   for (const id of DEVICE_BUTTONS) $(id).disabled = !enabled;
 }
@@ -1643,6 +1644,7 @@ async function refreshInfo(keepStatus) {
 let slotLabels = [];
 function buildSlots() {
   $("slots").innerHTML = "";
+  $("tplSlot").innerHTML = "";
   slotLabels = [];
   for (let i = 0; i < numSlots; i++) {
     const label = document.createElement("label");
@@ -1651,6 +1653,7 @@ function buildSlots() {
     $("slots").appendChild(label);
     label.querySelector("input").addEventListener("click", () => readSlot(i));
     slotLabels.push(label);
+    $("tplSlot").add(new Option("Slot " + i, i));
   }
 }
 buildSlots();
@@ -1658,6 +1661,7 @@ buildSlots();
 function updateSlotUi(used, current) {
   for (let i = 0; i < slotLabels.length; i++) {
     slotLabels[i].classList.toggle("used", used[i] === "1");
+    $("tplSlot").options[i].text = "Slot " + i + (used[i] === "1" ? " ●" : "");
     slotLabels[i].title = (used[i] === "1" ? "ocupado" : "vacío") +
       (i === current ? ", en pantalla" : "");
   }
@@ -1687,7 +1691,7 @@ $("testBtn").addEventListener("click", () =>
 $("tplSendBtn").addEventListener("click", () => {
   const errs = cardErrors(editedCard());
   if (errs.length) { setStatus("Revisa la estampa: " + errs.join("; ") + ".", "err"); return; }
-  uploadSlot(selectedSlot(), tplBits, "Plantilla");
+  uploadSlot(+$("tplSlot").value, tplBits, "Plantilla");
 });
 
 $("showBtn").addEventListener("click", async () => {
