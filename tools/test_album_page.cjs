@@ -446,6 +446,46 @@ async function checkA1(browser, check, refOut) {
   const esp = await page.$$eval("#grid button.st", l => l.map(b => b.getAttribute("aria-label")));
   check("A3.6 especiales y retos sin «Sin villa»: «Especial 2, Mascota, Oro»",
     esp.includes("Especial 2, Mascota, Oro") && esp.every(s => !s.includes("Sin villa")), JSON.stringify(esp));
+  // A3.7–A3.9: huecos legibles, foco visible y vacío por pestaña
+  await page.click("#tab0");
+  const holes = await page.evaluate(() => {   // el típico no trae dorsales sin datos: uno armado con sticker()
+    $("grid").append(sticker({ no: 401, got: true }));
+    const r = [...document.querySelectorAll("#grid div.st")].map(d => ({ t: d.textContent, got: d.classList.contains("got"),
+      tab: d.tabIndex, sr: getComputedStyle(d.querySelector(".sr")).clipPath }));
+    $("grid").lastChild.remove();
+    return r;
+  });
+  check("A3.7 cada hueco dice su estado en texto oculto y no es parada de Tab",
+    holes.some(h => h.got) && holes.some(h => !h.got) && holes.every(h => h.tab < 0 && h.sr === "inset(50%)" &&
+      h.t === h.t.slice(0, 4) + (h.got ? ", la tienes,sin datos" : ", vacío")),
+    JSON.stringify({ got: holes.filter(h => h.got).length, n: holes.length, bad: holes.find(h => !(h.tab < 0 && h.sr === "inset(50%)" && h.t === h.t.slice(0, 4) + (h.got ? ", la tienes,sin datos" : ", vacío"))) }));
+  await page.focus("#tab0");
+  await page.keyboard.press("ArrowRight");
+  const ring = sel => page.evaluate(s => {
+    const a = s ? document.querySelector(s) : document.activeElement, c = getComputedStyle(a);
+    const t = document.getElementById("tabs").getBoundingClientRect(), r = a.getBoundingClientRect();
+    return { o: c.outlineStyle + " " + c.outlineWidth + " " + c.outlineOffset, color: c.outlineColor,
+             inside: r.top - 4 >= t.top && r.left - 4 >= t.left };
+  }, sel);
+  const rt = await ring();
+  check("A3.8 pestaña con teclado: contorno de 2px separado 2px, sin recortarse en #tabs",
+    rt.o === "solid 2px 2px" && rt.color === "rgb(232, 234, 240)" && rt.inside, JSON.stringify(rt));
+  await page.keyboard.press("Tab");
+  const rs = await ring();
+  check("A3.8 estampa con teclado: el mismo contorno", rs.o === "solid 2px 2px", JSON.stringify(rs));
+  await page.evaluate(() => document.querySelector("#mineSt button").focus());
+  const rm = await ring();
+  check("A3.8 mi estampa: el contorno se aleja del anillo azul", rm.o === "solid 2px 4px", JSON.stringify(rm));
+  await page.goto("file://" + html);
+  await page.evaluate(openAll, CASES["solo mi estampa .json"].map(([n, b]) => [n, b.toString("base64")]));
+  const empties = await page.evaluate(() => [...document.querySelectorAll("#tabs [role=tab]")].slice(1).map(t => {
+    t.click();
+    return [t.textContent, document.querySelector("#grid > p").textContent];
+  }));
+  check("A3.9 vacío por pestaña: la villa por su nombre y «Sin especiales todavía.»",
+    empties.length === 11 && empties.at(-1)[1] === "Sin especiales todavía." && empties.slice(0, -1).every(([t, p]) =>
+      p === "Todavía no tienes estampas de " + t.replace(/ · 0$/, "") + ". Intercambia por infrarrojo con alguien de esa villa."),
+    JSON.stringify(empties));
   // los enlaces resuelven por file:// (relativos) y vuelven
   await page.goto("file://" + html);
   await page.click("a[href='../configurator/index.html']");
