@@ -261,6 +261,66 @@ async function runCase(browser, file, c) {
 // Motivo del error en la página de referencia: «<archivo> no se puede abrir: <motivo>.»
 const reason = s => (s.match(/ no se puede abrir: (.*)\.$/) || [])[1];
 
+// Apertura y errores (A1): lo que la página nueva añade y la referencia no tiene.
+const NEXT_STEPS = ["Guardar álbum (.json)", "Vuelve a guardarlo", "se editó a mano", "unos 52 KB"];
+async function checkA1(browser, check, refOut) {
+  const page = await browser.newPage();
+  const errors = [];
+  page.on("pageerror", e => errors.push(e.message));
+  await page.goto("file://" + html);
+  const links = () => page.$$eval("a[href='../configurator/index.html']", l => l.length);
+  const st = await page.evaluate(() => ({
+    drop: !document.getElementById("drop").hidden, head: !document.getElementById("openBtn").hidden,
+    btn: document.getElementById("openBtn2").textContent, status: document.getElementById("status").textContent }));
+  check("A1 inicio: zona de apertura visible, botón del encabezado oculto",
+    st.drop && !st.head && st.btn === "Abrir álbum…" && st.status === "", JSON.stringify(st));
+  check("A1 inicio: enlace al configurador en el encabezado y en la zona", await links() === 2, await links());
+  check("A1 inicio: la zona dice «Guardar álbum (.json)»",
+    await page.$eval("#drop", e => e.textContent.includes("Guardar álbum (.json)")));
+  // arrastre: entrar, pasar a un hijo (dragenter + dragleave del padre) y salir
+  const over = await page.evaluate(() => {
+    const ev = (type, files) => {
+      const dt = new DataTransfer();
+      if (files) dt.items.add(new File(["x"], "a.json"));
+      return new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true });
+    };
+    const on = () => document.body.classList.contains("over"), r = [];
+    document.dispatchEvent(ev("dragenter", false)); r.push(on());      // sin archivos: nada
+    document.dispatchEvent(ev("dragenter", true)); r.push(on());
+    document.dispatchEvent(ev("dragenter", true)); document.dispatchEvent(ev("dragleave", true)); r.push(on());
+    document.dispatchEvent(ev("dragleave", true)); r.push(on());
+    return r;
+  });
+  check("A1 arrastre: sin parpadeo y sin archivos no resalta", over.join() === "false,true,true,false", over);
+  for (const [n, c] of Object.entries(CASES)) {
+    if (!Array.isArray(c) || c.length !== 1) continue;
+    const r = refOut[n];
+    if (r.snap.album) continue;   // solo los inválidos
+    const s = await page.evaluate(openAll, [[c[0][0], c[0][1].toString("base64")]]);
+    check(`A1 error «${n}»: ⚠, motivo y siguiente paso`,
+      s[0].startsWith("⚠ ") && NEXT_STEPS.some(t => s[0].includes(t)), s[0]);
+  }
+  const ok = await page.evaluate(openAll, CASES["típico .json"].map(([n, b]) => [n, b.toString("base64")]));
+  check("A1 éxito: ✓", ok[0].startsWith("✓ "), ok[0]);
+  check("A1 con álbum: zona oculta, botón del encabezado y enlace visibles",
+    await page.evaluate(() => document.getElementById("drop").hidden && !document.getElementById("openBtn").hidden) &&
+    await links() >= 1);
+  const bad = await page.evaluate(openAll, [["x.json", Buffer.from("{").toString("base64")]]);
+  check("A1 error con álbum abierto: dice qué álbum se sigue viendo",
+    /Sigues viendo el álbum de .+\.$/.test(bad[0]), bad[0]);
+  // los enlaces resuelven por file:// (relativos) y vuelven
+  await page.goto("file://" + html);
+  await page.click("a[href='../configurator/index.html']");
+  await page.waitForFunction(() => document.title.includes("Configurador"));
+  const back = await page.$$eval("a[href='../album/index.html']", l => l.length);
+  check("A1 enlaces: álbum → configurador carga y el configurador enlaza al álbum", back >= 1, back);
+  await page.click("header a[href='../album/index.html']");
+  await page.waitForFunction(() => document.title.includes("Álbum"));
+  check("A1 enlaces: configurador → álbum carga", true);
+  check("A1 sin errores de página", !errors.length, errors.join("; "));
+  await page.close();
+}
+
 if (require.main === module) (async () => {
   const ref = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "album-ref-")), "index.html");
   fs.writeFileSync(ref, execFileSync("git", ["show", REF_COMMIT + ":web/album/index.html"],
@@ -297,6 +357,7 @@ if (require.main === module) (async () => {
         check(`referencia: «${n}» se rechaza`, !r.snap.album && reason(r.status[0]), r.status[0]);
       }
     }
+    await checkA1(browser, check, refOut);
   } finally {
     await browser.close();
     fs.rmSync(path.dirname(ref), { recursive: true, force: true });

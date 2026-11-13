@@ -62,9 +62,14 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 footer.hint { margin-top: 24px; }
 #privacy li { margin: 4px 0 0 18px; }
 #status { padding: 8px 10px; background: var(--card2); border-radius: 6px; color: var(--muted); margin-bottom: 12px; }
+#status:empty { display: none; }
 #status.ok { color: var(--ok); }
 #status.err { color: var(--err); }
 body.over { outline: 2px dashed var(--accent); outline-offset: -6px; }
+a { color: var(--accent); }
+#drop { text-align: center; padding: 32px 16px; margin-bottom: 12px; background: var(--card); border: 2px dashed var(--border); border-radius: 10px; }
+body.over #drop { border-color: var(--accent); background: var(--card2); }
+#drop .big { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 #summary {
   display: flex; gap: 14px; align-items: center;
   background: var(--card); border: 1px solid var(--border); border-radius: 10px;
@@ -114,10 +119,18 @@ dialog::backdrop { background: #000a; }
 
 <header>
   <h1>Copa BugCon 2026 · Álbum</h1>
-  <button id="openBtn">Abrir .json</button>
+  <a href="../configurator/index.html">Abrir el configurador</a>
+  <button id="openBtn" class="primary" hidden>Abrir álbum…</button>
   <input type="file" id="file" accept=".json,.bin,application/json" hidden>
 </header>
-<div id="status" role="status">Abre el .json que guarda el configurador con «Guardar .json».</div>
+<div id="status" role="status"></div>
+
+<section id="drop">
+  <p class="big">Arrastra aquí tu álbum o elígelo</p>
+  <button id="openBtn2" class="primary">Abrir álbum…</button>
+  <p class="hint">Es el archivo que guarda el <a href="../configurator/index.html">configurador</a>
+  con «Guardar álbum (.json)», o <code>tools/badge_usb.py album</code>. También acepta el .bin.</p>
+</section>
 
 <section id="view" hidden>
   <div id="summary">
@@ -196,8 +209,9 @@ let album = null;   // { no, mine, entries, numbers, source }
 let tab = 0;
 
 function setStatus(msg, cls) {
-  $("status").textContent = msg;
+  $("status").textContent = (cls === "ok" ? "✓ " : cls === "err" ? "⚠ " : "") + msg;
   $("status").className = cls || "";
+  $("status").scrollIntoView({ block: "nearest" });
 }
 
 /* ---------------- formato: ALBM y .json (como el configurador) ---------------- */
@@ -415,6 +429,8 @@ function show(a) {
   $("source").textContent = a.source;
   $("mineSt").replaceChildren(a.mine ? sticker({ no: a.no, card: a.mine, got: true, mine: true })
                                      : el("div", "st got", pad(a.no)));
+  $("drop").hidden = true;
+  $("openBtn").hidden = false;
   $("view").hidden = false;
   render();
 }
@@ -465,20 +481,41 @@ async function openFile(f) {
     show(albumFromExport(data, "Archivo " + f.name + when + "."));
     setStatus("Álbum abierto.", "ok");
   } catch (err) {
-    setStatus(f.name + " no se puede abrir: " + err.message + ".", "err");
+    const next = NEXT_STEP.find(([k]) => err.message.includes(k));
+    setStatus(f.name + " no se puede abrir: " + err.message + "." + (next ? " " + next[1] : "") +
+      (album ? " Sigues viendo el álbum de " + (album.mine && album.mine.nickname || pad(album.no)) + "." : ""), "err");
   }
 }
 
-$("openBtn").addEventListener("click", () => $("file").click());
+// Qué hacer después de cada error de exportFromJson / openFile (la primera frase no cambia).
+const NEXT_STEP = [
+  ["no es un álbum", "Elige el .json que guardó el configurador con «Guardar álbum (.json)»."],
+  ["incompleta o dañada", "Vuelve a guardarlo desde el configurador con el badge conectado."],
+  ["resumen no coincide", "El archivo se editó a mano; usa el original."],
+  ["demasiado grande", "El álbum lleno mide unos 52 KB; ¿es el archivo correcto?"],
+];
+
+for (const id of ["openBtn", "openBtn2"]) $(id).addEventListener("click", () => $("file").click());
 $("file").addEventListener("change", e => {
   const f = e.target.files[0];
   e.target.value = "";   // elegir el mismo archivo otra vez también dispara change
   if (f) openFile(f);
 });
-document.addEventListener("dragover", e => { e.preventDefault(); document.body.classList.add("over"); });
-document.addEventListener("dragleave", () => document.body.classList.remove("over"));
+// dragleave se dispara al pasar sobre cada hijo: se cuentan entradas y salidas.
+let dragDepth = 0;
+const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+document.addEventListener("dragenter", e => {
+  if (!hasFiles(e)) return;
+  dragDepth++;
+  document.body.classList.add("over");
+});
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("dragleave", e => {
+  if (hasFiles(e) && --dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("over"); }
+});
 document.addEventListener("drop", e => {
   e.preventDefault();
+  dragDepth = 0;
   document.body.classList.remove("over");
   if (e.dataTransfer.files[0]) openFile(e.dataTransfer.files[0]);
 });
