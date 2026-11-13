@@ -382,11 +382,48 @@ async function checkA1(browser, check, refOut) {
   check("A3.3 etiquetas «Todas · n/400» y «Villa · n» con aria-label",
     /^Todas · \d+\/400$/.test(pn.lab0) && pn.tab0 === pn.lab0.replace(/ · (\d+)\/400/, ", $1 de 400") &&
     /^.+ · \d+$/.test(pn.lab1) && /^.+, \d+ estampas?$/.test(pn.al1), JSON.stringify(pn));
-  await page.focus("#tab1");
+  await page.click("#tab1");   // en «Todas» el filtro va antes del panel (A3.4)
   await page.keyboard.press("Tab");
-  check("A3.2 Tab desde las pestañas entra a la primera estampa del panel",
+  check("A3.2 Tab desde una pestaña de villa entra a la primera estampa del panel",
     await page.evaluate(() => document.getElementById("grid").contains(document.activeElement) &&
                               document.activeElement.tagName === "BUTTON"));
+  // A3.4: filtro de vista «Todas / Tengo / Me faltan» e «Ir al dorsal»
+  const fv = () => page.evaluate(() => {
+    const g = document.getElementById("grid");
+    return { shown: !document.getElementById("filter").hidden, n: g.querySelectorAll("[data-no]").length,
+             empty: g.querySelectorAll(".empty").length, size: album.numbers.size,
+             pressed: [...document.querySelectorAll("#filter [aria-pressed=true]")].map(b => b.dataset.f).join(),
+             ae: document.activeElement.dataset.f || document.activeElement.dataset.no || document.activeElement.id,
+             data: JSON.stringify(sections()) + vcard(contacts()) };
+  });
+  check("A3.4 el filtro solo está en «Todas»", !(await fv()).shown && (await page.click("#tab0"), (await fv()).shown));
+  const f0 = await fv();
+  await page.click("#filter [data-f=got]");
+  const fg = await fv();
+  check("A3.4 «Tengo»: solo los dorsales que tengo, botón pulsado y con el foco",
+    fg.n === fg.size && !fg.empty && fg.pressed === "got" && fg.ae === "got", JSON.stringify({ ...fg, data: 0 }));
+  await page.click("#filter [data-f=missing]");
+  const fm = await fv();
+  check("A3.4 «Me faltan»: solo los huecos vacíos",
+    fm.n === 400 - fm.size && fm.empty === fm.n && fm.pressed === "missing", JSON.stringify({ ...fm, data: 0 }));
+  check("A3.4 el filtro no cambia sections() ni los contactos", f0.data === fg.data && fg.data === fm.data);
+  const go = async n => {
+    await page.click("#goNo", { clickCount: 3 });
+    await page.type("#goNo", String(n));
+    await page.keyboard.press("Enter");
+    return page.evaluate(() => {
+      const a = document.activeElement, r = a.getBoundingClientRect();
+      return { no: a.dataset.no, tag: a.tagName, visible: r.top >= 0 && r.bottom <= innerHeight,
+               pressed: document.querySelector("#filter [aria-pressed=true]").dataset.f };
+    });
+  };
+  const g250 = await go(250);
+  check("A3.4 «Ir al dorsal 250» con «Me faltan»: vuelve a «Todas», enfoca y muestra el 250",
+    g250.no === "250" && g250.visible && g250.pressed === "all", JSON.stringify(g250));
+  const g2 = await go(2);
+  check("A3.4 «Ir al dorsal» enfoca también un hueco vacío", g2.no === "2" && g2.tag === "DIV" && g2.visible, JSON.stringify(g2));
+  const g0 = await go(401);
+  check("A3.4 «Ir al dorsal 401» no se acepta", g0.no === undefined, JSON.stringify(g0));
   // los enlaces resuelven por file:// (relativos) y vuelven
   await page.goto("file://" + html);
   await page.click("a[href='../configurator/index.html']");
