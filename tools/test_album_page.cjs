@@ -182,6 +182,8 @@ const CASES = {
   "QR mal formado": "#/A/12/ABC/DEF",
 };
 
+module.exports = { CASES };
+
 /* ---------------- dentro de la página ---------------- */
 
 // Antes de cargar: las descargas se guardan en window.__dl en vez de bajarse.
@@ -259,7 +261,7 @@ async function runCase(browser, file, c) {
 // Motivo del error en la página de referencia: «<archivo> no se puede abrir: <motivo>.»
 const reason = s => (s.match(/ no se puede abrir: (.*)\.$/) || [])[1];
 
-(async () => {
+if (require.main === module) (async () => {
   const ref = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "album-ref-")), "index.html");
   fs.writeFileSync(ref, execFileSync("git", ["show", REF_COMMIT + ":web/album/index.html"],
                                      { cwd: path.join(__dirname, "..") }));
