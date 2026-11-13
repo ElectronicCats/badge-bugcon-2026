@@ -117,6 +117,46 @@ function tabsRun() {
   return ok;
 }
 
+// Etiquetado y validación en línea (sin badge).
+function a11yRun() {
+  const ok = {};
+  const lbl = id => $(id).getAttribute("aria-label");
+  const type = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event("input")); };
+  ok.canvases_are_img = ["srcCanvas", "preview", "tpl"].every(id => $(id).getAttribute("role") === "img" && lbl(id));
+  ok.preview_avatar_label = lbl("preview") === "Vista previa del avatar, 96 × 96, sin imagen";
+  ok.tpl_label = lbl("tpl") === "Plantilla del gafete con tu estampa";
+  const c = document.createElement("canvas");
+  c.width = 400; c.height = 200;
+  setTarget("slot");
+  setSource(c);
+  ok.preview_slot_label = lbl("preview") === "Vista previa del slot 0, " + panel.w + " × " + panel.h;
+  ok.src_label = lbl("srcCanvas") === "Imagen original, recuadro de recorte al " + $("cropSize").value + " %";
+  $("cropSize").value = 80; $("cropSize").dispatchEvent(new Event("input"));
+  ok.src_label_follows_crop = lbl("srcCanvas") === "Imagen original, recuadro de recorte al 80 %";
+  setTarget("avatar");
+  ok.src_focusable = $("srcCanvas").tabIndex === 0;
+  // validación en línea
+  ok.no_error_at_start = $("nickErr").textContent === "" && $("nick").getAttribute("aria-invalid") === "false";
+  type("nick", "😀");
+  ok.emoji_error = $("nick").getAttribute("aria-invalid") === "true" && /😀/.test($("nickErr").textContent) &&
+    $("nick").getAttribute("aria-describedby") === "nickErr";
+  type("nick", "Ana");
+  ok.error_clears = $("nickErr").textContent === "" && $("nick").getAttribute("aria-invalid") === "false";
+  type("nick", "");
+  ok.empty_quiet_until_blur = $("nickErr").textContent === "";
+  $("nick").dispatchEvent(new Event("blur"));
+  ok.empty_after_blur = $("nickErr").textContent === "Escribe un nickname." && $("nick").getAttribute("aria-invalid") === "true";
+  $("handleOn").checked = true; type("handle", "é".repeat(11));
+  ok.handle_too_long = $("handle").getAttribute("aria-invalid") === "true" && $("handleErr").textContent !== "";
+  // estructura
+  ok.text_rows_in_fieldsets = [...document.querySelectorAll("fieldset.textline > legend")].map(l => l.textContent).join() === "Renglón 1,Renglón 2,Renglón 3";
+  ok.free_points_live = $("freeV").getAttribute("aria-live") === "polite" &&
+    statInputs.every(s => s.getAttribute("aria-describedby") === "freeV");
+  const heads = [...document.querySelectorAll("h1,h2,h3")].map(h => +h.tagName[1]);
+  ok.headings_no_skips = heads.every((n, i) => i === 0 || n <= heads[i - 1] + 1);
+  return ok;
+}
+
 (async () => {
   const browser = await puppeteer.launch({ executablePath: BROWSER, headless: true });
   let failed = 0;
@@ -146,6 +186,48 @@ function tabsRun() {
 
     for (const [k, v] of Object.entries(await run(fitRun))) check("encuadre: " + k, v);
     for (const [k, v] of Object.entries(await run(tabsRun))) check("pestañas: " + k, v);
+    for (const [k, v] of Object.entries(await run(a11yRun))) check("accesibilidad: " + k, v);
+
+    // Recorte con teclado = arrastre: mismos bits. Gradiente 400×200 en Pantalla completa,
+    // recuadro al 50 %; teclado: 5 × → y 2 × ↓ (8 px de imagen cada una); ratón: lo mismo en pantalla.
+    const cropBits = async drive => {
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1366, height: 900 });
+      await page.goto("file://" + html);
+      await page.evaluate(() => {
+        const c = document.createElement("canvas");
+        c.width = 400; c.height = 200;
+        const x = c.getContext("2d"), g = x.createLinearGradient(0, 0, 400, 200);
+        g.addColorStop(0, "#000"); g.addColorStop(1, "#fff");
+        x.fillStyle = g; x.fillRect(0, 0, 400, 200);
+        setTarget("slot"); setSource(c);
+        $("mode").value = "threshold"; $("mode").dispatchEvent(new Event("change"));
+        $("cropSize").value = 50; $("cropSize").dispatchEvent(new Event("input"));
+      });
+      await drive(page);
+      const bits = await page.evaluate(() => [crop.cx, crop.cy, lastBits.join("")]);
+      await page.close();
+      return bits;
+    };
+    const byKeys = await cropBits(async page => {
+      await page.focus("#srcCanvas");
+      for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowRight");
+      for (let i = 0; i < 2; i++) await page.keyboard.press("ArrowDown");
+    });
+    const byMouse = await cropBits(async page => {
+      // pantalla de un punto de imagen (x, y) y de un desplazamiento de imagen (dx, dy)
+      const at = (dx, dy) => page.evaluate((dx, dy) => {
+        const r = srcCanvas.getBoundingClientRect(), s = srcScale(), k = r.width / srcCanvas.width;
+        const ox = (srcCanvas.width - oriented.width * s) / 2, oy = (srcCanvas.height - oriented.height * s) / 2;
+        return [r.left + (ox + (crop.cx + dx) * s) * k, r.top + (oy + (crop.cy + dy) * s) * k];
+      }, dx, dy);
+      const [x0, y0] = await at(0, 0), [x1, y1] = await at(40, 16);
+      await page.mouse.move(x0, y0); await page.mouse.down();
+      await page.mouse.move(x1, y1, { steps: 4 }); await page.mouse.up();
+    });
+    check("recorte: el teclado mueve el recuadro", byKeys[0] !== 200 || byKeys[1] !== 100);
+    check("recorte: teclado = arrastre (mismos bits)", byKeys[2] === byMouse[2] &&
+      Math.abs(byKeys[0] - byMouse[0]) < 0.5 && Math.abs(byKeys[1] - byMouse[1]) < 0.5);
   } finally {
     await browser.close();
   }
