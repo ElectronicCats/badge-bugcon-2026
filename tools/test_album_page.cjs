@@ -619,6 +619,15 @@ async function checkA1(browser, check, refOut) {
   });
   check("A6.3 un <main> con zona, resumen, pestañas y cuadrícula; encabezado y pie fuera",
     land.n === 1 && land.has && land.out && land.top, JSON.stringify(land));
+  // A6.5: sin movimiento. Si algún día se añade una transición o un desplazamiento suave, debe vivir
+  // dentro de @media (prefers-reduced-motion: no-preference).
+  const src = fs.readFileSync(html, "utf8");
+  const moving = (src.match(/<style>([\s\S]*?)<\/style>/)[1]
+    .replace(/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{(?:[^{}]|\{[^{}]*\})*\}/g, "")
+    .match(/\b(transition|animation|scroll-behavior)\b[^;}]*/g) || [])
+    .concat(src.match(/behavior:\s*["']smooth["']/g) || []);
+  check("A6.5 sin transiciones, animaciones ni desplazamiento suave fuera de prefers-reduced-motion: no-preference",
+    !moving.length, moving.join(" | "));
   // A6.4: sin desplazamiento horizontal en las tres medidas, ≥ 3 columnas a 360 px, pestañas con indicio
   const adapt = [];
   for (const [w, h, f] of [[1280, 800, 1], [512, 384, 2], [360, 740, 1]]) {
