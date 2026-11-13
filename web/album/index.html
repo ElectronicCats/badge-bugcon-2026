@@ -130,6 +130,8 @@ dialog::backdrop { background: #000a; }
 .stat i { display: block; height: 8px; background: var(--accent); border-radius: 4px; }
 .stat span:nth-child(2) { text-align: right; font-variant-numeric: tabular-nums; }
 #dHandle { margin-top: 10px; word-break: break-all; }
+#dMsg { color: var(--ok); margin-top: 8px; }
+#dMsg:empty { display: none; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
 </style>
 </head>
@@ -184,8 +186,8 @@ dialog::backdrop { background: #000a; }
   <div id="grid" role="tabpanel"></div>
 </section>
 
-<dialog id="detail">
-  <div id="dNoFace"></div>
+<dialog id="detail" aria-labelledby="dNick" aria-describedby="dMeta">
+  <div id="dNoFace" aria-hidden="true"></div>
   <h2 id="dNick"></h2>
   <p id="dMeta"></p>
   <div id="dStats"></div>
@@ -194,6 +196,7 @@ dialog::backdrop { background: #000a; }
     <button id="dVcf">Guardar contacto (.vcf)</button>
     <form method="dialog"><button>Cerrar</button></form>
   </div>
+  <p id="dMsg" role="status"></p>
 </dialog>
 
 <details id="privacy" open>
@@ -552,20 +555,34 @@ function showDetail(c, order) {
     .filter(Boolean).join(" · ");
   // Las especiales no tienen stats: su descripción va en el handle.
   $("dStats").replaceChildren(...(c.type !== ATTENDEE ? [] : STATS).map((name, i) => {
-    const row = el("div", "stat"), bar = el("i");
-    bar.style.width = Math.min(100, c.stats[i] * 100 / STAT_MAX) + "%";
-    row.append(el("span", "", name), el("span", "", String(c.stats[i])), el("span"));
-    row.lastChild.append(bar);
+    const row = el("div", "stat"), bar = el("i"), v = c.stats[i];
+    bar.style.width = Math.min(100, v * 100 / STAT_MAX) + "%";
+    // la fila visible no se lee: el lector oye «ATK 72 de 99»
+    const vis = [el("span", "", name), el("span", "", String(v)), el("span")];
+    vis.forEach(e => e.setAttribute("aria-hidden", "true"));
+    vis[2].append(bar);
+    row.append(...vis, el("span", "sr", name + " " + v + " de " + STAT_MAX));
     return row;
   }));
   const shared = hasHandle(c);
   $("dHandle").textContent = shared ? "Contacto: " + c.handle :
-    isMaster(c) && c.handle ? "Pedazo: " + c.handle.match(/.{1,4}/g).join(" ") :
+    isMaster(c) && c.handle ? "Pedazo de la gira de villas: " + c.handle.match(/.{1,4}/g).join(" ") :
     c.type !== ATTENDEE ? c.handle : "";
   $("dVcf").hidden = !shared || c.badgeNo === album.no;
-  $("dVcf").onclick = () => download(vcard([c]), "bugcon_" + c.badgeNo + ".vcf");
+  $("dVcf").onclick = () => {
+    download(vcard([c]), "bugcon_" + c.badgeNo + ".vcf");
+    $("dMsg").textContent = "✓ Descargado bugcon_" + c.badgeNo + ".vcf.";
+  };
+  $("dMsg").textContent = "";
   $("detail").showModal();
 }
+
+// Clic en el fondo (fuera del recuadro) cierra; el padding del diálogo también es el
+// propio <dialog>, por eso se compara la posición y no solo event.target.
+$("detail").addEventListener("click", e => {
+  const d = e.currentTarget, r = d.getBoundingClientRect();
+  if (e.target === d && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) d.close();
+});
 
 $("vcfBtn").addEventListener("click", () => {
   const list = contacts();
