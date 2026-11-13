@@ -547,6 +547,36 @@ async function checkA1(browser, check, refOut) {
     low.top >= 0 && low.bottom <= low.h && low.scrolls && low.btn, JSON.stringify(low));
   await page.keyboard.press("Escape");
   await page.setViewport({ width: 1280, height: 800 });
+  // A5: retroalimentación de «Descargar contactos»
+  const vcf = () => page.evaluate(() => {
+    const b = $("vcfBtn").getBoundingClientRect(), m = $("vcfMsg").getBoundingClientRect();
+    return { msg: $("vcfMsg").textContent, live: $("vcfMsg").getAttribute("role"), gap: m.top - b.bottom,
+             status: $("status").textContent, lives: document.querySelectorAll("[role=status]:not(:empty)").length,
+             dis: $("vcfBtn").disabled, why: $("vcfWhy").hidden ? null : $("vcfWhy").textContent,
+             who: $("vcfWho").hidden ? null : [...$("vcfWho").querySelectorAll("li")].map(l => l.textContent),
+             dl: window.__dl.map(d => d.name), n: contacts().length };
+  });
+  await page.evaluate(() => { window.__dl = []; });
+  const v0 = await vcf();
+  check("A5.3–A5.4 con contactos: sin motivo y «Ver quiénes» con número, nick y handle como texto",
+    !v0.dis && v0.why === null && v0.who && v0.who.length === v0.n && v0.n === 4 &&
+    v0.who.includes("#013 a,b;c\\d · @abc") && v0.who.includes("#007 Zoë 🐛 Bug · @zoe,bug;mx\\"),
+    JSON.stringify(v0));
+  await page.click("#vcfBtn");
+  const v1 = await vcf();
+  check("A5.1–A5.2 «Descargado … con 4 contactos» junto al botón, en una sola región que se anuncia",
+    v1.msg === "✓ Descargado contactos_bugcon_34.vcf con 4 contactos. Revisa cada handle antes de confiar en él." &&
+    v1.live === "status" && v1.gap >= 0 && v1.gap < 100 && v1.status === "" && v1.lives === 1 &&
+    v1.dl.join() === "contactos_bugcon_34.vcf", JSON.stringify(v1));
+  await page.evaluate(openAll, CASES["solo mi estampa .json"].map(([n, b]) => [n, b.toString("base64")]));
+  const v2 = await vcf();
+  check("A5.3 sin contactos: deshabilitado con «Nadie de tu álbum compartió su handle.», sin lista ni mensaje viejo",
+    v2.dis && v2.why === "Nadie de tu álbum compartió su handle." && v2.who === null && v2.msg === "", JSON.stringify(v2));
+  const qv = await browser.newPage();
+  await qv.goto("file://" + html + CASES["QR (mi dorsal no viene en el bitmap)"]);
+  const why = await qv.$eval("#vcfWhy", e => e.hidden ? null : e.textContent);
+  await qv.close();
+  check("A5.3 vista QR: «Abre el .json para ver los contactos.»", why === "Abre el .json para ver los contactos.", why);
   // los enlaces resuelven por file:// (relativos) y vuelven
   await page.goto("file://" + html);
   await page.click("a[href='../configurator/index.html']");
