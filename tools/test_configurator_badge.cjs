@@ -45,6 +45,7 @@ async function until(page, expr, what, ms = 15000) {
     const page = await browser.newPage();
     const errors = [];
     page.on("pageerror", e => errors.push(e.message));
+    page.on("dialog", d => d.accept());   // «¿Reemplazar la imagen del slot?» si ya tenía una
     await page.evaluateOnNewDocument(() => {
       const real = navigator.serial;
       real.requestPort = async () => (await real.getPorts())[0];

@@ -101,6 +101,8 @@ main { counter-reset: step; }
   color: var(--accent); font-size: var(--fs-md);
 }
 #stampCard[hidden] ~ .tplOnly { display: none; }   /* Plantilla y Álbum siguen a la estampa */
+main:has(#slotCtl[hidden]) .slotOnly { display: none; }   /* «En el badge» sigue a los controles de slot */
+.row > .danger { margin-left: auto; }   /* lo destructivo, aparte y al final del grupo */
 #privacy { max-width: 1600px; margin-top: var(--s4); }
 #moreAdj { margin-bottom: var(--s2); }
 #moreAdj summary { cursor: pointer; color: var(--accent); min-height: 24px; margin-bottom: var(--s2); }
@@ -170,6 +172,7 @@ canvas.px {
 #tabs { display: flex; gap: var(--s2); overflow-x: auto; padding: var(--s1) var(--s1) var(--s2);   /* holgura para el contorno de foco */ margin-bottom: var(--s3); max-width: 1600px; }
 #tabs button { white-space: nowrap; flex: none; }
 #tabs button[aria-selected=true] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+#tabs .sub { display: block; font-size: var(--fs-sm); font-weight: 400; color: var(--muted); }
 .slots { display: flex; gap: var(--s2); margin-bottom: var(--s3); }
 .slots label {
   position: relative;
@@ -258,7 +261,8 @@ header .hint { margin-top: 0; }
 #statusBar {
   position: sticky; top: 0; z-index: 1;
   display: flex; flex-direction: column; gap: var(--s2);
-  max-width: 1600px; margin: 0 calc(-1 * var(--s4)) var(--s4); padding: var(--s2) var(--s4);
+  /* sale el margen del body a cada lado y lo devuelve en padding: el contenido queda alineado con main */
+  max-width: calc(1600px + 2 * var(--s4)); margin: 0 calc(-1 * var(--s4)) var(--s4); padding: var(--s2) var(--s4);
   background: var(--bg);
 }
 </style>
@@ -283,13 +287,14 @@ header .hint { margin-top: 0; }
 </div>
 
 <nav id="tabs" role="tablist" aria-label="Qué vas a preparar">
-  <button role="tab" id="tabAvatar" data-target="avatar" aria-controls="tabpanel" aria-selected="true">Plantilla Copa BugCon</button>
-  <button role="tab" id="tabSlot" data-target="slot" aria-controls="tabpanel" aria-selected="false">Pantalla completa</button>
+  <button role="tab" id="tabAvatar" data-target="avatar" aria-controls="tabpanel" aria-selected="true">Plantilla Copa BugCon <span class="sub">estampa, avatar y gafete</span></button>
+  <button role="tab" id="tabSlot" data-target="slot" aria-controls="tabpanel" aria-selected="false">Pantalla completa <span class="sub">una imagen de 200×200 en un slot</span></button>
 </nav>
 
 <main id="tabpanel" role="tabpanel" aria-labelledby="tabAvatar">
   <!-- Pasos: el número sale de un contador CSS y salta las tarjetas ocultas de la otra pestaña.
-       Plantilla y Álbum se ocultan con #stampCard (`~ .tplOnly`), que setTarget ya oculta. -->
+       Plantilla y Álbum se ocultan con #stampCard (`~ .tplOnly`) y «En el badge» con #slotCtl
+       (`.slotOnly`), que setTarget ya oculta. -->
   <section class="card step" id="stampCard">
     <h2>Mi estampa</h2>
     <div class="field">
@@ -461,16 +466,21 @@ header .hint { margin-top: 0; }
         <button id="testBtn" disabled>Patrón de prueba</button>
         <span id="slotFlash" class="flash" aria-hidden="true" hidden></span>
       </div>
-      <h3>En el badge</h3>
-      <div class="row">
-        <button id="showBtn" disabled>Mostrar slot 0</button>
-        <button id="clrBtn" disabled>Pantalla en blanco</button>
-        <button id="delBtn" class="danger" disabled>Vaciar slot 0</button>
-      </div>
-      <p class="hint">«Enviar» y «Mostrar» abren la imagen a pantalla completa en el badge. Ahí, B la
-      cierra; sin tocar botones, el badge vuelve solo al inicio al minuto. «Vaciar slot» borra la imagen
-      del badge y deja el slot sin nada (si era el inicio, el badge vuelve al gafete).</p>
     </div>
+  </section>
+
+  <section class="card step slotOnly" id="badgeCard">
+    <h2>En el badge</h2>
+    <p class="hint">Actúa sobre el slot elegido en la vista previa, sin enviar nada del editor.</p>
+    <div class="row">
+      <button id="showBtn" disabled>Mostrar slot 0</button>
+      <button id="clrBtn" disabled>Pantalla en blanco</button>
+      <button id="delBtn" class="danger" disabled>Vaciar slot 0</button>
+    </div>
+    <p class="hint needconn" id="needBadge"></p>
+    <p class="hint">«Enviar» y «Mostrar» abren la imagen a pantalla completa en el badge. Ahí, B la
+    cierra; sin tocar botones, el badge vuelve solo al inicio al minuto. «Vaciar slot» borra la imagen
+    del badge y deja el slot sin nada (si era el inicio, el badge vuelve al gafete).</p>
   </section>
 
   <section class="card step tplOnly" id="tplCard">
@@ -1722,7 +1732,8 @@ const NEEDS = {   // aviso -> botones del badge que describe
   needTpl:    ["tplSendBtn", "tplSlot"],
   needAlbum:  ["jsonBtn"],
   needAvatar: ["avatarBtn"],
-  needSlot:   ["sendBtn", "loadSlotBtn", "testBtn", "showBtn", "clrBtn", "delBtn"],
+  needSlot:   ["sendBtn", "loadSlotBtn", "testBtn"],
+  needBadge:  ["showBtn", "clrBtn", "delBtn"],
 };
 function paintConn() {
   const mode = connMode, on = mode === "on";
@@ -2057,11 +2068,11 @@ function updateSlotUi(used, current) {
     const home = !!info && i === info.home;
     slotLabels[i].classList.toggle("used", used[i] === "1");
     slotLabels[i].classList.toggle("home", home);
-    slotLabels[i].querySelector("small").textContent =
-      (used[i] === "1" ? "imagen" : "vacío") + (home ? " · inicio" : "");
-    $("tplSlot").options[i].text = "Slot " + i + (used[i] === "1" ? " ●" : "");
-    slotLabels[i].title = (used[i] === "1" ? "ocupado" : "vacío") +
-      (i === current ? ", en pantalla" : "") + (home ? ", imagen de inicio" : "");
+    // el mismo texto en los radios y en el selector de la plantilla
+    const state = (used[i] === "1" ? "imagen" : "vacío") + (i === current ? " · en pantalla" : "") +
+                  (home ? " · inicio" : "");
+    slotLabels[i].querySelector("small").textContent = state;
+    $("tplSlot").options[i].text = "Slot " + i + " · " + state;
   }
 }
 
@@ -2131,18 +2142,28 @@ async function uploadSlot(n, bits, what, asHome) {
   if ($("status").className === "ok") setStatus(what + " en el slot " + n + ". " + shownMsg(n), "ok");   // no tapa un aviso de panel lento
 }
 
+// Reemplazar la imagen de un slot pide confirmar, salvo si el editor la leyó de ese mismo slot
+function okToOverwrite(n, fromThisSlot) {
+  return !(info && info.used[n] === "1") || fromThisSlot ||
+    confirm("El slot " + n + " ya tiene una imagen. ¿Reemplazarla? La que tiene se borra del badge.");
+}
+
 $("sendBtn").addEventListener("click", () => {
   if (!lastBits) { setStatus("Carga una imagen primero.", "err"); return; }
+  if (!okToOverwrite(selectedSlot(), slotSource)) return;   // slotSource: el editor tiene el slot elegido
   uploadSlot(selectedSlot(), lastBits, "Imagen", true).then(() => flashResult("slotFlash"));
 });
 
-$("testBtn").addEventListener("click", () =>
+$("testBtn").addEventListener("click", () => {
+  if (!okToOverwrite(selectedSlot(), false)) return;
   uploadSlot(selectedSlot(), testPatternBits(panel.w, panel.h), "Patrón de prueba")
-    .then(() => flashResult("slotFlash")));
+    .then(() => flashResult("slotFlash"));
+});
 
 $("tplSendBtn").addEventListener("click", () => {
   const errs = cardErrors(editedCard());
   if (errs.length) { setStatus("Revisa la estampa: " + errs.join("; ") + ".", "err"); return; }
+  if (!okToOverwrite(+$("tplSlot").value, false)) return;
   uploadSlot(+$("tplSlot").value, tplBits, "Plantilla").then(() => flashResult("tplFlash"));
 });
 
