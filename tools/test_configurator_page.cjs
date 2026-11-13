@@ -203,6 +203,16 @@ function a11yRun() {
     for (const [k, v] of Object.entries(await run(tabsRun))) check("pestañas: " + k, v);
     for (const [k, v] of Object.entries(await run(a11yRun))) check("accesibilidad: " + k, v);
 
+    // Zoom 200 % y 1024 px: sin desplazamiento horizontal en ninguna pestaña (683 = 1366 al 200 %, 960 = 1920 al 200 %)
+    for (const w of [1024, 960, 683]) for (const t of ["avatar", "slot"]) {
+      const page = await browser.newPage();
+      await page.setViewport({ width: w, height: 800 });
+      await page.goto("file://" + html);
+      const sw = await page.evaluate(t => { setTarget(t); return document.documentElement.scrollWidth; }, t);
+      await page.close();
+      check(`sin desplazamiento horizontal a ${w} px en ${t}`, sw <= w);
+    }
+
     // Recorte con teclado = arrastre: mismos bits. Gradiente 400×200 en Pantalla completa,
     // recuadro al 50 %; teclado: 5 × → y 2 × ↓ (8 px de imagen cada una); ratón: lo mismo en pantalla.
     const cropBits = async drive => {
