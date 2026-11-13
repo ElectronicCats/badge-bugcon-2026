@@ -628,6 +628,28 @@ async function checkA1(browser, check, refOut) {
     .concat(src.match(/behavior:\s*["']smooth["']/g) || []);
   check("A6.5 sin transiciones, animaciones ni desplazamiento suave fuera de prefers-reduced-motion: no-preference",
     !moving.length, moving.join(" | "));
+  // A6.6: impresión. Sin controles, tinta oscura sobre blanco, solo la pestaña activa y la cuadrícula.
+  await page.setViewport({ width: 1280, height: 800 });
+  await page.evaluate(openAll, CASES["lleno .json"].map(([n, b]) => [n, b.toString("base64")]));
+  await page.evaluate(() => { document.querySelectorAll("#tabs [role=tab]")[1].click(); });
+  await page.emulateMediaType("print");
+  const pr = await page.evaluate(() => {
+    const shown = q => [...document.querySelectorAll(q)].filter(e => e.offsetParent || getComputedStyle(e).position === "fixed").length;
+    const cs = e => getComputedStyle(e);
+    const rgb = c => c.match(/\d+/g).slice(0, 3).map(Number);
+    const lum = c => rgb(c).reduce((a, b) => a + b, 0) / 3;
+    return { buttons: shown("button:not(.st):not(#tabs button)"), tabs: shown("#tabs button"), inputs: shown("input"),
+      links: shown("header a"), grid: shown("#grid .st"), summary: shown("#summary"), owner: shown("#owner"),
+      bg: cs(document.body).backgroundColor, text: lum(cs(document.body).color), bgL: lum(cs(document.body).backgroundColor),
+      muted: lum(cs(document.querySelector(".hint")).color), width: document.documentElement.scrollWidth, iw: innerWidth };
+  });
+  const pdf = await page.pdf({ format: "A4" });
+  await page.emulateMediaType("screen");
+  check("A6.6 impresión: sin botones, campos ni enlaces; una pestaña (la activa), resumen y cuadrícula visibles",
+    pr.buttons === 0 && pr.inputs === 0 && pr.links === 0 && pr.tabs === 1 && pr.summary === 1 && pr.owner === 1 && pr.grid > 0,
+    JSON.stringify(pr));
+  check("A6.6 impresión: texto oscuro (también el atenuado) sobre fondo blanco y sin desbordar la hoja",
+    pr.bgL > 250 && pr.text < 60 && pr.muted < 130 && pr.width <= pr.iw && pdf.length > 1000, JSON.stringify(pr));
   // A6.4: sin desplazamiento horizontal en las tres medidas, ≥ 3 columnas a 360 px, pestañas con indicio
   const adapt = [];
   for (const [w, h, f] of [[1280, 800, 1], [512, 384, 2], [360, 740, 1]]) {
