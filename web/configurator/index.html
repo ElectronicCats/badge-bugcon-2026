@@ -90,6 +90,18 @@ main {
   border-radius: var(--r-lg);
   padding: var(--s4);
 }
+/* pasos numerados: las tarjetas ocultas (display: none) no cuentan */
+main { counter-reset: step; }
+.step { counter-increment: step; }
+.step > h2::before {
+  content: counter(step) / "Paso " counter(step) ": ";
+  display: inline-grid; place-items: center;
+  width: 1.6em; height: 1.6em; margin-right: var(--s2);
+  border: 1px solid var(--accent); border-radius: 50%;
+  color: var(--accent); font-size: var(--fs-md);
+}
+#stampCard[hidden] ~ .tplOnly { display: none; }   /* Plantilla y Álbum siguen a la estampa */
+#privacy { max-width: 1600px; margin-top: var(--s4); }
 button {
   background: var(--card2);
   color: var(--text);
@@ -274,7 +286,9 @@ header .hint { margin-top: 0; }
 </nav>
 
 <main id="tabpanel" role="tabpanel" aria-labelledby="tabAvatar">
-  <section class="card" id="stampCard">
+  <!-- Pasos: el número sale de un contador CSS y salta las tarjetas ocultas de la otra pestaña.
+       Plantilla y Álbum se ocultan con #stampCard (`~ .tplOnly`), que setTarget ya oculta. -->
+  <section class="card step" id="stampCard">
     <h2>Mi estampa</h2>
     <div class="field">
       <label for="nick">Nickname</label>
@@ -326,32 +340,9 @@ header .hint { margin-top: 0; }
       <span id="cardFlash" class="flash" aria-hidden="true" hidden></span>
     </div>
     <p class="hint needconn" id="needStamp"></p>
-
-    <h3>Plantilla Copa BugCon</h3>
-    <canvas id="tpl" class="px" width="200" height="200"></canvas>
-    <p class="hint">Así se ve tu gafete en el badge. También puedes ponerlo en un slot.</p>
-    <div class="row" id="tplHomeNote" hidden>
-      <span class="hint" id="tplHomeText"></span>
-      <button class="homeOffBtn">Volver al gafete</button>
-    </div>
-    <div class="row">
-      <button id="tplSendBtn" disabled>Enviar plantilla al slot</button>
-      <select id="tplSlot" aria-label="Slot de destino de la plantilla"></select>
-      <span id="tplFlash" class="flash" aria-hidden="true" hidden></span>
-    </div>
-
-    <h3>Álbum</h3>
-    <div class="row">
-      <button id="jsonBtn" disabled>Guardar .json</button>
-      <span id="jsonFlash" class="flash" aria-hidden="true" hidden></span>
-    </div>
-    <p class="hint">Guarda en tu computadora tu estampa y las de tu álbum; no se envía a
-    ningún lado. Incluye el nickname y el handle que cada quien compartió en su estampa.</p>
-    <p class="hint"><a href="../album/index.html" target="_blank">Ver el álbum</a>:
-    abre ahí el .json guardado para ver tus estampas por villa y descargar los contactos.</p>
   </section>
 
-  <section class="card">
+  <section class="card step">
     <h2>Imagen</h2>
     <div id="drop">Arrastra una imagen, pégala del portapapeles<br>o usa los botones.</div>
     <div class="row">
@@ -394,7 +385,7 @@ header .hint { margin-top: 0; }
     <p class="hint">Arrastra el recuadro para encuadrar; cambia su tamaño con el control o la rueda del ratón.</p>
   </section>
 
-  <section class="card">
+  <section class="card step">
     <h2>Ajustes</h2>
     <div class="ctl"><label for="br">Brillo</label><input type="range" id="br" min="-100" max="100" value="0"><output id="brV">0</output></div>
     <div class="ctl"><label for="ct">Contraste</label><input type="range" id="ct" min="-100" max="100" value="0"><output id="ctV">0</output></div>
@@ -426,7 +417,7 @@ header .hint { margin-top: 0; }
     <p class="hint">Arrastra el texto sobre la vista previa para moverlo.</p>
   </section>
 
-  <section class="card">
+  <section class="card step">
     <h2 id="pvTitle">Vista previa</h2>
     <canvas id="preview" class="px" width="96" height="96"></canvas>
     <p class="hint">Lo que ves es exactamente lo que recibe el badge.</p>
@@ -477,22 +468,51 @@ header .hint { margin-top: 0; }
     </div>
   </section>
 
-  <section class="card" id="privacy">
-    <h2>Privacidad</h2>
-    <ul class="hint">
-      <li>No hay servidor ni almacenamiento central: tu estampa, tu avatar y tu álbum
-      se guardan solo en tu badge. Nadie, ni la organización, recibe una copia.</li>
-      <li>Al intercambiar, tu estampa (nickname, villa, posición, estadísticas y dorsal) viaja
-      por infrarrojo al otro badge y se queda en su álbum; no se puede retirar de un badge
-      ajeno. Tu handle solo va si marcas "Compartir mi handle". El avatar y el gafete no
-      salen de tu badge.</li>
-      <li>El .json de "Guardar .json" incluye el nickname y el handle de quienes los
-      compartieron contigo: guárdalo para ti y no lo publiques.</li>
-      <li>Para borrar tu estampa, tu avatar y tu álbum: en el badge, Ajustes &gt; "Borrar
-      datos". Las imágenes del gafete se quedan hasta que subas otras a sus slots.</li>
-    </ul>
+  <section class="card step tplOnly" id="tplCard">
+    <h2>Plantilla del gafete</h2>
+    <canvas id="tpl" class="px" width="200" height="200"></canvas>
+    <p class="hint">Así se ve tu gafete en el badge. También puedes ponerlo en un slot.</p>
+    <div class="row" id="tplHomeNote" hidden>
+      <span class="hint" id="tplHomeText"></span>
+      <button class="homeOffBtn">Volver al gafete</button>
+    </div>
+    <div class="row">
+      <button id="tplSendBtn" class="primary" disabled>Enviar plantilla al slot</button>
+      <select id="tplSlot" aria-label="Slot de destino de la plantilla"></select>
+      <span id="tplFlash" class="flash" aria-hidden="true" hidden></span>
+    </div>
+    <p class="hint needconn" id="needTpl"></p>
+  </section>
+
+  <section class="card step tplOnly" id="albumCard">
+    <h2>Álbum</h2>
+    <div class="row">
+      <button id="jsonBtn" class="primary" disabled>Guardar .json</button>
+      <span id="jsonFlash" class="flash" aria-hidden="true" hidden></span>
+    </div>
+    <p class="hint needconn" id="needAlbum"></p>
+    <p class="hint">Guarda en tu computadora tu estampa y las de tu álbum; no se envía a
+    ningún lado. Incluye el nickname y el handle que cada quien compartió en su estampa.</p>
+    <p class="hint"><a href="../album/index.html" target="_blank">Ver el álbum</a>:
+    abre ahí el .json guardado para ver tus estampas por villa y descargar los contactos.</p>
   </section>
 </main>
+
+<section class="card" id="privacy">
+  <h2>Privacidad</h2>
+  <ul class="hint">
+    <li>No hay servidor ni almacenamiento central: tu estampa, tu avatar y tu álbum
+    se guardan solo en tu badge. Nadie, ni la organización, recibe una copia.</li>
+    <li>Al intercambiar, tu estampa (nickname, villa, posición, estadísticas y dorsal) viaja
+    por infrarrojo al otro badge y se queda en su álbum; no se puede retirar de un badge
+    ajeno. Tu handle solo va si marcas "Compartir mi handle". El avatar y el gafete no
+    salen de tu badge.</li>
+    <li>El .json de "Guardar .json" incluye el nickname y el handle de quienes los
+    compartieron contigo: guárdalo para ti y no lo publiques.</li>
+    <li>Para borrar tu estampa, tu avatar y tu álbum: en el badge, Ajustes &gt; "Borrar
+    datos". Las imágenes del gafete se quedan hasta que subas otras a sus slots.</li>
+  </ul>
+</section>
 
 <footer class="hint">Licencia GPL-3.0 · Código fuente: github.com/ElectronicCats/badge-bugcon-2026</footer>
 
@@ -1690,7 +1710,9 @@ function setStatus(msg, cls) {
 let connMode = hasSerial ? "off" : "noserial";
 let lostMsg = "";   // aviso fijo junto a «Conectar» tras perder la conexión (el mismo texto de #status)
 const NEEDS = {   // aviso -> botones del badge que describe
-  needStamp:  ["readCardBtn", "saveCardBtn", "tplSendBtn", "tplSlot", "jsonBtn"],
+  needStamp:  ["readCardBtn", "saveCardBtn"],
+  needTpl:    ["tplSendBtn", "tplSlot"],
+  needAlbum:  ["jsonBtn"],
   needAvatar: ["avatarBtn"],
   needSlot:   ["sendBtn", "loadSlotBtn", "testBtn", "showBtn", "clrBtn", "delBtn"],
 };
