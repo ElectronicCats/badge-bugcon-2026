@@ -148,6 +148,13 @@ input:disabled, select:disabled { color: var(--disabled); border-color: var(--bo
 .field label { color: var(--muted); }
 .field output { text-align: right; font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
 .field output.bad { color: var(--err); }
+/* mensaje de validación bajo el campo: región viva siempre presente, vacía sin ocupar sitio */
+.fielderr { color: var(--err); font-size: var(--fs-sm); margin: 0 0 var(--s2) calc(92px + var(--s2)); }
+.fielderr:empty { margin: 0; }
+input[type=text][aria-invalid=true] { border-color: var(--err); }
+#freeV { text-transform: none; }
+#freeV::before { content: "· "; }
+#cropKeys { display: block; }
 #drop {
   border: 2px dashed var(--border-ctl);
   border-radius: var(--r-lg);
@@ -227,7 +234,8 @@ canvas.px {
 #statusLog li.err { color: var(--err); }
 #statusLog li.warn { color: var(--warn); }
 #prog { width: 100%; accent-color: var(--accent); }
-.textline { margin-bottom: var(--s3); }
+.textline { border: 0; padding: 0; min-width: 0; margin-bottom: var(--s3); }
+.textline legend { padding: 0; margin-bottom: var(--s1); color: var(--muted); font-size: var(--fs-sm); }
 .textmain { display: flex; gap: var(--s2); margin-bottom: var(--s1); }
 .textmain input { flex: 1; min-width: 0; }
 .textopts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); color: var(--muted); font-size: var(--fs-sm); }
@@ -299,9 +307,10 @@ header .hint { margin-top: 0; }
     <h2>Mi estampa</h2>
     <div class="field">
       <label for="nick">Nickname</label>
-      <input type="text" id="nick" value="" autocomplete="off">
+      <input type="text" id="nick" value="" autocomplete="off" aria-describedby="nickErr">
       <output id="nickV">0/16 B</output>
     </div>
+    <p class="fielderr" id="nickErr" aria-live="polite"></p>
     <div class="field">
       <label for="team">Villa</label>
       <select id="team"></select><span></span>
@@ -310,7 +319,7 @@ header .hint { margin-top: 0; }
       <label for="pos">Posición</label>
       <select id="pos"></select><span></span>
     </div>
-    <h3>Estadísticas <span id="freeV" style="text-transform:none"></span></h3>
+    <h3>Estadísticas <span id="freeV" aria-live="polite" aria-atomic="true"></span></h3>
     <div id="statRows"></div>
     <details id="glossary" class="hint">
       <summary>¿Qué hace cada estadística en la Copa?</summary>
@@ -334,9 +343,10 @@ header .hint { margin-top: 0; }
     </div>
     <div class="field">
       <label for="handle">Handle</label>
-      <input type="text" id="handle" placeholder="@usuario" autocomplete="off" disabled>
+      <input type="text" id="handle" placeholder="@usuario" autocomplete="off" aria-describedby="handleErr" disabled>
       <output id="handleV">0/20 B</output>
     </div>
+    <p class="fielderr" id="handleErr" aria-live="polite"></p>
     <p class="hint">El handle viaja por infrarrojo dentro de tu estampa a cada badge con el
     que intercambies, y aparece en su álbum. Solo se envía si marcas la casilla.
     El avatar se queda en tu badge (no viaja por IR).</p>
@@ -360,7 +370,7 @@ header .hint { margin-top: 0; }
       <button id="camOffBtn" hidden>Cancelar</button>
     </div>
     <video id="video" autoplay playsinline></video>
-    <div id="srcWrap"><canvas id="srcCanvas" width="320" height="320"></canvas></div>
+    <div id="srcWrap"><canvas id="srcCanvas" width="320" height="320" role="img" tabindex="0" aria-label="Imagen original" aria-describedby="cropKeys"></canvas></div>
     <div class="ctl">
       <label for="cropSize">Recorte</label>
       <input type="range" id="cropSize" min="10" max="100" value="100">
@@ -389,7 +399,8 @@ header .hint { margin-top: 0; }
       <button id="flipHBtn">Espejo H</button>
       <button id="flipVBtn">Espejo V</button>
     </div>
-    <p class="hint">Arrastra el recuadro para encuadrar; cambia su tamaño con el control o la rueda del ratón.</p>
+    <p class="hint">Arrastra el recuadro para encuadrar; cambia su tamaño con el control o la rueda del ratón.
+    <span id="cropKeys">Con el teclado, enfoca la imagen: Flechas: mover · +/−: tamaño · Mayús: más rápido.</span></p>
   </section>
 
   <section class="card step">
@@ -429,7 +440,7 @@ header .hint { margin-top: 0; }
 
   <section class="card step">
     <h2 id="pvTitle">Vista previa</h2>
-    <canvas id="preview" class="px" width="96" height="96"></canvas>
+    <canvas id="preview" class="px" width="96" height="96" role="img" aria-label="Vista previa"></canvas>
     <p class="hint">Lo que ves es exactamente lo que recibe el badge.</p>
 
     <div id="avatarCtl">
@@ -485,7 +496,7 @@ header .hint { margin-top: 0; }
 
   <section class="card step tplOnly" id="tplCard">
     <h2>Plantilla del gafete</h2>
-    <canvas id="tpl" class="px" width="200" height="200"></canvas>
+    <canvas id="tpl" class="px" width="200" height="200" role="img" aria-label="Plantilla del gafete con tu estampa"></canvas>
     <p class="hint">Así se ve tu gafete en el badge. También puedes ponerlo en un slot.</p>
     <div class="row" id="tplHomeNote" hidden>
       <span class="hint" id="tplHomeText"></span>
@@ -874,12 +885,13 @@ $("resetBtn").addEventListener("click", () => {
 // Renglones de texto encima de la imagen
 const textRows = [];
 for (let i = 0; i < 3; i++) {
-  const div = document.createElement("div");
+  const div = document.createElement("fieldset");
   div.className = "textline";
   div.innerHTML =
+    '<legend>Renglón ' + (i+1) + '</legend>' +
     '<div class="textmain">' +
-      '<input type="text" placeholder="Renglón ' + (i+1) + '" aria-label="Renglón ' + (i+1) + '">' +
-      '<select aria-label="Color del renglón ' + (i+1) + '"><option value="black">Negro</option><option value="white">Blanco</option></select>' +
+      '<input type="text" placeholder="Texto" aria-label="Texto">' +
+      '<select aria-label="Color"><option value="black">Negro</option><option value="white">Blanco</option></select>' +
     '</div>' +
     '<div class="textopts">' +
       '<label>Tamaño <input type="number" min="6" max="80" value="20"></label>' +
@@ -1409,6 +1421,44 @@ function render() {
   }
 }
 
+/* nombres accesibles de los lienzos: se repintan cada vez que se repinta el lienzo, desde aquí
+   y no dentro de drawSource/render (envueltas abajo) */
+
+function setLabel(el, text) {
+  if (el.getAttribute("aria-label") !== text) el.setAttribute("aria-label", text);
+}
+function paintLabels() {
+  setLabel($("srcCanvas"), oriented
+    ? "Imagen original, recuadro de recorte al " + $("cropSize").value + " %"
+    : "Imagen original: todavía no hay imagen");
+  setLabel($("preview"), (target === "avatar" ? "Vista previa del avatar" : "Vista previa del slot " + selectedSlot()) +
+    ", " + W + " × " + H + (oriented ? "" : ", sin imagen"));
+}
+for (const name of ["drawSource", "render"]) {
+  const inner = globalThis[name];
+  globalThis[name] = function () { const r = inner.apply(this, arguments); paintLabels(); return r; };
+}
+
+// Recorte con teclado: lo mismo que el arrastre y la rueda, sobre crop.cx/cy/size
+srcCanvas.addEventListener("keydown", e => {
+  if (!oriented || e.ctrlKey || e.altKey || e.metaKey) return;
+  const step = (e.shiftKey ? 0.10 : 0.02) * Math.max(oriented.width, oriented.height);
+  const move = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  const zoom = { "+": 1.05, "=": 1.05, "-": 0.95, "_": 0.95 }[e.key];
+  if (!move && !zoom) return;
+  e.preventDefault();
+  if (move) { crop.cx += move[0] * step; crop.cy += move[1] * step; }
+  else {
+    const max = maxCropH();
+    crop.size = Math.min(max, Math.max(10, crop.size * zoom));
+    $("cropSize").value = Math.round(crop.size / max * 100);
+    $("cropSizeV").textContent = $("cropSize").value;
+  }
+  clampCrop();
+  drawSource();
+  render();
+});
+
 /* arrastrar los renglones de texto sobre la vista previa */
 
 const measureCtx = document.createElement("canvas").getContext("2d");
@@ -1554,6 +1604,7 @@ const statInputs = STATS.map((name, i) => {
     '<output id="st' + i + 'V">0</output>';
   $("statRows").appendChild(div);
   const input = div.querySelector("input");
+  input.setAttribute("aria-describedby", "freeV");   // cuántos puntos quedan por repartir
   // el presupuesto se respeta al mover: no deja pasar de STAT_BUDGET
   input.addEventListener("input", () => {
     const others = statValues().reduce((a, v) => a + v, 0) - +input.value;
@@ -1588,7 +1639,7 @@ function cardErrors(c) {
 function onCardEdit() {
   statInputs.forEach((s, i) => { $("st" + i + "V").textContent = s.value; });
   const used = statValues().reduce((a, v) => a + v, 0);
-  $("freeV").textContent = "· puntos libres: " + (STAT_BUDGET - used);
+  $("freeV").textContent = "puntos libres: " + (STAT_BUDGET - used);
   const c = editedCard();
   const nb = utf8.encode(c.nickname).length, hb = utf8.encode(c.handle).length;
   $("nickV").textContent = nb + "/" + NICK_BYTES + " B";
@@ -1596,7 +1647,26 @@ function onCardEdit() {
   $("handleV").textContent = hb + "/" + HANDLE_BYTES + " B";
   $("handleV").classList.toggle("bad", !!textError(c.handle, HANDLE_BYTES, "handle"));
   $("handle").disabled = !$("handleOn").checked;
+  paintFieldErrors(c, nb);
   renderTemplate();
+}
+
+// Mensaje bajo nickname y handle (el texto de textError) y aria-invalid. «Escribe un nickname»
+// solo después de salir del campo o de intentar guardar; los demás errores salen al escribir.
+const touchedNick = { v: false };
+const sentence = s => s ? s[0].toUpperCase() + s.slice(1) + "." : "";
+function paintFieldErrors(c, nb) {
+  const msgs = {
+    nick: sentence(textError(c.nickname, NICK_BYTES, "nickname")) || (!nb && touchedNick.v ? "Escribe un nickname." : ""),
+    handle: sentence(textError(c.handle, HANDLE_BYTES, "handle")),
+  };
+  for (const id of ["nick", "handle"]) {
+    if ($(id + "Err").textContent !== msgs[id]) $(id + "Err").textContent = msgs[id];
+    $(id).setAttribute("aria-invalid", !!msgs[id]);
+  }
+}
+for (const [id, ev] of [["nick", "blur"], ["saveCardBtn", "click"], ["tplSendBtn", "click"]]) {
+  $(id).addEventListener(ev, () => { touchedNick.v = true; onCardEdit(); });
 }
 for (const id of ["nick", "team", "pos", "handle", "handleOn"]) {
   $(id).addEventListener("input", onCardEdit);
