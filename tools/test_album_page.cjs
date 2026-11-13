@@ -1,0 +1,303 @@
+#!/usr/bin/env node
+/*
+ * test_album_page.cjs — El álbum web (web/album/index.html) interpreta y
+ * exporta lo mismo que una versión de referencia de la página.
+ *
+ * Arma en memoria álbumes sintéticos (.bin de ALBM y .json bb26-album, sin
+ * badge ni datos reales), archivos inválidos y rutas del QR; abre cada uno en
+ * las dos páginas (Brave headless, file://) y compara: las secciones y su
+ * contenido, los dorsales que cuentan, los bytes y el nombre del .vcf de
+ * contactos y de cada .vcf individual del detalle, y el motivo de cada error.
+ * Los .vcf salen de pulsar los botones de la página (pestañas, estampas,
+ * "Guardar contacto", "Descargar contactos"); la descarga se intercepta.
+ *
+ * Uso (puppeteer-core instalado con npm en otra carpeta; sale 1 si algo difiere):
+ *   NODE_PATH=<carpeta>/node_modules node tools/test_album_page.cjs [html] [commit]
+ * html: la página a probar (web/album/index.html); commit: la referencia (264d5f7).
+ */
+const { execFileSync } = require("child_process");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const puppeteer = require("puppeteer-core");
+
+const html = path.resolve(process.argv[2] || path.join(__dirname, "../web/album/index.html"));
+const REF_COMMIT = process.argv[3] || "264d5f7";
+const BROWSER = process.env.BROWSER || "/usr/bin/brave-browser";
+
+/* ---------------- archivos de prueba ---------------- */
+
+const ATTENDEE = 0, CHALLENGE = 1, SPECIAL = 2, NONE = 0xff, FLAG_HANDLE = 0x02;
+const MASTER_FIRST = 901, VILLAS = 10;
+
+// Pseudoaleatorio fijo (mulberry32): mismos archivos en cada corrida.
+function rng(seed) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Estampa v1 de 64 B (firmware services/card.h); la firma es relleno.
+function card({ type = ATTENDEE, no, nick = "", team = NONE, pos = NONE, stats = [0, 0, 0, 0],
+                rarity = 0, flags, handle = "" }) {
+  const b = Buffer.alloc(64);
+  b[0] = 1; b[1] = type; b.writeUInt16LE(no, 2);
+  Buffer.from(nick, "utf8").copy(b, 4, 0, 16);
+  b[20] = team; b[21] = pos;
+  stats.forEach((s, i) => { b[22 + i] = s; });
+  b[26] = rarity;
+  b[27] = flags !== undefined ? flags : (handle ? FLAG_HANDLE : 0);
+  Buffer.from(handle, "utf8").copy(b, 28, 0, 20);
+  for (let i = 48; i < 64; i++) b[i] = (no * 7 + i) & 0xff;
+  return b;
+}
+
+// Exportación de ALBM (services/usb_protocol.h): cabecera de 80 B y count × 80 B.
+function albm(mine, entries, { provisioned = 1, mac = [0xf4, 0x12, 0xfa, 0x52, 0x03, 0xf8] } = {}) {
+  const h = Buffer.alloc(80);
+  h.write("ALBM", 0, "latin1"); h[4] = 1; h[5] = provisioned;
+  Buffer.from(mac).copy(h, 6);
+  h.writeUInt16LE(entries.length, 12);
+  mine.copy(h, 16);
+  return Buffer.concat([h, ...entries.map((c, i) => {
+    const e = Buffer.alloc(80);
+    c.copy(e, 0);
+    for (let k = 64; k < 72; k++) e[k] = (i + k) & 0xff;   // token
+    e.writeUInt16LE(i, 72);                                 // orden de llegada
+    e.writeUInt32LE(0x1000 + i, 74);                        // nonce
+    return e;
+  })]);
+}
+
+// .json como lo guarda el configurador (albumJson en web/configurator).
+function albumJson(data, extra = {}) {
+  return Buffer.from(JSON.stringify({
+    format: "bb26-album", version: 1,
+    badge_no: data.readUInt16LE(18),
+    mac: [...data.subarray(6, 12)].map(b => b.toString(16).padStart(2, "0").toUpperCase()).join(":"),
+    provisioned: data[5] !== 0, count: data.readUInt16LE(12),
+    fw: "1.0.0", exported_at: "2026-11-21T19:30:00Z", albm: data.toString("base64"), ...extra,
+  }, null, 1));
+}
+
+const NICKS = ["Ana", "Beto", "Caro", "Dani", "Eli", "Fer", "Gabo", "Hugo", "Iris", "Juan",
+  "Kari", "Leo", "Mau", "Nadia", "Oli", "Pau", "Quique", "Rosa", "Sofi", "Tono"];
+
+function attendee(r, no, extra = {}) {
+  return card({
+    no, nick: NICKS[no % NICKS.length] + no, team: Math.floor(r() * VILLAS), pos: Math.floor(r() * 5),
+    stats: [0, 1, 2, 3].map(() => Math.floor(r() * 100)), rarity: r() < 0.7 ? 0 : r() < 0.6 ? 1 : 2, ...extra,
+  });
+}
+
+const MY_NO = 34;
+const mine = card({ no: MY_NO, nick: "Yo Mismo", team: 0, pos: 3, stats: [60, 40, 99, 10], rarity: 2,
+                    handle: "@yo_mismo" });
+
+function typical() {
+  const r = rng(1);
+  const list = [];
+  for (let i = 0; i < 40; i++) list.push(attendee(r, 3 + i * 9));   // dorsales 3..354, varias villas
+  list.push(
+    // compartieron su handle; textos que el .vcf escapa o dobla
+    attendee(r, 7, { nick: "Zoë 🐛 Bug", handle: "@zoe,bug;mx\\", team: 9 }),
+    attendee(r, 13, { nick: "a,b;c\\d", handle: "@abc", team: 4 }),
+    attendee(r, 399, { nick: "ÑandúÑandúÑandú", handle: "🔒🔒🔒🔒🔒", team: 9, pos: 4 }),
+    attendee(r, 250, { nick: "ctl\x01\x7fx", handle: "h\x02i", team: 2 }),
+    // handle sin FLAG_HANDLE: no es contacto
+    attendee(r, 15, { handle: "@sin_flag", flags: 0 }),
+    attendee(r, 16, { team: NONE }),                                  // sin villa
+    attendee(r, 3 + 9),                                               // repetida (dorsal 12 ya está)
+    card({ no: MY_NO, nick: "Yo Mismo" }),                            // mi propia estampa recibida
+    // maestro de villa con su pedazo (no es contacto ni cuenta en x/400)
+    card({ no: MASTER_FIRST + 3, nick: "Maestra OT", team: 3, pos: 0, rarity: 2, handle: "A1B2C3D4E5F60718" }),
+    card({ type: SPECIAL, no: 2, nick: "Mascota", handle: "Edición 2026", rarity: 2 }),
+    card({ type: SPECIAL, no: 1, nick: "Staff", handle: "Gracias por venir" }),
+    card({ type: CHALLENGE, no: 5, nick: "Reto CTF", handle: "Resuelve el reto" }),
+    card({ no: 0, nick: "Sin provisión" }),                          // dorsal 0, fuera de rango
+  );
+  return albm(mine, list);
+}
+
+function full() {
+  const r = rng(2), list = [];
+  for (let no = 1; no <= 400; no++) {
+    if (no !== MY_NO) list.push(attendee(r, no, no % 37 === 0 ? { handle: "@user" + no } : {}));
+  }
+  return albm(mine, list);
+}
+
+const empty = albm(card({ no: 400, nick: "" }), [], { provisioned: 0 });
+const tiny = albm(mine, []);
+
+// Base32 de RFC 4648 sin relleno (album::qrText)
+function base32(bytes) {
+  const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = 0, buf = 0, out = "";
+  for (const b of bytes) {
+    buf = (buf << 8) | b; bits += 8;
+    while (bits >= 5) { bits -= 5; out += A[(buf >> bits) & 31]; }
+  }
+  return bits ? out + A[(buf << (5 - bits)) & 31] : out;
+}
+function qr(no, numbers) {
+  const bm = Buffer.alloc(50);
+  for (const n of numbers) bm[(n - 1) >> 3] |= 0x80 >> ((n - 1) & 7);
+  return `#/A/${no}/${base32(bm)}/${base32(Buffer.from("tag12345"))}`;
+}
+
+const T = typical(), F = full();
+const badCount = Buffer.from(T); badCount.writeUInt16LE(5, 12);
+const tj = JSON.parse(albumJson(T));
+
+// Cada caso: archivos que se abren en orden ([nombre, bytes]) o un fragmento del QR.
+const CASES = {
+  "vacío .bin": [["vacio.bin", empty]],
+  "vacío .json": [["vacio.json", albumJson(empty)]],
+  "solo mi estampa .json": [["mia.json", albumJson(tiny)]],
+  "típico .bin": [["tipico.bin", T]],
+  "típico .json": [["tipico.json", albumJson(T)]],
+  "típico .json sin exported_at": [["tipico2.json", albumJson(T, { exported_at: undefined, fw: null })]],
+  "lleno .bin": [["lleno.bin", F]],
+  "lleno .json": [["lleno.json", albumJson(F)]],
+  "JSON roto": [["roto.json", Buffer.from('{"format": "bb26-album", ')]],
+  "format equivocado": [["otro.json", albumJson(T, { format: "bb26-card" })]],
+  "version equivocada": [["v2.json", albumJson(T, { version: 2 })]],
+  "albm con base64 inválido": [["b64.json", Buffer.from(JSON.stringify({ ...tj, albm: "@@no base64@@" }))]],
+  "albm no es texto": [["num.json", Buffer.from(JSON.stringify({ ...tj, albm: 5 }))]],
+  "count no cuadra (.json)": [["count.json", albumJson(badCount)]],
+  "count no cuadra (.bin)": [["count.bin", badCount]],
+  "resumen editado (badge_no)": [["editado.json", albumJson(T, { badge_no: 35 })]],
+  "resumen editado (mac en minúsculas)": [["mac.json", albumJson(T, { mac: "f4:12:fa:52:03:f8" })]],
+  "300 KB": [["grande.json", Buffer.alloc(300 * 1024, 0x20)]],
+  "archivo vacío": [["nada.json", Buffer.alloc(0)]],
+  "JSON nulo": [["null.json", Buffer.from("null")]],
+  "error con álbum abierto": [["tipico.json", albumJson(T)], ["roto.json", Buffer.from("{")]],
+  "segundo álbum reemplaza": [["lleno.bin", F], ["tipico.bin", T]],
+  "QR (mi dorsal no viene en el bitmap)": qr(123, [1, 2, 3, 50, 399, 400]),
+  "QR con dorsal fuera de rango": qr(901, [10, 20]),
+  "QR mal formado": "#/A/12/ABC/DEF",
+};
+
+/* ---------------- dentro de la página ---------------- */
+
+// Antes de cargar: las descargas se guardan en window.__dl en vez de bajarse.
+function hookDownloads() {
+  const blobs = new Map();
+  const create = URL.createObjectURL;
+  URL.createObjectURL = b => { const u = create(b); blobs.set(u, b); return u; };
+  window.__dl = [];
+  HTMLAnchorElement.prototype.click = function () {
+    if (this.download) window.__dl.push({ name: this.download, blob: blobs.get(this.href) });
+  };
+}
+
+// Estado del álbum abierto y todo lo que se puede descargar desde la interfaz.
+async function snapshot() {
+  const bytes = async b => Array.from(new Uint8Array(await b.arrayBuffer()));
+  const out = { album: typeof album !== "undefined" && album !== null };
+  if (!out.album) return out;
+  out.sections = JSON.stringify(sections());
+  out.numbers = [...album.numbers].sort((a, b) => a - b);
+  out.no = album.no;
+  out.contacts = vcard(contacts());
+  window.__dl = [];
+  const vcfBtn = document.getElementById("vcfBtn");
+  out.vcfDisabled = vcfBtn.disabled;
+  if (!vcfBtn.disabled) vcfBtn.click();
+  // cada estampa de cada pestaña: abrir el detalle y pulsar "Guardar contacto" si está
+  const dlg = document.getElementById("detail"), dVcf = document.getElementById("dVcf");
+  const tabs = () => document.querySelectorAll('#tabs [role="tab"]');
+  const visit = st => {
+    st.click();
+    if (!dlg.open) return;
+    if (!dVcf.hidden) dVcf.click();
+    dlg.close();
+  };
+  document.querySelectorAll("#mineSt button").forEach(visit);
+  for (let i = 0; i < tabs().length; i++) {
+    tabs()[i].click();
+    document.querySelectorAll("#grid button").forEach(visit);
+  }
+  out.downloads = {};
+  for (const d of window.__dl) {
+    const b = await bytes(d.blob);
+    if (d.name in out.downloads && out.downloads[d.name].join() !== b.join()) out.downloads[d.name] = "difiere";
+    else out.downloads[d.name] = b;
+  }
+  return out;
+}
+
+async function openAll(files) {
+  const status = [];
+  for (const [name, b64] of files) {
+    const bin = atob(b64), u8 = Uint8Array.from(bin, c => c.charCodeAt(0));
+    await openFile(new File([u8], name));
+    status.push(document.getElementById("status").textContent);
+  }
+  return status;
+}
+
+/* ---------------- comparación ---------------- */
+
+async function runCase(browser, file, c) {
+  const page = await browser.newPage();
+  const errors = [];
+  page.on("pageerror", e => errors.push(e.message));
+  await page.evaluateOnNewDocument(hookDownloads);
+  await page.goto("file://" + file + (typeof c === "string" ? c : ""));
+  const status = typeof c === "string" ? [await page.$eval("#status", e => e.textContent)]
+    : await page.evaluate(openAll, c.map(([n, b]) => [n, b.toString("base64")]));
+  const snap = await page.evaluate(snapshot);
+  await page.close();
+  return { status, snap, errors };
+}
+
+// Motivo del error en la página de referencia: «<archivo> no se puede abrir: <motivo>.»
+const reason = s => (s.match(/ no se puede abrir: (.*)\.$/) || [])[1];
+
+(async () => {
+  const ref = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "album-ref-")), "index.html");
+  fs.writeFileSync(ref, execFileSync("git", ["show", REF_COMMIT + ":web/album/index.html"],
+                                     { cwd: path.join(__dirname, "..") }));
+  const browser = await puppeteer.launch({ executablePath: BROWSER, headless: true });
+  let failed = 0;
+  const check = (name, pass, why) => {
+    if (!pass) failed++;
+    console.log(pass ? "ok   " : "FALLA", name + (pass || !why ? "" : " — " + why));
+  };
+  try {
+    const refOut = {};
+    for (const [name, c] of Object.entries(CASES)) {
+      const [a, b] = [await runCase(browser, ref, c), await runCase(browser, html, c)];
+      refOut[name] = a;
+      const why = [...a.errors, ...b.errors];
+      // el texto alrededor del error puede cambiar; el motivo tiene que seguir ahí
+      a.status.forEach((s, i) => {
+        if (reason(s) && !b.status[i].includes(reason(s))) why.push(`falta «${reason(s)}» en «${b.status[i]}»`);
+      });
+      for (const k of ["album", "no", "numbers", "sections", "contacts", "vcfDisabled", "downloads"]) {
+        if (JSON.stringify(a.snap[k]) !== JSON.stringify(b.snap[k])) why.push(k + " distinto");
+      }
+      check(name + " = " + REF_COMMIT, !why.length, why.join("; "));
+    }
+    // Que los casos sí prueben algo: lo que se espera de la referencia.
+    const names = Object.keys(refOut["típico .json"].snap.downloads || {}).sort().join(" ");
+    check("referencia: el típico baja contactos y .vcf individuales",
+      names === "bugcon_13.vcf bugcon_250.vcf bugcon_399.vcf bugcon_7.vcf contactos_bugcon_34.vcf", names);
+    const e = refOut["error con álbum abierto"];
+    check("referencia: un error deja abierto el álbum anterior", e.snap.album && e.snap.no === MY_NO);
+    for (const [n, r] of Object.entries(refOut)) {
+      if (Array.isArray(CASES[n]) && CASES[n].length === 1 && !/^(vacío|típico|lleno|solo mi)/.test(n)) {
+        check(`referencia: «${n}» se rechaza`, !r.snap.album && reason(r.status[0]), r.status[0]);
+      }
+    }
+  } finally {
+    await browser.close();
+    fs.rmSync(path.dirname(ref), { recursive: true, force: true });
+  }
+  process.exit(failed ? 1 : 0);
+})().catch(e => { console.error(e.stack || e.message); process.exit(1); });
