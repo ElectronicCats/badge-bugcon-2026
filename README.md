@@ -112,8 +112,7 @@ puedes:
 2. Mueve el interruptor **SW1** a la posición de encendido.
 3. Verás la copa y el texto "Copa BugCon 2026 · CDMX · 20-21 nov". Las luces
    hacen una ola verde, blanca y roja.
-4. Después de unos segundos aparece tu gafete. Si quieres, presiona cualquier
-   botón para saltar la bienvenida.
+4. Después de unos segundos aparece tu gafete.
 
 ### Apagar
 
@@ -134,9 +133,9 @@ solo:
 
 ## Tu primer encendido
 
-1. La primera vez verás **"Presiona cualquier botón"**. Presiona el que
+1. Después de la bienvenida aparece tu gafete. Presiona el botón que
    quieras.
-2. Ganas tu primera estampa especial: **"Debut"**. Las luces festejan.
+2. Con ese primer botón ganas tu primera estampa especial: **"Debut"**. Las luces festejan.
    Presiona **A** para continuar.
 3. El Badge pregunta **"¿Personalizas tu estampa?"** y te muestra tu tarjeta.
    - **A (Sí):** eliges tu apodo, tu villa y más.
@@ -194,9 +193,10 @@ Desde el gafete:
 En casi todas las pantallas, salvo el gafete y los juegos, hay una barra
 superior con:
 
-- **La hora.** Si dice `--:--`, el Badge aún no tiene la hora. Pídela en la
-  mesa de soporte o
-  [pónsela desde tu computadora](tools/README.md#poner-la-hora).
+- **La hora.** Si dice `--:--`, el Badge aún no tiene la hora. La forma más
+  fácil de ponérsela es conectarlo al [configurador web](#configurador-web):
+  la toma de tu computadora al conectar. También puedes pedirla en la mesa de
+  soporte o [ponerla con las herramientas](tools/README.md#poner-la-hora).
 - **"IR"**, cuando tu Badge está listo para recibir estampas.
 - **Una pila** que muestra cuánta energía queda. Es un cálculo aproximado.
 
@@ -482,8 +482,8 @@ derecha**; arriba se lee cuál ves, por ejemplo "< Reloj 1/5 >". **B** sale.
 
 ### Reloj
 
-Muestra la hora y la fecha en grande. Si el Badge no tiene la hora, pídela en
-la mesa de soporte.
+Muestra la hora y la fecha en grande. Si el Badge no tiene la hora, conéctalo
+al [configurador web](#configurador-web) o pídela en la mesa de soporte.
 
 ### Marco
 
@@ -513,6 +513,8 @@ Son funciones avanzadas que solo trabajan con el Badge conectado por USB a una
 computadora con su programa. Sin computadora, el Badge te lo indica en
 pantalla. Para los Tokens, consulta
 [El Badge en tu escritorio](tools/README.md#el-badge-en-tu-escritorio).
+La vista **SDR** muestra la dirección de su visor web,
+`espargos.net/espsdr/app/`, que se abre en la computadora.
 
 > Mientras el temporizador corre, o si el Badge está conectado por USB,
 > Herramientas no regresa sola al gafete.
@@ -565,7 +567,10 @@ La guía completa está en
   de una charla.
 - Si el Badge tiene la hora, marca la charla **"En curso"** o la
   **"Próxima"**.
-- Si dice "El badge no tiene la hora", pídela en la mesa de soporte.
+- Si dice "El badge no tiene la hora", el pie te da la dirección del
+  [configurador web](#configurador-web)
+  (`electroniccats.github.io/badge-bugcon-2026/configurator`): conéctalo por
+  USB y la hora se pone sola. También puedes pedirla en la mesa de soporte.
 
 ## Retos y secretos
 
@@ -589,7 +594,7 @@ La guía completa está en
 | **Pantalla de inicio** | Elige qué ves en reposo: tu **Gafete** o una de las imágenes que cargaste con el [configurador web](#configurador-web). La actual dice "activa". |
 | **Cómo usar** | Una ayuda rápida de 3 pantallas. |
 | **Borrar progreso** | Borra tus récords de juegos y todas las estampas de tu álbum. Tu estampa se conserva. |
-| **Borrar datos** | Borra todo lo anterior y también tu estampa, tu apodo y tus marcas del control remoto. El Badge queda como nuevo. |
+| **Borrar datos** | Borra todo lo anterior y también tu estampa, tu apodo, tus marcas del control remoto y las imágenes de los 4 slots. La pantalla de inicio vuelve a ser tu gafete. El Badge queda como nuevo. |
 
 ### Para borrar con seguridad
 
@@ -652,7 +657,7 @@ con el Badge apagado.
 | Aparece una pantalla de pruebas al encender | Encendiste el Badge con A y B presionados. Apágalo y enciéndelo sin presionar botones. |
 | La pantalla se quedó congelada justo al encender | Quizá presionaste BOOT al encender. Apágalo y enciéndelo sin presionar botones. |
 | No puedo intercambiar | Junten bien las puntas de arriba, no muevan los Badges y que los dos presionen A+B. |
-| La hora dice `--:--` | Pídela en la mesa de soporte o [pónsela desde tu computadora](tools/README.md#poner-la-hora). Recuerda que se pierde al apagar con SW1. |
+| La hora dice `--:--` | Conecta el Badge al [configurador web](#configurador-web): pone la hora al conectar. También puedes pedirla en la mesa de soporte o [ponerla con las herramientas](tools/README.md#poner-la-hora). Recuerda que se pierde al apagar con SW1. |
 | La pila marca vacía pero las pilas son nuevas | Ve a **Ajustes › Pilas nuevas**. |
 | Quiero empezar de cero | **Ajustes › Borrar datos** (mantén A para confirmar). |
 | Sigues con dudas | Acércate a la mesa de soporte de BugCON 2026. |
@@ -700,8 +705,8 @@ funcione, la carpeta `album/` debe estar junto a `configurator/`; si abres el
 2. En la página, presiona **Conectar**.
 3. El navegador abre una lista de puertos. Elige **USB JTAG/serial debug
    unit** y acepta.
-4. El botón cambia a **Desconectar** y la página lee tu Badge: tu estampa,
-   tu avatar y qué hay en sus imágenes.
+4. El botón cambia a **Desconectar** y la página le pone al Badge la hora de
+   tu computadora y lee tu estampa, tu avatar y qué hay en sus imágenes.
 
 Solo un programa puede usar el Badge a la vez. Si la página dice que el
 puerto está ocupado, cierra otras pestañas del configurador, el monitor
@@ -716,6 +721,8 @@ La página tiene **dos pestañas**: la **Plantilla Copa BugCon**, que se abre
 por defecto, y **Pantalla completa**. Cambias con un clic o con las flechas
 ← → (también Inicio y Fin) del teclado. Cada pestaña numera sus pasos: sigue
 el orden de las tarjetas. Los textos largos están en **Más información**.
+Arriba, junto a **Conectar**, el enlace **Ver el álbum** abre la página del
+álbum.
 
 ### Pestaña "Plantilla Copa BugCon": tu estampa y tu avatar
 
@@ -743,19 +750,21 @@ Badge.
    por negro y **Restablecer ajustes** lo deja como estaba. Puedes agregar
    **Texto encima** y arrastrarlo en la vista previa.
 4. **Vista previa.** Lo que ves ahí es exactamente lo que recibe el Badge.
-5. En la misma tarjeta, presiona **Enviar avatar**. La imagen se queda en tu
-   Badge y aparece en tu plantilla. No viaja a otros Badges al intercambiar.
+5. **Plantilla.** Muestra tu gafete completo, tal como lo verás en el Badge.
+   Se actualiza al guardar la estampa y al enviar el avatar. Presiona
+   **Enviar avatar**: la imagen se queda en tu Badge y aparece en tu
+   plantilla. No viaja a otros Badges al intercambiar.
 
 Más cosas en esta pestaña:
 
-- La tarjeta **Plantilla** muestra tu gafete completo. Con **Enviar plantilla
-  al slot** la guardas como imagen en una de las 4 posiciones del Badge
-  (slots), para verla en el Marco. Si el slot ya tiene una imagen, la página
-  te pide confirmar antes de reemplazarla.
 - **Álbum › Guardar álbum (.json)** guarda en tu computadora tu estampa y las de tu
   álbum. El archivo incluye el nickname y el handle que cada quien compartió
-  contigo: **no lo publiques**. Para verlo, usa **Ver el álbum** y arrastra el
-  `.json`; ahí también puedes descargar los contactos (`.vcf`).
+  contigo: **no lo publiques**. Para verlo, usa **Ver el álbum**, presiona
+  **Abrir álbum…** y elige el `.json` (o arrástralo a la página). Ahí puedes
+  filtrar las que **Tengo** o **Me faltan**, ir directo a un dorsal,
+  imprimirlo desde el navegador y descargar los contactos
+  (**Descargar contactos (.vcf)**).
+  **Abrir el configurador** te regresa.
 
 ### Pestaña "Pantalla completa": una imagen en todo el panel
 
@@ -815,9 +824,8 @@ tiene un programa más viejo que no la incluye.
 
 La página no tiene servidor ni almacenamiento central: tu estampa, tu avatar
 y tu álbum se guardan solo en tu Badge, y nadie recibe una copia. Tu handle
-solo se comparte si marcas la casilla. Para borrar tu estampa, tu avatar y tu
-álbum, usa **Ajustes › Borrar datos** en el Badge; las imágenes de los slots
-se quedan hasta que subas otras.
+solo se comparte si marcas la casilla. Para borrar tu estampa, tu avatar, tu
+álbum y las imágenes de los slots, usa **Ajustes › Borrar datos** en el Badge.
 
 ### Si algo no funciona en el configurador
 
