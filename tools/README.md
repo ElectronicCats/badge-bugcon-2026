@@ -572,6 +572,8 @@ necesitas para usar tu Badge.
 - `ir_aim.py`: aciertos de infrarrojo entre dos Badges.
 - `ui_walk.py`: recorre las pantallas y captura cada una.
 - `sdr/sdr_host_live.py`, `sdr/sdr_rx_live.py`, `sdr/sdr_viewer_live.py`: pruebas del SDR.
+- `sdr/esdr_wire_live.py <puerto>`: muestra en hexadecimal, byte por byte, lo que el Badge
+  envía y recibe en los modos host y captura de ráfaga del SDR, para revisar el formato de cada paquete.
 
 **Pruebas de la PC** (sin Badge): los `test_*.py` de esta carpeta y los
 `sdr/test_*.c` (con su `Makefile`). Se corren con
