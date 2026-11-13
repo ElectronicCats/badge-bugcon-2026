@@ -102,6 +102,8 @@ main { counter-reset: step; }
 }
 #stampCard[hidden] ~ .tplOnly { display: none; }   /* Plantilla y Álbum siguen a la estampa */
 #privacy { max-width: 1600px; margin-top: var(--s4); }
+#moreAdj { margin-bottom: var(--s2); }
+#moreAdj summary { cursor: pointer; color: var(--accent); min-height: 24px; margin-bottom: var(--s2); }
 button {
   background: var(--card2);
   color: var(--text);
@@ -389,10 +391,13 @@ header .hint { margin-top: 0; }
     <h2>Ajustes</h2>
     <div class="ctl"><label for="br">Brillo</label><input type="range" id="br" min="-100" max="100" value="0"><output id="brV">0</output></div>
     <div class="ctl"><label for="ct">Contraste</label><input type="range" id="ct" min="-100" max="100" value="0"><output id="ctV">0</output></div>
-    <div class="ctl"><label for="gm">Gamma</label><input type="range" id="gm" min="20" max="300" value="100"><output id="gmV">1.00</output></div>
-    <div class="ctl"><label for="bp">Punto negro</label><input type="range" id="bp" min="0" max="254" value="0"><output id="bpV">0</output></div>
-    <div class="ctl"><label for="wp">Punto blanco</label><input type="range" id="wp" min="1" max="255" value="255"><output id="wpV">255</output></div>
-    <div class="ctl"><label for="sh">Nitidez</label><input type="range" id="sh" min="0" max="200" value="0"><output id="shV">0</output></div>
+    <details id="moreAdj">
+      <summary>Más ajustes</summary>
+      <div class="ctl"><label for="gm">Gamma</label><input type="range" id="gm" min="20" max="300" value="100"><output id="gmV">1.00</output></div>
+      <div class="ctl"><label for="bp">Punto negro</label><input type="range" id="bp" min="0" max="254" value="0"><output id="bpV">0</output></div>
+      <div class="ctl"><label for="wp">Punto blanco</label><input type="range" id="wp" min="1" max="255" value="255"><output id="wpV">255</output></div>
+      <div class="ctl"><label for="sh">Nitidez</label><input type="range" id="sh" min="0" max="200" value="0"><output id="shV">0</output></div>
+    </details>
     <div class="row">
       <button id="autoBtn">Niveles auto</button>
       <label><input type="checkbox" id="invert"> Invertir</label>
@@ -842,6 +847,9 @@ $("autoBtn").addEventListener("click", () => {
   $("wp").value = hi; $("wpV").textContent = hi;
   render();
 });
+
+// «Niveles auto» mueve Punto negro y Punto blanco: abre «Más ajustes» para que se vea qué cambió
+$("autoBtn").addEventListener("click", () => { if (oriented) $("moreAdj").open = true; });
 
 $("resetBtn").addEventListener("click", () => {
   for (const [id, out, fmt] of SLIDERS) {
