@@ -213,6 +213,7 @@ canvas.px {
 #status.err { color: var(--err); background: var(--err-bg); }
 /* aviso: la operación ocurrió, pero hay algo que mirar (la clase sigue siendo "err") */
 #status[data-tone=warn] { color: var(--warn); background: var(--warn-bg); }
+#alert { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 #waitHint { font-size: var(--fs-sm); color: var(--muted); }
 .state { font-size: var(--fs-sm); color: var(--muted); }
 .state[data-state=dirty] { color: var(--warn); }
@@ -280,15 +281,16 @@ header .hint { margin-top: 0; }
 <header>
   <h1>Copa BugCon 2026 · Configurador</h1>
   <button id="connectBtn" class="primary">Conectar</button>
-  <span id="connState" class="pill" data-state="off"><span id="connLabel">Sin conexión</span></span>
+  <span id="connState" class="pill" data-state="off" aria-live="polite"><span id="connLabel">Sin conexión</span></span>
   <span id="connInfo" class="hint" hidden></span>
-  <p id="lostNotice" role="alert" hidden><span id="lostText"></span> <button id="lostClose" type="button">Cerrar</button></p>
+  <p id="lostNotice" hidden><span id="lostText"></span> <button id="lostClose" type="button">Cerrar</button></p>
   <p id="howto" class="hint">Abre este archivo en Chrome, Edge o Brave de una computadora y conecta el badge con un cable USB de datos.</p>
   <p id="nowebserial" hidden></p>
 </header>
 
 <div id="statusBar">
   <div id="status" role="status">Listo.</div>
+  <div id="alert" role="alert"></div>
   <progress id="prog" max="1" value="0" hidden></progress>
   <span id="waitHint" hidden>Esperando al badge…</span>
   <details id="statusLog"><summary>Últimos mensajes</summary><ol></ol></details>
@@ -1176,12 +1178,12 @@ function showSelectedSlot() {
 for (const b of $("tabs").children) {
   b.addEventListener("click", () => setTarget(b.dataset.target));
 }
-// ←/→ pasan a la otra pestaña (patrón WAI-ARIA de tabs)
+// ←/→ pasan a la otra pestaña; Inicio/Fin a la primera/última (patrón WAI-ARIA de tabs)
 $("tabs").addEventListener("keydown", (e) => {
-  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
   e.preventDefault();
-  const tabs = [...$("tabs").children];
-  const next = tabs[(tabs.indexOf(document.activeElement) + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+  const tabs = [...$("tabs").children], i = tabs.indexOf(document.activeElement);
+  const next = tabs[e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : (i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
   setTarget(next.dataset.target);
   next.focus();
 });
@@ -1791,6 +1793,11 @@ function setStatus(msg, cls) {
   $("status").textContent = msg;
   $("status").className = cls || "";
   $("status").dataset.tone = tone;
+  // Los errores se anuncian en #alert (asertiva); #status deja de ser región viva para no leerlos dos veces.
+  // El texto vacío entre medias hace que un mismo error repetido se vuelva a anunciar.
+  $("status").setAttribute("aria-live", cls === "err" ? "off" : "polite");
+  $("alert").textContent = "";
+  if (cls === "err") setTimeout(() => { $("alert").textContent = msg; }, 50);
   // historial: los últimos 10, el más nuevo arriba
   const ol = $("statusLog").querySelector("ol");
   const li = document.createElement("li");

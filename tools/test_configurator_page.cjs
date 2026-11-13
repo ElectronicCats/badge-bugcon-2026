@@ -152,6 +152,21 @@ function a11yRun() {
   ok.text_rows_in_fieldsets = [...document.querySelectorAll("fieldset.textline > legend")].map(l => l.textContent).join() === "Renglón 1,Renglón 2,Renglón 3";
   ok.free_points_live = $("freeV").getAttribute("aria-live") === "polite" &&
     statInputs.every(s => s.getAttribute("aria-describedby") === "freeV");
+  // regiones vivas: pastilla cortés, errores en #alert (y #status calla), el resto solo en #status
+  ok.pill_live = $("connState").getAttribute("aria-live") === "polite";
+  ok.lost_notice_not_alert = !$("lostNotice").hasAttribute("role");
+  setStatus("Todo bien.", "ok");
+  ok.status_ok_polite = $("status").getAttribute("aria-live") === "polite" && $("alert").textContent === "";
+  setStatus("Falló algo.", "err");
+  ok.status_err_silent = $("status").getAttribute("aria-live") === "off" && $("status").className === "err";
+  ok.alert_has_role = $("alert").getAttribute("role") === "alert";
+  setStatus("Listo.");
+  // pestañas: Fin → última, Inicio → primera, → rodea
+  const key = k => { document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true })); return target; };
+  document.querySelector('#tabs [data-target="avatar"]').focus();
+  ok.tabs_end = key("End") === "slot" && document.activeElement.id === "tabSlot";
+  ok.tabs_home = key("Home") === "avatar" && document.activeElement.id === "tabAvatar";
+  ok.tabs_wrap = key("ArrowLeft") === "slot" && key("ArrowRight") === "avatar";
   const heads = [...document.querySelectorAll("h1,h2,h3")].map(h => +h.tagName[1]);
   ok.headings_no_skips = heads.every((n, i) => i === 0 || n <= heads[i - 1] + 1);
   return ok;
