@@ -714,38 +714,45 @@ cómo quedaría; solo no podrás enviarla.
 
 La página tiene **dos pestañas**: la **Plantilla Copa BugCon**, que se abre
 por defecto, y **Pantalla completa**. Cambias con un clic o con las flechas
-← → del teclado.
+← → (también Inicio y Fin) del teclado. Cada pestaña numera sus pasos: sigue
+el orden de las tarjetas. Los textos largos están en **Más información**.
 
 ### Pestaña "Plantilla Copa BugCon": tu estampa y tu avatar
 
 Sirve para editar tu estampa, ponerle una imagen (tu **avatar**, de 96 × 96
-puntos) y ver tu gafete tal como lo muestra el Badge.
+puntos) y ver tu **plantilla** (tu gafete completo) tal como lo muestra el
+Badge.
 
 1. **Mi estampa.** Escribe tu **Nickname** (hasta 16 bytes; la ñ y los acentos
    ocupan dos), elige tu **Villa** y tu **Posición** y reparte tus
    **Estadísticas** (200 puntos en total; arriba ves cuántos te quedan). Si
    quieres, marca **Compartir mi handle** y escríbelo.
-   - **Leer del badge** trae la estampa que ya tienes en el Badge.
+   - **Leer mi estampa del badge** trae la estampa que ya tienes en el Badge.
    - **Guardar estampa** la guarda en el Badge; el Badge la firma y la página
-     muestra "Estampa guardada y firmada por el badge".
+     muestra "Estampa guardada y firmada por el badge". Junto a los botones
+     ves si está **Guardada en el badge** o **Sin guardar**.
 2. **Imagen.** Arrastra una imagen a la página, pégala del portapapeles o usa
-   **Abrir archivo** o **Cámara**. Mueve el recuadro para encuadrar y cambia
-   su tamaño con el control **Recorte** o la rueda del ratón. Puedes
-   **Girar 90°** o hacer **Espejo H/V**.
+   **Abrir archivo** o **Usar la cámara**. Mueve el recuadro para encuadrar y
+   cambia su tamaño con el control **Recorte** o la rueda del ratón (con el
+   teclado, enfoca la imagen y usa las flechas y +/−). Puedes **Girar imagen
+   90°** o **Voltear horizontal / vertical**.
 3. **Ajustes y Tramado.** El panel es de blanco y negro, así que la página
-   convierte tu imagen con puntitos (tramado). Juega con brillo, contraste,
-   gamma, nitidez y **Niveles auto**; **Restablecer** lo deja como estaba.
-   Puedes agregar **Texto encima** y arrastrarlo en la vista previa.
+   convierte tu imagen con puntitos (tramado). Juega con brillo y contraste;
+   gamma, punto negro, punto blanco y nitidez están en **Más ajustes**.
+   **Ajustar niveles** los calcula solo, **Invertir colores** cambia blanco
+   por negro y **Restablecer ajustes** lo deja como estaba. Puedes agregar
+   **Texto encima** y arrastrarlo en la vista previa.
 4. **Vista previa.** Lo que ves ahí es exactamente lo que recibe el Badge.
-5. Presiona **Enviar avatar**. La imagen se queda en tu Badge y aparece en tu
-   gafete. No viaja a otros Badges al intercambiar.
+5. En la misma tarjeta, presiona **Enviar avatar**. La imagen se queda en tu
+   Badge y aparece en tu plantilla. No viaja a otros Badges al intercambiar.
 
 Más cosas en esta pestaña:
 
-- La **Plantilla Copa BugCon** es una vista de tu gafete completo. Con
-  **Enviar plantilla al slot** la guardas como imagen en una de las 4
-  posiciones del Badge (slots), para verla en el Marco.
-- **Álbum › Guardar .json** guarda en tu computadora tu estampa y las de tu
+- La tarjeta **Plantilla** muestra tu gafete completo. Con **Enviar plantilla
+  al slot** la guardas como imagen en una de las 4 posiciones del Badge
+  (slots), para verla en el Marco. Si el slot ya tiene una imagen, la página
+  te pide confirmar antes de reemplazarla.
+- **Álbum › Guardar álbum (.json)** guarda en tu computadora tu estampa y las de tu
   álbum. El archivo incluye el nickname y el handle que cada quien compartió
   contigo: **no lo publiques**. Para verlo, usa **Ver el álbum** y arrastra el
   `.json`; ahí también puedes descargar los contactos (`.vcf`).
@@ -760,8 +767,8 @@ la barra de estado, y guardarla en uno de los 4 **slots** del Badge.
    aquí no cambia tu avatar.
 2. Elige el **Encuadre**:
    - **Rellenar (recorta):** llena todo el panel y corta lo que sobra.
-   - **Encajar completa:** muestra la imagen entera y deja bandas, **Blancas**
-     o **Negras** a tu elección. Úsalo con fotos horizontales o verticales.
+   - **Encajar completa:** muestra la imagen entera y deja bandas; en **Bandas** eliges **Blanco**
+     o **Negro**. Úsalo con fotos horizontales o verticales.
 3. Marca **Mostrar guías** si quieres ver qué tapa el Badge: la línea roja
    marca la franja de abajo, donde aparecen "Luz" y "Salir" al entrar al
    Marco. Es solo una guía; no se envía.
@@ -769,33 +776,36 @@ la barra de estado, y guardarla en uno de los 4 **slots** del Badge.
    **vacío**, y cuál es el de **inicio**.
    - Si tu editor está vacío, al elegir un slot se carga la imagen que tiene.
    - Si ya tienes una imagen en el editor, no se pierde. Para traer la del
-     slot a propósito, presiona **Abrir en el editor**.
+     slot a propósito, presiona **Editar la imagen del slot n**.
 5. Presiona **Enviar al slot n**. Se guarda y se abre a pantalla completa en
-   el Badge.
+   el Badge. Si el slot ya tenía una imagen, antes te pide confirmar.
 
 En el Badge:
 
 - **B** cierra la imagen. Si no tocas botones, el Badge vuelve solo a su
   pantalla de inicio al minuto. No se borró: sigue en su slot.
 - Para verla después: **Menú › Herramientas › Marco** (con **arriba / abajo**
-  pasas de una a otra) o el botón **Mostrar slot n** de la página.
-- **Pantalla en blanco** deja el panel en blanco. **Patrón de prueba** envía
-  un borde y una marca en la esquina para comprobar que la imagen sale
-  completa y sin cortes.
+  pasas de una a otra) o el botón **Mostrar slot n** de la tarjeta **En el
+  badge**.
+- Esa tarjeta también tiene **Pantalla en blanco**, que deja el panel en
+  blanco, y **Vaciar slot n**, que borra la imagen del Badge (pide confirmar).
+- **Enviar patrón de prueba** manda un borde y una marca en la esquina para
+  comprobar que la imagen sale completa y sin cortes; reemplaza la imagen del
+  slot, así que también pide confirmar si estaba ocupado.
 
 #### Usar la imagen como pantalla de inicio
 
 Marca **Usar como inicio** antes de enviar y la imagen **reemplaza a tu
-gafete** cuando el Badge está en reposo. Encima se dibujan la franja de
+plantilla** cuando el Badge está en reposo. Encima se dibujan la franja de
 arriba (tu villa) y el pie (pista y dorsal), así que no pongas nada
 importante ahí; **Mostrar guías** te los marca.
 
-Para regresar a tu gafete tienes dos formas:
+Para regresar a tu plantilla tienes dos formas:
 
-- En la página, el botón **Volver al gafete** (aparece cuando hay un inicio
-  activo, en las dos pestañas).
-- En el Badge, **Menú › Ajustes › Pantalla de inicio › Gafete**, sin
-  computadora.
+- En la página, el botón **Volver a la plantilla** (aparece cuando hay un
+  inicio activo, en las dos pestañas).
+- En el Badge, **Menú › Ajustes › Pantalla de inicio › Gafete** (así se llama
+  ahí la plantilla), sin computadora.
 
 La estampa de campeón del cierre del evento siempre tiene prioridad sobre la
 imagen de inicio. Si la casilla **Usar como inicio** no aparece, tu Badge
@@ -817,7 +827,9 @@ se quedan hasta que subas otras.
 | La lista de puertos sale vacía | Prueba otro cable (debe ser de datos) u otro puerto USB y revisa que el Badge esté encendido. Si la ventana ni aparece, activa el permiso "Puertos serie" en la configuración del sitio del navegador. |
 | "No se pudo abrir el puerto" | Algo más está usando el Badge: cierra otras pestañas, el monitor serie o las herramientas de computadora y espera unos segundos. |
 | "El badge no contestó" | Desconecta y conecta de nuevo. En Linux, ejecuta `stty -F /dev/ttyACM0 min 1`. |
-| Quise enviar y dice "Carga una imagen primero." | Aún no hay imagen en el editor de esa pestaña. |
+| Quise enviar y dice "Carga una imagen primero" | Aún no hay imagen en el editor de esa pestaña: arrastra una o usa **Abrir archivo**. |
+| Dice "Conexión perdida" | Se salió el cable o el Badge se reinició. Revisa el cable y presiona **Conectar** otra vez. |
+| Dice "El badge está ocupado" | Está terminando otra operación (refrescar la pantalla tarda unos segundos). Espera y vuelve a intentar. |
 | Mi imagen desapareció del Badge | A los 60 segundos sin botones vuelve al inicio. Ábrela de nuevo con **Mostrar slot n** o en **Marco**. |
 | El **Ver el álbum** no abre | Extrae todo el .zip, o abre la página desde el repositorio completo: `album/` debe estar junto a `configurator/`. |
 
