@@ -577,6 +577,48 @@ async function checkA1(browser, check, refOut) {
   const why = await qv.$eval("#vcfWhy", e => e.hidden ? null : e.textContent);
   await qv.close();
   check("A5.3 vista QR: «Abre el .json para ver los contactos.»", why === "Abre el .json para ver los contactos.", why);
+  // A6.1: los colores viven en :root; fuera solo var(--…)
+  const css = fs.readFileSync(html, "utf8").match(/<style>([\s\S]*?)<\/style>/)[1].replace(/:root\s*\{[^}]*\}/, "");
+  const loose = css.match(/#[0-9a-f]{3,8}\b|rgba?\(/gi);
+  check("A6.1 sin colores sueltos fuera de :root", !loose, loose && loose.join(" "));
+  // A6.2: contraste de los pares que usa la página (WCAG 2.x), leído de los tokens reales
+  const ratios = await page.evaluate(() => {
+    const v = n => getComputedStyle(document.documentElement).getPropertyValue("--" + n).trim();
+    const rgba = h => { h = h.slice(1); if (h.length <= 4) h = [...h].map(c => c + c).join("");
+      return [0, 2, 4, 6].map(i => parseInt(h.slice(i, i + 2) || "ff", 16)); };
+    const over = (f, b) => f.slice(0, 3).map((c, i) => c * f[3] / 255 + b[i] * (1 - f[3] / 255));
+    const lum = c => c.map(x => (x /= 255) <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)
+                      .reduce((s, x, i) => s + x * [0.2126, 0.7152, 0.0722][i], 0);
+    const cr = (f, b) => { const bg = over(rgba(v(b)), [0, 0, 0]), fg = over(rgba(v(f)), bg);
+      const [x, y] = [lum(fg), lum(bg)].sort((p, q) => q - p); return +((x + 0.05) / (y + 0.05)).toFixed(2); };
+    const crOn = (f, bgRgb) => { const [x, y] = [lum(rgba(v(f)).slice(0, 3)), lum(bgRgb)].sort((p, q) => q - p);
+      return +((x + 0.05) / (y + 0.05)).toFixed(2); };
+    const out = {};
+    for (const f of ["text", "muted", "accent", "ok", "err"]) for (const b of ["bg", "card", "card2"]) out[f + "/" + b] = [cr(f, b), 4.5];
+    out["on-accent/accent"] = [cr("on-accent", "accent"), 4.5];
+    for (const f of ["tag-text", "silver", "gold"]) out[f + "/tag-bg"] = [crOn(f, over(rgba(v("tag-bg")), rgba(v("card2")))), 4.5];
+    for (const f of ["silver", "gold", "accent"]) for (const b of ["bg", "card"]) out[f + "/" + b + " (borde)"] = [cr(f, b), 3];
+    for (const b of ["bg", "card"]) out["foco text/" + b] = [cr("text", b), 3];
+    return out;
+  });
+  const weak = Object.entries(ratios).filter(([, [r, min]]) => r < min);
+  check("A6.2 contraste ≥ 4.5:1 en texto y ≥ 3:1 en bordes de estado y foco", !weak.length, JSON.stringify(weak));
+  // con el típico abierto (hay .sub de villa y etiquetas de dorsal) y un detalle
+  await page.evaluate(openAll, CASES["típico .json"].map(([n, b]) => [n, b.toString("base64")]));
+  const tiny = await page.evaluate(() => [...document.querySelectorAll("body *")]
+    .filter(e => e.offsetParent && [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()) &&
+                 parseFloat(getComputedStyle(e).fontSize) < 12)
+    .map(e => e.className || e.tagName));
+  check("A6.2 ningún texto visible de menos de 12 px", !tiny.length, tiny.join(" "));
+  // A6.3: regiones
+  const land = await page.evaluate(() => {
+    const m = document.querySelectorAll("main");
+    return { n: m.length, has: ["drop", "summary", "tabs", "grid"].every(id => m[0]?.contains($(id))),
+             out: ["header", "footer", "#privacy", "#detail"].every(q => !m[0]?.contains(document.querySelector(q))),
+             top: ["header", "footer"].every(q => document.querySelector(q).parentElement === document.body) };
+  });
+  check("A6.3 un <main> con zona, resumen, pestañas y cuadrícula; encabezado y pie fuera",
+    land.n === 1 && land.has && land.out && land.top, JSON.stringify(land));
   // los enlaces resuelven por file:// (relativos) y vuelven
   await page.goto("file://" + html);
   await page.click("a[href='../configurator/index.html']");
