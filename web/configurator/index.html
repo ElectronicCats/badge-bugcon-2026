@@ -453,12 +453,6 @@ header .hint { margin-top: 0; }
     <canvas id="preview" class="px" width="96" height="96" role="img" aria-label="Vista previa"></canvas>
     <p class="hint">Lo que ves es exactamente lo que recibe el badge.</p>
 
-    <div id="avatarCtl">
-      <div class="row"><button id="avatarBtn" class="primary" disabled>Enviar avatar</button>
-        <span id="avatarState" class="state" hidden></span>
-        <span id="avatarFlash" class="flash" aria-hidden="true" hidden></span></div>
-      <p class="hint needconn" id="needAvatar"></p>
-    </div>
     <div id="slotCtl" hidden>
       <p class="hint needconn" id="needSlot"></p>
       <p class="hint" id="fullHint"></p>
@@ -517,17 +511,18 @@ header .hint { margin-top: 0; }
   <section class="card step tplOnly" id="tplCard">
     <h2>Plantilla</h2>
     <canvas id="tpl" class="px" width="200" height="200" role="img" aria-label="Plantilla con tu estampa"></canvas>
-    <p class="hint">Así se ve tu plantilla en el badge. También puedes ponerla en un slot.</p>
+    <p class="hint">Así se ve la plantilla de inicio de tu badge. Se actualiza al guardar la estampa
+    (paso 1) y al enviar el avatar; las imágenes en slots se manejan en la pestaña Pantalla completa.</p>
     <div class="row" id="tplHomeNote" hidden>
       <span class="hint" id="tplHomeText"></span>
       <button class="homeOffBtn">Volver a la plantilla</button>
     </div>
-    <div class="row">
-      <button id="tplSendBtn" class="primary" disabled>Enviar plantilla al slot</button>
-      <select id="tplSlot" aria-label="Slot de destino de la plantilla"></select>
-      <span id="tplFlash" class="flash" aria-hidden="true" hidden></span>
+    <div id="avatarCtl">
+      <div class="row"><button id="avatarBtn" class="primary" disabled>Enviar avatar</button>
+        <span id="avatarState" class="state" hidden></span>
+        <span id="avatarFlash" class="flash" aria-hidden="true" hidden></span></div>
+      <p class="hint needconn" id="needAvatar"></p>
     </div>
-    <p class="hint needconn" id="needTpl"></p>
   </section>
 
   <section class="card step tplOnly" id="albumCard">
@@ -556,7 +551,7 @@ header .hint { margin-top: 0; }
     <li>El .json de "Guardar álbum (.json)" incluye el nickname y el handle de quienes los
     compartieron contigo: guárdalo para ti y no lo publiques.</li>
     <li>Para borrar tu estampa, tu avatar y tu álbum: en el badge, Ajustes &gt; "Borrar
-    datos". Las imágenes que enviaste a los slots (también la plantilla) se quedan hasta que subas otras.</li>
+    datos". Las imágenes que enviaste a los slots se quedan hasta que subas otras.</li>
   </ul>
 </section>
 
@@ -1687,7 +1682,7 @@ function paintFieldErrors(c, nb) {
     $(id).setAttribute("aria-invalid", !!msgs[id]);
   }
 }
-for (const [id, ev] of [["nick", "blur"], ["saveCardBtn", "click"], ["tplSendBtn", "click"]]) {
+for (const [id, ev] of [["nick", "blur"], ["saveCardBtn", "click"]]) {
   $(id).addEventListener(ev, () => { touchedNick.v = true; onCardEdit(); });
 }
 for (const id of ["nick", "team", "pos", "handle", "handleOn"]) {
@@ -1711,7 +1706,7 @@ const tpl = $("tpl"), tplCtx = tpl.getContext("2d", { willReadFrequently: true }
 const snapObs = new ResizeObserver(() => { snapCanvas(preview); snapCanvas(tpl); });
 snapObs.observe(preview.parentElement);
 snapObs.observe(tpl.parentElement);
-let tplBits = null;
+let tplBits = null;   // lo leen las pruebas (tools/test_configurator_page.cjs)
 
 function renderTemplate() {
   const w = panel.w, h = panel.h;
@@ -1836,7 +1831,6 @@ let connMode = hasSerial ? "off" : "noserial";
 let lostMsg = "";   // aviso fijo junto a «Conectar» tras perder la conexión (el mismo texto de #status)
 const NEEDS = {   // aviso -> botones del badge que describe
   needStamp:  ["readCardBtn", "saveCardBtn"],
-  needTpl:    ["tplSendBtn", "tplSlot"],
   needAlbum:  ["jsonBtn"],
   needAvatar: ["avatarBtn"],
   needSlot:   ["sendBtn", "loadSlotBtn", "testBtn"],
@@ -1872,7 +1866,7 @@ function paintConn() {
 }
 
 const DEVICE_BUTTONS = ["sendBtn", "loadSlotBtn", "showBtn", "clrBtn", "delBtn", "testBtn", "avatarBtn",
-                        "readCardBtn", "saveCardBtn", "tplSendBtn", "tplSlot", "jsonBtn"];
+                        "readCardBtn", "saveCardBtn", "jsonBtn"];
 function deviceButtons(enabled) {
   for (const id of DEVICE_BUTTONS) $(id).disabled = !enabled;
   paintBusy();
@@ -2169,7 +2163,6 @@ async function refreshInfo(keepStatus) {
 let slotLabels = [];
 function buildSlots() {
   $("slots").innerHTML = "";
-  $("tplSlot").innerHTML = "";
   slotLabels = [];
   for (let i = 0; i < numSlots; i++) {
     const label = document.createElement("label");
@@ -2181,7 +2174,6 @@ function buildSlots() {
       if (!oriented || slotSource) readSlot(i);
     });
     slotLabels.push(label);
-    $("tplSlot").add(new Option("Slot " + i, i));
   }
   updateHomeUi();
 }
@@ -2192,11 +2184,9 @@ function updateSlotUi(used, current) {
     const home = !!info && i === info.home;
     slotLabels[i].classList.toggle("used", used[i] === "1");
     slotLabels[i].classList.toggle("home", home);
-    // el mismo texto en los radios y en el selector de la plantilla
     const state = (used[i] === "1" ? "imagen" : "vacío") + (i === current ? " · en pantalla" : "") +
                   (home ? " · inicio" : "");
     slotLabels[i].querySelector("small").textContent = state;
-    $("tplSlot").options[i].text = "Slot " + i + " · " + state;
   }
 }
 
@@ -2283,13 +2273,6 @@ $("testBtn").addEventListener("click", () => {
   if (!okToOverwrite(selectedSlot(), false)) return;
   uploadSlot(selectedSlot(), testPatternBits(panel.w, panel.h), "Patrón de prueba")
     .then(() => flashResult("slotFlash"));
-});
-
-$("tplSendBtn").addEventListener("click", () => {
-  const errs = cardErrors(editedCard());
-  if (errs.length) { setStatus("Revisa la estampa: " + errs.join("; ") + ".", "err"); return; }
-  if (!okToOverwrite(+$("tplSlot").value, false)) return;
-  uploadSlot(+$("tplSlot").value, tplBits, "Plantilla").then(() => flashResult("tplFlash"));
 });
 
 $("showBtn").addEventListener("click", async () => {
