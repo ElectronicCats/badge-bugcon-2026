@@ -35,6 +35,9 @@ hardware/**/*.csv
 # KiCAD local history
 hardware/.history/
 
+# KiCAD per-user project settings (layers, view state)
+*.kicad_prl
+
 # Binarios del firmware (scripts/compile.sh, arduino-cli)
 build/
 
