@@ -1542,7 +1542,7 @@ function loadBlob(blob) {
     cnv.getContext("2d").drawImage(bmp, 0, 0);
     setSource(cnv);
     setStatus("Imagen cargada (" + bmp.width + " x " + bmp.height + ").", "");
-  }).catch(() => setStatus("No se pudo leer esa imagen.", "err"));
+  }).catch(() => setStatus("No se pudo leer esa imagen: prueba con otra (JPG, PNG o similar).", "err"));
 }
 
 $("fileBtn").addEventListener("click", () => $("file").click());
@@ -1558,7 +1558,7 @@ for (const ev of ["dragover", "dragenter"]) {
 for (const ev of ["dragleave", "drop"]) {
   document.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); });
 }
-const NOT_IMAGE = "Ese archivo no es una imagen.";
+const NOT_IMAGE = "Ese archivo no es una imagen: elige un JPG, PNG o similar.";
 document.addEventListener("drop", e => {
   const f = e.dataTransfer && e.dataTransfer.files[0];
   if (!f) return;
@@ -1582,7 +1582,7 @@ $("camBtn").addEventListener("click", async () => {
   try {
     camStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640 } });
   } catch (err) {
-    setStatus("Cámara no disponible: " + err.message, "err");
+    setStatus("Cámara no disponible (" + err.message + "): permite el acceso en el navegador o usa «Abrir archivo».", "err");
     return;
   }
   video.srcObject = camStream;
@@ -2029,25 +2029,32 @@ async function disconnect(ev) {
 }
 
 const FRIENDLY = {
-  "ERR empty":     "ese slot está vacío: envía una imagen primero.",
-  "ERR badslot":   "número de slot inválido.",
-  "ERR timeout":   "el badge no recibió todos los datos; intenta de nuevo.",
-  "ERR flash":     "el badge no pudo escribir en su memoria.",
-  "ERR badcmd":    "el badge no entendió el comando (¿firmware viejo?).",
-  "ERR badver":    "el badge no reconoce esta versión de estampa (¿firmware viejo?).",
-  "ERR badnick":   "el badge rechazó el nickname (vacío o con caracteres no válidos).",
-  "ERR badteam":   "la villa no está en el catálogo del badge.",
-  "ERR badpos":    "la posición no está en el catálogo del badge.",
-  "ERR badstats":  "cada estadística va de 0 a " + STAT_MAX + " y entre todas suman a lo más " + STAT_BUDGET + ".",
-  "ERR badhandle": "el badge rechazó el handle (caracteres no válidos).",
-  "timeout":       "el badge no contestó; revisa la conexión.",
+  "ERR empty":     "ese slot está vacío: elige otro o envíale una imagen primero.",
+  "ERR badslot":   "ese slot no existe en el badge: elige uno de la lista.",
+  "ERR timeout":   "el badge no recibió todos los datos: revisa el cable y vuelve a intentar.",
+  "ERR flash":     "el badge no pudo escribir en su memoria: vuelve a intentar y, si sigue igual, reinícialo.",
+  "ERR badcmd":    "el badge no entiende esa orden, quizá por su firmware: actualízalo.",
+  "ERR badver":    "el badge no reconoce esta versión de estampa, quizá por su firmware: actualízalo.",
+  "ERR badnick":   "el badge rechazó el nickname (vacío o con caracteres no válidos): corrígelo y guarda otra vez.",
+  "ERR badteam":   "el badge no tiene esa villa: elige otra de la lista o actualiza su firmware.",
+  "ERR badpos":    "el badge no tiene esa posición: elige otra de la lista o actualiza su firmware.",
+  "ERR badstats":  "cada estadística va de 0 a " + STAT_MAX + " y entre todas suman a lo más " + STAT_BUDGET + ": baja alguna y guarda otra vez.",
+  "ERR badhandle": "el badge rechazó el handle (caracteres no válidos): corrígelo o desmarca «Compartir mi handle».",
+  "timeout":       "el badge no contestó: revisa que siga conectado y vuelve a intentar.",
+  "sin respuesta": "el badge no contestó: revisa que siga conectado y vuelve a intentar.",
+};
+// nombre legible de cada orden para el aviso de error (command() recibe la orden en crudo)
+const OP_NAMES = {
+  INFO: "Leer datos del badge", UPLD: "Enviar imagen", READ: "Leer slot", SHOW: "Mostrar slot",
+  DEL: "Vaciar slot", CLR: "Pantalla en blanco", AVTR: "Enviar avatar", AVRD: "Leer avatar",
+  ALBM: "Leer álbum", HOME: "Cambiar inicio",
 };
 
 let busy = false;
 async function command(line, payload, fn, label) {
   if (!port) return null;
   if (busy) {
-    setStatus("El badge está ocupado: espera a que termine la operación.", "err");
+    setStatus("El badge está ocupado: espera a que termine la operación y vuelve a intentar.", "err");
     return null;
   }
   busy = true;
@@ -2058,7 +2065,7 @@ async function command(line, payload, fn, label) {
     if (payload) await sendPayload(payload);
     return await fn();
   } catch (err) {
-    setStatus((label || line.split(" ")[0]) + " falló: " + (FRIENDLY[err.message] || err.message), "err");
+    setStatus((label || OP_NAMES[line.split(" ")[0]] || line.split(" ")[0]) + " falló: " + (FRIENDLY[err.message] || err.message), "err");
     return null;
   } finally {
     busy = false;
@@ -2126,7 +2133,7 @@ async function refreshInfo(keepStatus) {
   if (reply === null) return false;
   const m = reply.match(INFO_RE);
   if (!m) {
-    setStatus("Esto no parece un badge BugCon 2026: " + reply, "err");
+    setStatus("Ese dispositivo no parece un badge BugCon 2026 (" + reply + "): elige el puerto del badge al conectar.", "err");
     return false;
   }
   info = { fw: m[1], no: +m[2], w: +m[3], h: +m[4], album: +m[5], total: +m[6],
@@ -2256,7 +2263,7 @@ function okToOverwrite(n, fromThisSlot) {
 }
 
 $("sendBtn").addEventListener("click", () => {
-  if (!lastBits) { setStatus("Carga una imagen primero.", "err"); return; }
+  if (!lastBits) { setStatus("Carga una imagen primero: arrástrala o usa «Abrir archivo».", "err"); return; }
   if (!okToOverwrite(selectedSlot(), slotSource)) return;   // slotSource: el editor tiene el slot elegido
   uploadSlot(selectedSlot(), lastBits, "Imagen", true).then(() => flashResult("slotFlash"));
 });
@@ -2339,7 +2346,7 @@ $("clrBtn").addEventListener("click", () => {
 });
 
 $("avatarBtn").addEventListener("click", async () => {
-  if (!avatarBits) { setStatus("Carga una imagen para el avatar primero.", "err"); return; }
+  if (!avatarBits) { setStatus("Carga una imagen para el avatar primero: arrástrala o usa «Abrir archivo».", "err"); return; }
   setStatus("Enviando el avatar…", "");
   if (await command("AVTR", packBits(avatarBits, AVATAR_W, AVATAR_H), () => expectOk("Avatar"))) {
     badgeAvatar = avatarBits;

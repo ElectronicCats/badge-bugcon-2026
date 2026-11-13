@@ -172,6 +172,24 @@ function a11yRun() {
   return ok;
 }
 
+// Cada clave de FRIENDLY sale como «<operación> falló: <qué hacer>», sin la orden en crudo.
+async function friendlyRun() {
+  const ok = {};
+  port = {}; writer = { write: async () => {} };
+  for (const key of Object.keys(FRIENDLY)) {
+    await command("UPLD 0", null, async () => { throw new Error(key); });
+    const t = $("status").textContent;
+    ok["mensaje " + key] = t === "Enviar imagen falló: " + FRIENDLY[key] && /[:;] .*[a-z]/.test(FRIENDLY[key]) &&
+      !t.includes("ERR ") && $("status").className === "err";
+  }
+  await command("DEL 2", null, async () => { throw new Error("ERR empty"); });
+  ok.nombre_de_la_orden = $("status").textContent.startsWith("Vaciar slot falló:");
+  await command("CARD", null, async () => { throw new Error("timeout"); }, "Guardar la estampa");
+  ok.etiqueta_propia = $("status").textContent.startsWith("Guardar la estampa falló:");
+  port = null;
+  return ok;
+}
+
 (async () => {
   const browser = await puppeteer.launch({ executablePath: BROWSER, headless: true });
   let failed = 0;
@@ -202,6 +220,7 @@ function a11yRun() {
     for (const [k, v] of Object.entries(await run(fitRun))) check("encuadre: " + k, v);
     for (const [k, v] of Object.entries(await run(tabsRun))) check("pestañas: " + k, v);
     for (const [k, v] of Object.entries(await run(a11yRun))) check("accesibilidad: " + k, v);
+    for (const [k, v] of Object.entries(await run(friendlyRun))) check("errores: " + k, v);
 
     // Zoom 200 % y 1024 px: sin desplazamiento horizontal en ninguna pestaña (683 = 1366 al 200 %, 960 = 1920 al 200 %)
     for (const w of [1024, 960, 683]) for (const t of ["avatar", "slot"]) {
