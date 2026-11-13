@@ -77,6 +77,8 @@ body.over #drop { border-color: var(--accent); background: var(--card2); }
 }
 #summary > div:last-child { flex: 1; min-width: 0; }
 #summary .st { width: 96px; }
+#countV { font-size: 16px; font-weight: 600; }
+#countN { font-size: 13px; color: var(--muted); }
 #countBar { width: 100%; accent-color: var(--accent); margin-top: 6px; }
 #tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 10px; }
 #tabs button { white-space: nowrap; flex: none; }
@@ -138,7 +140,8 @@ dialog::backdrop { background: #000a; }
     <div>
       <h2 id="owner"></h2>
       <div id="countV"></div>
-      <progress id="countBar" max="400" value="0"></progress>
+      <div id="countN"></div>
+      <progress id="countBar" max="400" value="0" aria-labelledby="countV"></progress>
       <p class="hint" id="source"></p>
     </div>
   </div>
@@ -423,9 +426,11 @@ function show(a) {
   tab = 0;
   $("owner").textContent = a.mine ? "Álbum de " + (a.mine.nickname || pad(a.no)) + " · " + pad(a.no)
                                   : "Álbum del " + pad(a.no);
-  $("countV").textContent = a.numbers.size + "/" + ATTENDEES + " estampas" +
-    (a.entries.length ? " · " + a.entries.length + " recibidas" : "");
+  const of = a.numbers.size + " de " + ATTENDEES;
+  $("countV").textContent = of + " dorsales";
+  $("countN").textContent = a.entries.length ? a.entries.length + " estampas recibidas, con especiales y retos" : "";
   $("countBar").value = a.numbers.size;
+  $("countBar").setAttribute("aria-valuetext", of);
   $("source").textContent = a.source;
   $("mineSt").replaceChildren(a.mine ? sticker({ no: a.no, card: a.mine, got: true, mine: true })
                                      : el("div", "st got", pad(a.no)));
