@@ -245,7 +245,9 @@ canvas.px {
 .hint { color: var(--muted); font-size: var(--fs-sm); margin-top: var(--s2); }
 footer.hint { margin-top: var(--s5); }
 #privacy li { margin: var(--s1) 0 0 var(--s5); }
-#glossary summary { cursor: pointer; color: var(--accent); }
+#glossary summary, .more summary { cursor: pointer; color: var(--accent); }
+.more { margin: var(--s2) 0; }
+.more > p { margin-top: var(--s1); }
 #glossary dt { font-weight: 700; color: var(--text); }
 #glossary dd { margin: 0 0 var(--s2); }
 header .hint { margin-top: 0; }
@@ -297,7 +299,7 @@ header .hint { margin-top: 0; }
 </div>
 
 <nav id="tabs" role="tablist" aria-label="Qué vas a preparar">
-  <button role="tab" id="tabAvatar" data-target="avatar" aria-controls="tabpanel" aria-selected="true">Plantilla Copa BugCon <span class="sub">estampa, avatar y gafete</span></button>
+  <button role="tab" id="tabAvatar" data-target="avatar" aria-controls="tabpanel" aria-selected="true">Plantilla Copa BugCon <span class="sub">estampa, avatar y plantilla</span></button>
   <button role="tab" id="tabSlot" data-target="slot" aria-controls="tabpanel" aria-selected="false">Pantalla completa <span class="sub">una imagen de 200×200 en un slot</span></button>
 </nav>
 
@@ -349,11 +351,13 @@ header .hint { margin-top: 0; }
       <output id="handleV">0/20 B</output>
     </div>
     <p class="fielderr" id="handleErr" aria-live="polite"></p>
-    <p class="hint">El handle viaja por infrarrojo dentro de tu estampa a cada badge con el
-    que intercambies, y aparece en su álbum. Solo se envía si marcas la casilla.
-    El avatar se queda en tu badge (no viaja por IR).</p>
+    <p class="hint">El handle solo se envía a otros badges si marcas la casilla.</p>
+    <details class="more"><summary aria-label="Más información: handle">Más información</summary>
+      <p class="hint">El handle viaja por infrarrojo dentro de tu estampa a cada badge con el
+      que intercambies, y aparece en su álbum. El avatar se queda en tu badge (no viaja por IR).</p>
+    </details>
     <div class="row">
-      <button id="readCardBtn" disabled>Leer del badge</button>
+      <button id="readCardBtn" disabled>Leer mi estampa del badge</button>
       <button id="saveCardBtn" class="primary" disabled>Guardar estampa</button>
       <span id="cardState" class="state" hidden></span>
       <span id="cardFlash" class="flash" aria-hidden="true" hidden></span>
@@ -367,9 +371,9 @@ header .hint { margin-top: 0; }
     <div class="row">
       <button id="fileBtn">Abrir archivo</button>
       <input type="file" id="file" accept="image/*" hidden>
-      <button id="camBtn">Cámara</button>
-      <button id="capBtn" hidden>Capturar</button>
-      <button id="camOffBtn" hidden>Cancelar</button>
+      <button id="camBtn">Usar la cámara</button>
+      <button id="capBtn" hidden>Capturar foto</button>
+      <button id="camOffBtn" hidden>Cancelar cámara</button>
     </div>
     <video id="video" autoplay playsinline></video>
     <div id="srcWrap"><canvas id="srcCanvas" width="320" height="320" role="img" tabindex="0" aria-label="Imagen original" aria-describedby="cropKeys"></canvas></div>
@@ -393,13 +397,16 @@ header .hint { margin-top: 0; }
           </select>
         </span>
       </div>
-      <p class="hint">Rellenar llena la pantalla y corta lo que sobra; Encajar muestra la imagen entera y deja bandas.
-      Con Invertir, las bandas se invierten igual que la imagen.</p>
+      <p class="hint">Rellenar llena la pantalla; Encajar muestra la imagen entera y deja bandas.</p>
+      <details class="more"><summary aria-label="Más información: encuadre">Más información</summary>
+        <p class="hint">Rellenar corta lo que sobra de la imagen. Con Invertir colores, las bandas se invierten
+        igual que la imagen.</p>
+      </details>
     </div>
     <div class="row">
-      <button id="rotBtn">Girar 90°</button>
-      <button id="flipHBtn">Espejo H</button>
-      <button id="flipVBtn">Espejo V</button>
+      <button id="rotBtn">Girar imagen 90°</button>
+      <button id="flipHBtn">Voltear horizontal</button>
+      <button id="flipVBtn">Voltear vertical</button>
     </div>
     <p class="hint">Arrastra el recuadro para encuadrar; cambia su tamaño con el control o la rueda del ratón.
     <span id="cropKeys">Con el teclado, enfoca la imagen: Flechas: mover · +/−: tamaño · Mayús: más rápido.</span></p>
@@ -417,9 +424,9 @@ header .hint { margin-top: 0; }
       <div class="ctl"><label for="sh">Nitidez</label><input type="range" id="sh" min="0" max="200" value="0"><output id="shV">0</output></div>
     </details>
     <div class="row">
-      <button id="autoBtn">Niveles auto</button>
-      <label><input type="checkbox" id="invert"> Invertir</label>
-      <button id="resetBtn">Restablecer</button>
+      <button id="autoBtn">Ajustar niveles</button>
+      <label><input type="checkbox" id="invert"> Invertir colores</label>
+      <button id="resetBtn">Restablecer ajustes</button>
     </div>
 
     <h3>Tramado</h3>
@@ -454,29 +461,37 @@ header .hint { margin-top: 0; }
     <div id="slotCtl" hidden>
       <p class="hint needconn" id="needSlot"></p>
       <p class="hint" id="fullHint"></p>
+      <details class="more"><summary aria-label="Más información: pantalla completa y slots">Más información</summary>
+        <p class="hint" id="fullMore"></p>
+      </details>
       <div class="slots" id="slots"></div>
-      <p class="hint">Elige el slot de destino. Si el editor está vacío, se carga la imagen del slot;
-      si ya tienes una, no se pierde: usa «Abrir en el editor».</p>
+      <p class="hint">Elige el slot de destino.</p>
       <div id="homeCtl" hidden>
         <div class="row">
           <label><input type="checkbox" id="homeUse"> Usar como inicio</label>
           <span id="homeState" class="hint"></span>
-          <button class="homeOffBtn" hidden>Volver al gafete</button>
+          <button class="homeOffBtn" hidden>Volver a la plantilla</button>
         </div>
-        <p class="hint">La imagen reemplaza al gafete en la pantalla de reposo, con la franja de la
-        selección arriba y el pie abajo encima. En el gafete, ← y → pasan entre la plantilla y los
-        slots con imagen (el pie dice cuál se ve: «&lt;Plantilla&gt;» o «&lt;Slot n&gt;») y lo dejan como
-        inicio. Se apaga con «Volver al gafete», en el badge con ←/→ hasta la plantilla o en
-        Ajustes &gt; Pantalla de inicio. La estampa de campeón la reemplaza al cierre del evento.</p>
+        <p class="hint">El inicio es lo que muestra el badge en reposo: la imagen reemplaza a la plantilla.</p>
+        <details class="more"><summary aria-label="Más información: inicio">Más información</summary>
+          <p class="hint">La imagen se ve con la franja de la selección arriba y el pie abajo encima.
+          En el inicio, ← y → pasan entre la plantilla y los slots con imagen (el pie dice cuál se
+          ve: «&lt;Plantilla&gt;» o «&lt;Slot n&gt;») y lo dejan como inicio. Se apaga con «Volver a la
+          plantilla», en el badge con ←/→ hasta la plantilla o en Ajustes &gt; Pantalla de inicio.
+          La estampa de campeón la reemplaza al cierre del evento.</p>
+        </details>
       </div>
       <label><input type="checkbox" id="guides"> Mostrar guías</label>
-      <p class="hint">La línea roja marca la franja de abajo que tapan «Luz» y «Salir» al entrar al Marco
-      hasta que pulsas un botón. Con «Usar como inicio» marca también la de arriba: son las que tapan
-      la selección y el pie. Es solo una guía: no se envía.</p>
+      <p class="hint">Las líneas rojas marcan lo que tapan los textos del badge. Es solo una guía: no se envía.</p>
+      <details class="more"><summary aria-label="Más información: guías">Más información</summary>
+        <p class="hint">La línea roja marca la franja de abajo que tapan «Luz» y «Salir» al entrar al Marco
+        hasta que pulsas un botón. Con «Usar como inicio» marca también la de arriba: son las que tapan
+        la selección y el pie.</p>
+      </details>
       <div class="row">
         <button id="sendBtn" class="primary" disabled>Enviar al slot 0</button>
-        <button id="loadSlotBtn" disabled>Abrir en el editor</button>
-        <button id="testBtn" disabled>Patrón de prueba</button>
+        <button id="loadSlotBtn" disabled>Editar la imagen del slot 0</button>
+        <button id="testBtn" disabled>Enviar patrón de prueba</button>
         <span id="slotFlash" class="flash" aria-hidden="true" hidden></span>
       </div>
     </div>
@@ -491,18 +506,20 @@ header .hint { margin-top: 0; }
       <button id="delBtn" class="danger" disabled>Vaciar slot 0</button>
     </div>
     <p class="hint needconn" id="needBadge"></p>
-    <p class="hint">«Enviar» y «Mostrar» abren la imagen a pantalla completa en el badge. Ahí, B la
-    cierra; sin tocar botones, el badge vuelve solo al inicio al minuto. «Vaciar slot» borra la imagen
-    del badge y deja el slot sin nada (si era el inicio, el badge vuelve al gafete).</p>
+    <p class="hint">«Enviar» y «Mostrar» abren la imagen en el badge; B la cierra.</p>
+    <details class="more"><summary aria-label="Más información: en el badge">Más información</summary>
+      <p class="hint">Sin tocar botones, el badge vuelve solo al inicio al minuto. «Vaciar slot» borra
+      la imagen del badge y deja el slot sin nada (si era el inicio, el badge vuelve a la plantilla).</p>
+    </details>
   </section>
 
   <section class="card step tplOnly" id="tplCard">
-    <h2>Plantilla del gafete</h2>
-    <canvas id="tpl" class="px" width="200" height="200" role="img" aria-label="Plantilla del gafete con tu estampa"></canvas>
-    <p class="hint">Así se ve tu gafete en el badge. También puedes ponerlo en un slot.</p>
+    <h2>Plantilla</h2>
+    <canvas id="tpl" class="px" width="200" height="200" role="img" aria-label="Plantilla con tu estampa"></canvas>
+    <p class="hint">Así se ve tu plantilla en el badge. También puedes ponerla en un slot.</p>
     <div class="row" id="tplHomeNote" hidden>
       <span class="hint" id="tplHomeText"></span>
-      <button class="homeOffBtn">Volver al gafete</button>
+      <button class="homeOffBtn">Volver a la plantilla</button>
     </div>
     <div class="row">
       <button id="tplSendBtn" class="primary" disabled>Enviar plantilla al slot</button>
@@ -515,7 +532,7 @@ header .hint { margin-top: 0; }
   <section class="card step tplOnly" id="albumCard">
     <h2>Álbum</h2>
     <div class="row">
-      <button id="jsonBtn" class="primary" disabled>Guardar .json</button>
+      <button id="jsonBtn" class="primary" disabled>Guardar álbum (.json)</button>
       <span id="jsonFlash" class="flash" aria-hidden="true" hidden></span>
     </div>
     <p class="hint needconn" id="needAlbum"></p>
@@ -533,12 +550,12 @@ header .hint { margin-top: 0; }
     se guardan solo en tu badge. Nadie, ni la organización, recibe una copia.</li>
     <li>Al intercambiar, tu estampa (nickname, villa, posición, estadísticas y dorsal) viaja
     por infrarrojo al otro badge y se queda en su álbum; no se puede retirar de un badge
-    ajeno. Tu handle solo va si marcas "Compartir mi handle". El avatar y el gafete no
+    ajeno. Tu handle solo va si marcas "Compartir mi handle". El avatar y la plantilla no
     salen de tu badge.</li>
-    <li>El .json de "Guardar .json" incluye el nickname y el handle de quienes los
+    <li>El .json de "Guardar álbum (.json)" incluye el nickname y el handle de quienes los
     compartieron contigo: guárdalo para ti y no lo publiques.</li>
     <li>Para borrar tu estampa, tu avatar y tu álbum: en el badge, Ajustes &gt; "Borrar
-    datos". Las imágenes del gafete se quedan hasta que subas otras a sus slots.</li>
+    datos". Las imágenes que enviaste a los slots (también la plantilla) se quedan hasta que subas otras.</li>
   </ul>
 </section>
 
@@ -1116,10 +1133,12 @@ function fitCanvas(cnv, w, h) {
 }
 
 function updateFullHint() {
-  $("fullHint").textContent = "Imagen para toda la pantalla (" + panel.w + " × " + panel.h +
-    "). «Enviar» la guarda en el slot elegido y la abre en el badge; después la ves con «Mostrar» " +
+  $("fullHint").textContent = "Imagen para toda la pantalla (" + panel.w + " × " + panel.h + ").";
+  $("fullMore").textContent = "«Enviar» la guarda en el slot elegido y la abre en el badge; después la ves con «Mostrar» " +
     "o en Herramientas > Escritorio > Marco" +
-    (info && info.home !== null ? ". Para dejarla fija en el badge, marca «Usar como inicio»." : ".");
+    (info && info.home !== null ? ". Para dejarla fija en el badge, marca «Usar como inicio»." : ".") +
+    " Si el editor está vacío, al elegir un slot se carga su imagen; si ya tienes una, no se pierde: " +
+    "usa «Editar la imagen del slot n».";
 }
 
 // Cada pestaña tiene su propia imagen, con su giro, espejo y recorte: el avatar y la
@@ -2128,7 +2147,7 @@ async function refreshInfo(keepStatus) {
 }
 
 /* selector de slot: con el editor vacío o con otro slot leído, se lee al editor; con una
-   imagen de la persona no la pisa (para eso está «Abrir en el editor») */
+   imagen de la persona no la pisa (para eso está «Editar la imagen del slot n») */
 let slotLabels = [];
 function buildSlots() {
   $("slots").innerHTML = "";
@@ -2170,12 +2189,13 @@ function updateHomeUi() {
   const home = supported && info.home >= 0;
   $("homeCtl").hidden = !supported;
   $("homeUse").checked = supported && info.home === n;
-  $("homeState").textContent = home ? "Inicio actual: slot " + info.home : "Inicio actual: el gafete";
+  $("homeState").textContent = home ? "Inicio actual: slot " + info.home : "Inicio actual: la plantilla";
   for (const b of document.querySelectorAll(".homeOffBtn")) b.hidden = !home;
   $("tplHomeNote").hidden = !home;
   if (home) $("tplHomeText").textContent = "Ahora el inicio del badge muestra la imagen del slot " +
-    info.home + " en lugar de este gafete.";
+    info.home + " en lugar de la plantilla.";
   $("sendBtn").textContent = "Enviar al slot " + n;
+  $("loadSlotBtn").textContent = "Editar la imagen del slot " + n;
   $("showBtn").textContent = "Mostrar slot " + n;
   $("delBtn").textContent = "Vaciar slot " + n;
   updateFullHint();
@@ -2184,7 +2204,7 @@ function updateHomeUi() {
 
 for (const b of document.querySelectorAll(".homeOffBtn")) {
   b.addEventListener("click", async () => {
-    if (await command("HOME OFF", null, () => expectOk("Inicio: el gafete"))) await refreshInfo(true);
+    if (await command("HOME OFF", null, () => expectOk("Inicio: la plantilla"))) await refreshInfo(true);
   });
 }
 
@@ -2201,7 +2221,7 @@ async function applyHome() {
   const n = selectedSlot(), on = $("homeUse").checked;
   if (info.used[n] !== "1" || (on ? info.home === n : info.home !== n)) return;
   const ok = await command(on ? "HOME " + n : "HOME OFF", null,
-    () => expectOk(on ? "Inicio: slot " + n : "Inicio: el gafete"));
+    () => expectOk(on ? "Inicio: slot " + n : "Inicio: la plantilla"));
   if (ok) await refreshInfo(true);
   else updateHomeUi();
 }
@@ -2212,7 +2232,7 @@ function selectedSlot() {
 
 const panelBytes = () => ((panel.w + 7) >> 3) * panel.h;
 
-// asHome: con «Usar como inicio» marcada o desmarcada, deja el slot (o el gafete) como inicio
+// asHome: con «Usar como inicio» marcada o desmarcada, deja el slot (o la plantilla) como inicio
 async function uploadSlot(n, bits, what, asHome) {
   setStatus("Enviando " + what + " al slot " + n + "…", "");
   const ok = await command("UPLD " + n, packBits(bits, panel.w, panel.h),
@@ -2221,7 +2241,7 @@ async function uploadSlot(n, bits, what, asHome) {
     if ($("homeUse").checked) {
       await command("HOME " + n, null, () => expectOk("Inicio: slot " + n));
     } else if (info.home === n) {
-      await command("HOME OFF", null, () => expectOk("Inicio: el gafete"));
+      await command("HOME OFF", null, () => expectOk("Inicio: la plantilla"));
     }
   }
   if (!ok) return;
@@ -2265,7 +2285,7 @@ $("showBtn").addEventListener("click", async () => {
 
 $("loadSlotBtn").addEventListener("click", () => readSlot(selectedSlot()));
 
-// Deja el slot sin imagen (DEL): no queda en blanco, queda vacío. Si era el inicio, el badge vuelve al gafete.
+// Deja el slot sin imagen (DEL): no queda en blanco, queda vacío. Si era el inicio, el badge vuelve a la plantilla.
 $("delBtn").addEventListener("click", async () => {
   const n = selectedSlot();
   if (!confirm("¿Vaciar el slot " + n + "? Se borra su imagen del badge y no se puede deshacer.")) return;

@@ -327,7 +327,7 @@ class Villas(unittest.TestCase):
 
 
 class ExportJson(unittest.TestCase):
-    """El .json (bb26-album) que guarda el configurador con "Guardar .json"."""
+    """El .json (bb26-album) que guarda el configurador con "Guardar álbum (.json)"."""
 
     def test_roundtrip(self):
         data = export([entry(7, 1), entry(8, 2)])

@@ -491,7 +491,7 @@ def _run_command(badge, args, console):
         say("Aviso: este archivo tiene apodos y handles de otras personas. "
             "Guárdalo con cuidado y no lo publiques.")
         data = badge.album()
-        if args.output.endswith(".json"):  # el de "Guardar .json" (bb26-album)
+        if args.output.endswith(".json"):  # el de "Guardar álbum (.json)" (bb26-album)
             import datetime
 
             import verify_album

@@ -39,7 +39,7 @@ Una estampa repetida en la exportación (mismo tipo y número que una anterior)
 no cuenta: el badge las deduplica, así que una repetida es una exportación
 alterada (cuentan los tokens únicos).
 
-Exportación local: "Guardar .json" del configurador y `badge_usb.py album
+Exportación local: "Guardar álbum (.json)" del configurador y `badge_usb.py album
 -o x.json` la guardan como .json; acepta el .bin y el .json. El .json lleva la
 exportación completa en base64 ("albm") y un resumen legible; lo único que
 cuenta es "albm" y un resumen que no coincide con ella se rechaza:

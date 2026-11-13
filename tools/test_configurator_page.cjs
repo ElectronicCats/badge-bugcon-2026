@@ -124,7 +124,7 @@ function a11yRun() {
   const type = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event("input")); };
   ok.canvases_are_img = ["srcCanvas", "preview", "tpl"].every(id => $(id).getAttribute("role") === "img" && lbl(id));
   ok.preview_avatar_label = lbl("preview") === "Vista previa del avatar, 96 × 96, sin imagen";
-  ok.tpl_label = lbl("tpl") === "Plantilla del gafete con tu estampa";
+  ok.tpl_label = lbl("tpl") === "Plantilla con tu estampa";
   const c = document.createElement("canvas");
   c.width = 400; c.height = 200;
   setTarget("slot");
