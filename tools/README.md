@@ -340,10 +340,11 @@ Guarda en tu computadora tu estampa y todas las de tu álbum:
 python3 tools/badge_usb.py album -o mi_album.json
 ```
 
-Verás cuántas estampas se guardaron. Para verlas, abre la página del álbum
-del configurador (`album/index.html`) y arrastra ahí el archivo. Desde esa
-página también puedes descargar los contactos de quienes compartieron su
-handle.
+Verás cuántas estampas se guardaron. (En el configurador, el mismo archivo
+sale del botón **Guardar álbum (.json)**.) Para verlas, abre la página del
+álbum (`album/index.html`), pulsa **Abrir álbum…** y elige el archivo, o
+arrástralo ahí. Desde esa página también puedes descargar los contactos
+(**Descargar contactos (.vcf)**) de quienes compartieron su handle.
 
 > **Cuida este archivo.** Tiene los apodos y los handles de las personas con
 > quienes intercambiaste. No lo publiques.

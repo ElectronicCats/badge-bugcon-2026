@@ -5,7 +5,7 @@ Dos páginas que se abren directo desde tu computadora, sin instalar nada,
 sin servidor y sin Internet. Nada de lo que hagas se envía a ningún lado.
 
   configurator/index.html  Configurador: estampa, avatar, imágenes del
-                           gafete y "Guardar .json" (tu álbum) por USB.
+                           gafete y "Guardar álbum (.json)" por USB.
   album/index.html         Álbum: abre el .json guardado para ver tus
                            estampas y descargar los contactos (.vcf).
 
@@ -40,10 +40,12 @@ prueba otro cable o revisa el permiso "Puertos serie" del navegador.
 
 4. Tu álbum
 -----------
-"Guardar .json" guarda tu estampa y las de tu álbum en tu computadora.
-El archivo incluye el nickname y el handle que cada quien compartió en su
-estampa: no lo publiques. Para verlo, abre album/index.html (o "Ver el
-álbum" en el configurador) y arrastra el .json.
+"Guardar álbum (.json)" guarda tu estampa y las de tu álbum en tu
+computadora. El archivo incluye el nickname y el handle que cada quien
+compartió en su estampa: no lo publiques. Para verlo, abre album/index.html
+(o "Ver el álbum" en el configurador), pulsa "Abrir álbum…" y elige el .json,
+o arrástralo a la página. Ahí también puedes descargar los contactos
+("Descargar contactos (.vcf)") y volver con "Abrir el configurador".
 
 
 5. Privacidad
