@@ -98,6 +98,11 @@ body.over #drop { border-color: var(--accent); background: var(--card2); }
 #countN { font-size: var(--fs-m); color: var(--muted); }
 #countBar { width: 100%; accent-color: var(--accent); margin-top: var(--sp-2); }
 #tabs { display: flex; gap: var(--sp-2); overflow-x: auto; padding: var(--sp-1); margin: calc(-1 * var(--sp-1)) calc(-1 * var(--sp-1)) var(--sp-3); }   /* sitio para el foco */
+/* Indicio de que hay más pestañas: se desvanece el borde por donde aún se puede desplazar (--fl/--fr los pone fade()). */
+#tabs {
+  -webkit-mask-image: linear-gradient(to right, transparent, black var(--fl, 0px), black calc(100% - var(--fr, 0px)), transparent);
+          mask-image: linear-gradient(to right, transparent, black var(--fl, 0px), black calc(100% - var(--fr, 0px)), transparent);
+}
 #tabs button { white-space: nowrap; flex: none; }
 #tabs button[aria-selected=true] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 #filter, #filter > div, #goForm { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
@@ -454,8 +459,10 @@ function sticker(it) {
   const face = el("div", "face", initial(c)), nick = el("span", "nick", c.nickname || "—");
   face.setAttribute("aria-hidden", "true");
   nick.title = c.nickname;   // los largos se cortan con «…»
+  const sub = el("span", "sub", it.mine ? "Mi estampa" : TEAMS[c.team] || "Sin villa");
+  sub.title = sub.textContent;
   e.append(face, el("span", "no tag", kindName(c)), nick,
-           el("span", "sub", it.mine ? "Mi estampa" : TEAMS[c.team] || "Sin villa"));
+           sub);
   // La rareza no solo con el color del borde: ◆ Plata, ★ Oro (el nombre accesible la dice en texto).
   if (r) {
     const m = el("span", "rar", r === 1 ? "◆" : "★");
@@ -507,6 +514,7 @@ function render() {
   }
   $("grid").replaceChildren(...(items.length ? items.map(sticker) : [el("p", "", empty)]));
   if (items.length) $("grid").removeAttribute("tabindex"); else $("grid").tabIndex = -1;
+  fade();
   const list = contacts(), n = list.length;
   $("vcfBtn").disabled = !n;
   $("vcfWhy").hidden = !!n;
@@ -517,6 +525,15 @@ function render() {
   $("vcfWho").querySelector("ul").replaceChildren(...list.map(c =>
     el("li", "", pad(c.badgeNo) + " " + (c.nickname || "—") + " · " + c.handle)));
 }
+
+// Desvanece el borde de las pestañas por el que aún hay más (solo presentación).
+function fade() {
+  const t = $("tabs"), left = Math.round(t.scrollLeft), right = t.scrollWidth - t.clientWidth - left;
+  t.style.setProperty("--fl", left > 1 ? "24px" : "0px");
+  t.style.setProperty("--fr", right > 1 ? "24px" : "0px");
+}
+$("tabs").addEventListener("scroll", fade);
+window.addEventListener("resize", fade);
 
 // Pestañas con foco itinerante: ←/→ (con vuelta), Inicio y Fin activan y enfocan.
 $("tabs").addEventListener("keydown", ev => {
