@@ -149,6 +149,19 @@ dialog::backdrop { background: var(--scrim); }
 #vcfWho summary { cursor: pointer; }
 #vcfWho li { margin: 2px 0 0 18px; overflow-wrap: anywhere; }
 .row { display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; margin-top: var(--sp-3); }
+/* Impresión: tinta sobre papel claro, sin botones ni controles; de las pestañas queda la activa como título
+   y de la cuadrícula lo que se esté viendo. */
+@media print {
+  :root { --bg: white; --card: white; --card2: white; --text: black; --muted: dimgray; --accent: navy;
+          --ok: darkgreen; --err: darkred; --border: gray; --silver: gray; --gold: darkgoldenrod; --tag-bg: black; }
+  body { max-width: none; padding: 0; }
+  header, #status, #drop, #actions, #filter, #tabs button:not([aria-selected=true]), dialog { display: none !important; }
+  #tabs { -webkit-mask-image: none; mask-image: none; margin: 0 0 var(--sp-2); padding: 0; }
+  #tabs button { border: 0; padding: 0; font-size: var(--fs-l); font-weight: 600; color: var(--text); }
+  #summary { break-inside: avoid; }
+  #countBar { accent-color: var(--text); }
+  .st { break-inside: avoid; }
+}
 </style>
 </head>
 <body>
