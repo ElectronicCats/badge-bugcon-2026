@@ -424,6 +424,28 @@ async function checkA1(browser, check, refOut) {
   check("A3.4 «Ir al dorsal» enfoca también un hueco vacío", g2.no === "2" && g2.tag === "DIV" && g2.visible, JSON.stringify(g2));
   const g0 = await go(401);
   check("A3.4 «Ir al dorsal 401» no se acepta", g0.no === undefined, JSON.stringify(g0));
+  // A3.5–A3.6: rareza con símbolo y nombre accesible de cada estampa
+  const lab = sel => page.$eval(sel, e => e.getAttribute("aria-label"));
+  const sts = await page.evaluate(() => [...document.querySelectorAll("#grid button.st, #mineSt button.st")].map(b => ({
+    r: b.className.match(/r(\d)/)[1], rar: (b.querySelector(".rar") || {}).textContent || "",
+    hidden: b.querySelector(".face").getAttribute("aria-hidden"), label: b.getAttribute("aria-label") })));
+  check("A3.5 Plata ◆, Oro ★ y nada en las comunes, además del borde",
+    sts.length > 40 && sts.every(s => s.rar === ["", "◆", "★"][s.r]) && sts.some(s => s.r === "1") && sts.some(s => s.r === "2"),
+    JSON.stringify(sts.filter(s => s.rar !== ["", "◆", "★"][s.r])));
+  check("A3.6 la inicial no se lee y todas las estampas tienen nombre accesible",
+    sts.every(s => s.hidden === "true" && /^(Mi estampa, )?#\d{3}, /.test(s.label)));
+  const mineLab = await lab("#mineSt button");
+  check("A3.6 mi estampa: «Mi estampa, #034, Yo Mismo, Villa del Hardware, Oro»",
+    mineLab === "Mi estampa, #034, Yo Mismo, Villa del Hardware, Oro", mineLab);
+  const l13 = await lab('#grid [data-no="13"]');
+  check("A3.6 el nick va como texto, con comas y barras tal cual", l13.startsWith("#013, a,b;c\\d, PaySec LATAM"), l13);
+  check("A3.6 el nick completo en el title de los que se cortan",
+    await page.$eval('#grid [data-no="399"] .nick', e =>
+      e.title === album.entries.find(x => x.card.badgeNo === 399).card.nickname && e.title.startsWith("ÑandúÑandú")));
+  await page.evaluate(() => [...document.querySelectorAll("#tabs [role=tab]")].find(t => t.textContent.startsWith("Especiales")).click());
+  const esp = await page.$$eval("#grid button.st", l => l.map(b => b.getAttribute("aria-label")));
+  check("A3.6 especiales y retos sin «Sin villa»: «Especial 2, Mascota, Oro»",
+    esp.includes("Especial 2, Mascota, Oro") && esp.every(s => !s.includes("Sin villa")), JSON.stringify(esp));
   // los enlaces resuelven por file:// (relativos) y vuelven
   await page.goto("file://" + html);
   await page.click("a[href='../configurator/index.html']");
