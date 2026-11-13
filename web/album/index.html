@@ -60,6 +60,9 @@ button:disabled { opacity: 0.45; cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #10131a; font-weight: 600; }
 .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
 footer.hint { margin-top: 24px; }
+#privacy summary { cursor: pointer; }
+#privacy summary h2 { display: inline; }
+#source { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #privacy li { margin: 4px 0 0 18px; }
 #status { padding: 8px 10px; background: var(--card2); border-radius: 6px; color: var(--muted); margin-bottom: 12px; }
 #status:empty { display: none; }
@@ -71,11 +74,13 @@ a { color: var(--accent); }
 body.over #drop { border-color: var(--accent); background: var(--card2); }
 #drop .big { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 #summary {
-  display: flex; gap: 14px; align-items: center;
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
   background: var(--card); border: 1px solid var(--border); border-radius: 10px;
   padding: 12px; margin-bottom: 12px;
 }
-#summary > div:last-child { flex: 1; min-width: 0; }
+#summary > div:nth-child(2) { flex: 1 1 160px; min-width: 0; }
+#actions { flex: 0 1 240px; }
+@media (max-width: 560px) { #actions { flex-basis: 100%; } }
 #summary .st { width: 96px; }
 #countV { font-size: 16px; font-weight: 600; }
 #countN { font-size: 13px; color: var(--muted); }
@@ -142,16 +147,19 @@ dialog::backdrop { background: #000a; }
       <div id="countV"></div>
       <div id="countN"></div>
       <progress id="countBar" max="400" value="0" aria-labelledby="countV"></progress>
+      <p class="hint" id="quickNote" hidden>Vista rápida del QR: solo dice qué dorsales tienes.
+      Para ver estampas y contactos, abre tu .json.</p>
       <p class="hint" id="source"></p>
+    </div>
+    <div id="actions">
+      <button id="vcfBtn" class="primary">Descargar contactos (.vcf)</button>
+      <p class="hint" id="vcfWhy" hidden>Abre el .json para ver los contactos.</p>
+      <p class="hint">Los contactos son las estampas cuyo dueño eligió compartir su handle.
+      El handle lo escribe cada quien: revísalo antes de confiar en él.</p>
     </div>
   </div>
   <nav id="tabs" role="tablist"></nav>
   <div id="grid"></div>
-  <div class="row">
-    <button id="vcfBtn" class="primary">Descargar contactos (.vcf)</button>
-  </div>
-  <p class="hint">Los contactos son las estampas cuyo dueño eligió compartir su handle.
-  El handle lo escribe cada quien: revísalo antes de confiar en él.</p>
 </section>
 
 <dialog id="detail">
@@ -166,8 +174,8 @@ dialog::backdrop { background: #000a; }
   </div>
 </dialog>
 
-<section id="privacy">
-  <h2>Privacidad</h2>
+<details id="privacy" open>
+  <summary><h2>Privacidad</h2></summary>
   <ul class="hint">
     <li>El archivo se abre solo en este navegador: la página no lo envía a ningún lado y
     no hay servidor ni almacenamiento central.</li>
@@ -176,7 +184,7 @@ dialog::backdrop { background: #000a; }
     <li>Para borrar tu estampa y tu álbum del badge: Ajustes &gt; "Borrar datos". Lo que ya
     pasó a otros badges se queda en sus álbumes.</li>
   </ul>
-</section>
+</details>
 
 <footer class="hint">Licencia GPL-3.0 · Código fuente: github.com/ElectronicCats/badge-bugcon-2026</footer>
 
@@ -407,6 +415,9 @@ function sticker(it) {
 function render() {
   const secs = sections();
   tab = Math.min(tab, secs.length - 1);
+  // Vista rápida del QR (sin estampa mía): las villas siempre darían 0, solo se pinta «Todas».
+  const quick = !album.mine;
+  if (quick) secs.length = 1;
   $("tabs").replaceChildren(...secs.map((s, i) => {
     const b = el("button", "", s.name + " " + (i ? s.items.length : album.numbers.size));
     b.setAttribute("role", "tab");
@@ -418,6 +429,7 @@ function render() {
   $("grid").replaceChildren(...(items.length ? items.map(sticker) : [el("p", "", "Sin estampas")]));
   const n = contacts().length;
   $("vcfBtn").disabled = !n;
+  $("vcfWhy").hidden = !quick;
   $("vcfBtn").textContent = "Descargar contactos (.vcf)" + (n ? " · " + n : "");
 }
 
@@ -431,7 +443,8 @@ function show(a) {
   $("countN").textContent = a.entries.length ? a.entries.length + " estampas recibidas, con especiales y retos" : "";
   $("countBar").value = a.numbers.size;
   $("countBar").setAttribute("aria-valuetext", of);
-  $("source").textContent = a.source;
+  $("source").textContent = $("source").title = a.source;
+  $("quickNote").hidden = !!a.mine;
   $("mineSt").replaceChildren(a.mine ? sticker({ no: a.no, card: a.mine, got: true, mine: true })
                                      : el("div", "st got", pad(a.no)));
   $("drop").hidden = true;

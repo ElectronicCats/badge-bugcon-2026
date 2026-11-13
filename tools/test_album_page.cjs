@@ -310,12 +310,49 @@ async function checkA1(browser, check, refOut) {
   check("A2 conteos: «N de 400 dorsales», recibidas aparte y barra con nombre y valor",
     cnt.v === `${cnt.size} de 400 dorsales` && cnt.n.startsWith(cnt.rec + " estampas recibidas") &&
     cnt.val === cnt.size && cnt.lab === "countV" && cnt.vt === `${cnt.size} de 400`, cnt);
+  // A2.3: el botón de contactos y su aviso viven en el resumen y se ven sin desplazar con «Todas»
+  for (const [w, h] of [[1280, 800], [360, 740]]) {
+    await page.setViewport({ width: w, height: h });
+    const r = await page.evaluate(() => {
+      const b = document.getElementById("vcfBtn").getBoundingClientRect();
+      return { inSummary: !!document.querySelector("#summary #vcfBtn"), hint: !!document.querySelector("#summary #actions .hint"),
+               tab: document.querySelector("#tabs [aria-selected=true]").textContent, top: b.top, bottom: b.bottom,
+               h: innerHeight, over: document.documentElement.scrollWidth > innerWidth };
+    });
+    check(`A2.3 ${w}×${h}: «Descargar contactos» y aviso en el resumen, visibles con «Todas», sin desborde`,
+      r.inSummary && r.hint && r.tab.startsWith("Todas") && r.top >= 0 && r.bottom <= r.h && !r.over, r);
+  }
   check("A1 con álbum: zona oculta, botón del encabezado y enlace visibles",
     await page.evaluate(() => document.getElementById("drop").hidden && !document.getElementById("openBtn").hidden) &&
     await links() >= 1);
   const bad = await page.evaluate(openAll, [["x.json", Buffer.from("{").toString("base64")]]);
   check("A1 error con álbum abierto: dice qué álbum se sigue viendo",
     /Sigues viendo el álbum de .+\.$/.test(bad[0]), bad[0]);
+  // A2.4–A2.6: vista rápida del QR, origen y privacidad plegable
+  const probe = pg => (pg || page).evaluate(() => {
+    const $ = id => document.getElementById(id);
+    return { tabs: [...document.querySelectorAll("#tabs [role=tab]")].map(t => t.textContent),
+             note: !$("quickNote").hidden && $("quickNote").textContent.includes("solo dice qué dorsales"),
+             why: !$("vcfWhy").hidden, dis: $("vcfBtn").disabled, source: $("source").textContent,
+             title: $("source").title, priv: $("privacy").tagName + $("privacy").open,
+             frases: ["no hay servidor ni almacenamiento central", "infrarrojo", "publiques", "borrar datos"]
+               .every(f => $("privacy").textContent.toLowerCase().replace(/\s+/g, " ").includes(f)) };
+  });
+  const qp = await browser.newPage();   // el fragmento del QR se lee al cargar: página nueva
+  await qp.goto("file://" + html + CASES["QR (mi dorsal no viene en el bitmap)"]);
+  const q = await probe.call(null, qp);
+  check("A2.4 vista QR: aviso, solo «Todas», botón deshabilitado con motivo",
+    q.note && q.tabs.length === 1 && q.tabs[0].startsWith("Todas") && q.why && q.dis, JSON.stringify(q));
+  await page.goto("file://" + html);
+  await page.evaluate(openAll, CASES["típico .json"].map(([n, b]) => [n, b.toString("base64")]));
+  await qp.close();
+  const t = await probe();
+  check("A2.4 álbum del .json: sin aviso, con todas las pestañas, sin motivo de deshabilitado",
+    !t.note && t.tabs.length > 2 && !t.why, t);
+  check("A2.5 origen: nombre y fecha de exportación en una línea, con título completo",
+    /^Archivo .+, exportado .+\.$/.test(t.source) && t.title === t.source, t);
+  check("A2.6 privacidad: <details> abierto y con las frases que vigila test_configurator",
+    t.priv === "DETAILStrue" && t.frases, JSON.stringify(t));
   // los enlaces resuelven por file:// (relativos) y vuelven
   await page.goto("file://" + html);
   await page.click("a[href='../configurator/index.html']");
