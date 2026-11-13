@@ -353,6 +353,40 @@ async function checkA1(browser, check, refOut) {
     /^Archivo .+, exportado .+\.$/.test(t.source) && t.title === t.source, t);
   check("A2.6 privacidad: <details> abierto y con las frases que vigila test_configurator",
     t.priv === "DETAILStrue" && t.frases, JSON.stringify(t));
+  // A3.1–A3.3: foco estable, patrón de pestañas completo y etiquetas
+  const ae = () => page.evaluate(() => document.activeElement.id);
+  const sel = () => page.evaluate(() => [...document.querySelectorAll("#tabs [role=tab]")]
+    .map(t => (t.getAttribute("aria-selected") === "true" ? "S" : "-") + t.tabIndex).join(" "));
+  await page.focus("#tab2");
+  await page.keyboard.press("Enter");
+  check("A3.1 clic/Enter en una pestaña: el foco sigue en esa pestaña", await ae() === "tab2", await ae());
+  await page.keyboard.press("ArrowRight");
+  check("A3.2 → activa y enfoca la siguiente", await ae() === "tab3" && /^(-[-0-9]+ ){3}S0/.test(await sel()), await sel());
+  await page.keyboard.press("End");
+  const nTabs = await page.$$eval("#tabs [role=tab]", l => l.length);
+  check("A3.2 Fin va a la última y → da la vuelta a la primera",
+    await ae() === "tab" + (nTabs - 1) && (await page.keyboard.press("ArrowRight"), await ae()) === "tab0");
+  await page.keyboard.press("ArrowLeft");
+  check("A3.2 ← desde la primera da la vuelta; Inicio vuelve a la primera",
+    await ae() === "tab" + (nTabs - 1) && (await page.keyboard.press("Home"), await ae()) === "tab0");
+  const pn = await page.evaluate(() => {
+    const g = document.getElementById("grid"), t = [...document.querySelectorAll("#tabs [role=tab]")];
+    return { role: g.getAttribute("role"), lb: g.getAttribute("aria-labelledby"),
+             ctl: t.every(b => b.getAttribute("aria-controls") === "grid"),
+             tab0: t[0].getAttribute("aria-label"), lab0: t[0].textContent,
+             lab1: t[1].textContent, al1: t[1].getAttribute("aria-label"),
+             esp: t.map(b => b.textContent).filter(x => x.startsWith("Especiales")) };
+  });
+  check("A3.2 #grid es tabpanel enlazado a la pestaña activa, con aria-controls",
+    pn.role === "tabpanel" && pn.lb === "tab0" && pn.ctl, JSON.stringify(pn));
+  check("A3.3 etiquetas «Todas · n/400» y «Villa · n» con aria-label",
+    /^Todas · \d+\/400$/.test(pn.lab0) && pn.tab0 === pn.lab0.replace(/ · (\d+)\/400/, ", $1 de 400") &&
+    /^.+ · \d+$/.test(pn.lab1) && /^.+, \d+ estampas?$/.test(pn.al1), JSON.stringify(pn));
+  await page.focus("#tab1");
+  await page.keyboard.press("Tab");
+  check("A3.2 Tab desde las pestañas entra a la primera estampa del panel",
+    await page.evaluate(() => document.getElementById("grid").contains(document.activeElement) &&
+                              document.activeElement.tagName === "BUTTON"));
   // los enlaces resuelven por file:// (relativos) y vuelven
   await page.goto("file://" + html);
   await page.click("a[href='../configurator/index.html']");

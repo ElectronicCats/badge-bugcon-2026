@@ -159,7 +159,7 @@ dialog::backdrop { background: #000a; }
     </div>
   </div>
   <nav id="tabs" role="tablist"></nav>
-  <div id="grid"></div>
+  <div id="grid" role="tabpanel"></div>
 </section>
 
 <dialog id="detail">
@@ -418,20 +418,46 @@ function render() {
   // Vista rápida del QR (sin estampa mía): las villas siempre darían 0, solo se pinta «Todas».
   const quick = !album.mine;
   if (quick) secs.length = 1;
-  $("tabs").replaceChildren(...secs.map((s, i) => {
-    const b = el("button", "", s.name + " " + (i ? s.items.length : album.numbers.size));
-    b.setAttribute("role", "tab");
+  // Los botones se crean una vez (así el foco no se pierde al cambiar de pestaña) y solo se actualizan.
+  const tabs = $("tabs");
+  if (tabs.children.length !== secs.length) {
+    tabs.replaceChildren(...secs.map((s, i) => {
+      const b = el("button");
+      b.id = "tab" + i;
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-controls", "grid");
+      b.addEventListener("click", () => { tab = i; render(); });
+      return b;
+    }));
+  }
+  secs.forEach((s, i) => {
+    const b = tabs.children[i], n = i ? s.items.length : album.numbers.size;
+    b.textContent = s.name + " · " + (i ? n : n + "/" + ATTENDEES);
+    b.setAttribute("aria-label", i ? s.name + ", " + n + (n === 1 ? " estampa" : " estampas")
+                                   : s.name + ", " + n + " de " + ATTENDEES);
     b.setAttribute("aria-selected", i === tab);
-    b.addEventListener("click", () => { tab = i; render(); });
-    return b;
-  }));
+    b.tabIndex = i === tab ? 0 : -1;
+  });
+  $("grid").setAttribute("aria-labelledby", "tab" + tab);
   const items = secs[tab].items;
   $("grid").replaceChildren(...(items.length ? items.map(sticker) : [el("p", "", "Sin estampas")]));
+  if (items.length) $("grid").removeAttribute("tabindex"); else $("grid").tabIndex = -1;
   const n = contacts().length;
   $("vcfBtn").disabled = !n;
   $("vcfWhy").hidden = !quick;
   $("vcfBtn").textContent = "Descargar contactos (.vcf)" + (n ? " · " + n : "");
 }
+
+// Pestañas con foco itinerante: ←/→ (con vuelta), Inicio y Fin activan y enfocan.
+$("tabs").addEventListener("keydown", ev => {
+  const n = $("tabs").children.length;
+  const to = { ArrowRight: (tab + 1) % n, ArrowLeft: (tab + n - 1) % n, Home: 0, End: n - 1 }[ev.key];
+  if (to === undefined) return;
+  ev.preventDefault();
+  tab = to;
+  render();
+  $("tabs").children[tab].focus();
+});
 
 function show(a) {
   album = a;
