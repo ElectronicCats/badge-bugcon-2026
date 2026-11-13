@@ -302,6 +302,14 @@ async function checkA1(browser, check, refOut) {
   }
   const ok = await page.evaluate(openAll, CASES["típico .json"].map(([n, b]) => [n, b.toString("base64")]));
   check("A1 éxito: ✓", ok[0].startsWith("✓ "), ok[0]);
+  const cnt = await page.evaluate(() => {
+    const $ = id => document.getElementById(id), b = $("countBar");
+    return { v: $("countV").textContent, n: $("countN").textContent, val: b.value,
+             lab: b.getAttribute("aria-labelledby"), vt: b.getAttribute("aria-valuetext"), size: album.numbers.size, rec: album.entries.length };
+  });
+  check("A2 conteos: «N de 400 dorsales», recibidas aparte y barra con nombre y valor",
+    cnt.v === `${cnt.size} de 400 dorsales` && cnt.n.startsWith(cnt.rec + " estampas recibidas") &&
+    cnt.val === cnt.size && cnt.lab === "countV" && cnt.vt === `${cnt.size} de 400`, cnt);
   check("A1 con álbum: zona oculta, botón del encabezado y enlace visibles",
     await page.evaluate(() => document.getElementById("drop").hidden && !document.getElementById("openBtn").hidden) &&
     await links() >= 1);
