@@ -1994,7 +1994,10 @@ $("connectBtn").addEventListener("click", async () => {
   await sleep(OPEN_WAIT_MS);
   if (!port) return;   // se perdió en la espera (readerLoop ya avisó)
   deviceButtons(true);
-  if (await refreshInfo()) await readCard(true);
+  if (await refreshInfo()) {
+    await syncClock();
+    await readCard(true);
+  }
   await showSelectedSlot();
   if (port) { connMode = "on"; paintConn(); }
 });
@@ -2125,6 +2128,13 @@ async function readPayloadReply(expected) {
 }
 
 const INFO_RE = /^OK BB26 (\S+) no=(\d+) panel=(\d+)x(\d+) album=(\d+)\/(\d+) slots=(\d+) current=(-?\d+) used=([01]+)(?: home=(-?\d+))?(?: .*)?$/;   // campos nuevos al final de INFO no deben romper la conexión
+
+// Pone el reloj del badge con la hora local de la PC (igual que `badge_usb.py time`:
+// segundos desde 1970 en hora local). Si falla no estorba: el badge sigue "sin hora".
+async function syncClock() {
+  const epoch = Math.floor(Date.now() / 1000) - new Date().getTimezoneOffset() * 60;
+  await command("TIME " + epoch, null, () => readReply(5000), "Poner la hora");
+}
 
 async function refreshInfo(keepStatus) {
   if (!port) return false;
