@@ -619,6 +619,36 @@ async function checkA1(browser, check, refOut) {
   });
   check("A6.3 un <main> con zona, resumen, pestañas y cuadrícula; encabezado y pie fuera",
     land.n === 1 && land.has && land.out && land.top, JSON.stringify(land));
+  // A6.4: sin desplazamiento horizontal en las tres medidas, ≥ 3 columnas a 360 px, pestañas con indicio
+  const adapt = [];
+  for (const [w, h, f] of [[1280, 800, 1], [512, 384, 2], [360, 740, 1]]) {
+    await page.setViewport({ width: w, height: h, deviceScaleFactor: f });
+    for (const c of ["típico .json", "lleno .json", "QR (mi dorsal no viene en el bitmap)"]) {
+      const m = CASES[c];
+      if (Array.isArray(m)) await page.evaluate(openAll, m.map(([n, b]) => [n, b.toString("base64")]));
+      else { await page.goto("file://" + html + m); }
+      adapt.push(await page.evaluate((w, c) => {
+        const t = $("tabs"), more = t.scrollWidth > t.clientWidth;
+        return { w, c, sw: document.documentElement.scrollWidth, iw: innerWidth,
+          cols: getComputedStyle($("grid")).gridTemplateColumns.split(" ").length,
+          more, fr: t.style.getPropertyValue("--fr"), fl: t.style.getPropertyValue("--fl"),
+          mask: getComputedStyle(t).maskImage !== "none" };
+      }, w, c));
+    }
+  }
+  const badA = adapt.filter(a => a.sw > a.iw || a.cols < 3 || !a.mask || (a.more && a.fr !== "24px") || (!a.more && a.fr === "24px"));
+  check("A6.4 sin desplazamiento horizontal a 1280, 1024 al 200 % y 360; ≥ 3 columnas; pestañas con borde desvanecido",
+    !badA.length && adapt.some(a => a.more), JSON.stringify(badA));
+  await page.setViewport({ width: 360, height: 740 });
+  await page.evaluate(openAll, CASES["típico .json"].map(([n, b]) => [n, b.toString("base64")]));
+  const sc = await page.evaluate(() => {
+    const t = $("tabs"); t.scrollLeft = t.scrollWidth; t.dispatchEvent(new Event("scroll"));
+    return { fl: t.style.getPropertyValue("--fl"), fr: t.style.getPropertyValue("--fr"),
+             sub: [...document.querySelectorAll(".st .sub")].filter(e => e.title !== e.textContent) .length };
+  });
+  check("A6.4 al llegar al final de las pestañas se desvanece solo el borde izquierdo; la villa de cada estampa lleva title",
+    sc.fl === "24px" && sc.fr === "0px" && sc.sub === 0, JSON.stringify(sc));
+  await page.setViewport({ width: 1280, height: 800 });
   // los enlaces resuelven por file:// (relativos) y vuelven
   await page.goto("file://" + html);
   await page.click("a[href='../configurator/index.html']");
