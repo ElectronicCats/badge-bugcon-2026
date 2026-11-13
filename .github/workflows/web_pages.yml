@@ -1,0 +1,57 @@
+# Publica el configurador y el álbum en GitHub Pages:
+# https://electroniccats.github.io/badge-bugcon-2026/configurator/
+# Requiere Settings > Pages > Source: "GitHub Actions".
+
+name: Configurador en GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - web/configurator/**
+      - web/album/**
+      - LICENSE
+      - .github/workflows/web_pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: 3.x
+
+    - name: Tests
+      run: python3 -m unittest tools/test_verify_album.py tools/test_configurator.py
+
+    # Mismas carpetas hermanas que el .zip, para que ../album/index.html funcione.
+    - name: Stage site
+      run: |
+        mkdir _site
+        cp -r web/configurator web/album _site/
+        cp LICENSE _site/LICENSE.txt
+        echo '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=configurator/">' > _site/index.html
+
+    - uses: actions/configure-pages@v5
+
+    - uses: actions/upload-pages-artifact@v3
+      with:
+        path: _site
+
+    - id: deployment
+      uses: actions/deploy-pages@v4
