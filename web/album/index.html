@@ -70,6 +70,10 @@ footer.hint { margin-top: 24px; }
 #status.err { color: var(--err); }
 body.over { outline: 2px dashed var(--accent); outline-offset: -6px; }
 a { color: var(--accent); }
+/* Foco: contorno claro separado del borde, distinto del anillo azul de .mine y de los bordes de rareza. */
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.st.mine:focus-visible { outline-offset: 4px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 #drop { text-align: center; padding: 32px 16px; margin-bottom: 12px; background: var(--card); border: 2px dashed var(--border); border-radius: 10px; }
 body.over #drop { border-color: var(--accent); background: var(--card2); }
 #drop .big { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
@@ -85,7 +89,7 @@ body.over #drop { border-color: var(--accent); background: var(--card2); }
 #countV { font-size: 16px; font-weight: 600; }
 #countN { font-size: 13px; color: var(--muted); }
 #countBar { width: 100%; accent-color: var(--accent); margin-top: 6px; }
-#tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 10px; }
+#tabs { display: flex; gap: 6px; overflow-x: auto; padding: 4px 4px 6px; margin: -4px -4px 10px; }   /* sitio para el foco */
 #tabs button { white-space: nowrap; flex: none; }
 #tabs button[aria-selected=true] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 #filter, #filter > div, #goForm { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -419,7 +423,8 @@ function sticker(it) {
   const c = it.card;
   if (!c) {
     const e = el("div", "st " + (it.got ? "got" : "empty"));
-    e.append(el("span", "no", pad(it.no)));
+    // El estado en texto (no solo en title) para el lector; siguen sin ser paradas de Tab.
+    e.append(el("span", "no", pad(it.no)), el("span", "sr", it.got ? ", la tienes," : ", vacío"));
     if (it.got) e.append(el("span", "sub", "sin datos"));
     e.title = it.got ? "La tienes; abre el .json del configurador para ver sus datos." : "Hueco vacío";
     e.dataset.no = it.no;
@@ -476,7 +481,8 @@ function render() {
   // El filtro solo decide qué se pinta de lo que ya devolvió sections().
   $("filter").hidden = tab !== 0;
   for (const b of $("filter").querySelectorAll("[data-f]")) b.setAttribute("aria-pressed", b.dataset.f === filter);
-  let items = secs[tab].items, empty = "Sin estampas";
+  let items = secs[tab].items, empty = secs[tab].name === "Especiales" ? "Sin especiales todavía." :
+    "Todavía no tienes estampas de " + secs[tab].name + ". Intercambia por infrarrojo con alguien de esa villa.";
   if (tab === 0 && filter !== "all") {
     items = items.filter(it => it.got === (filter === "got"));
     empty = filter === "got" ? "Todavía no tienes dorsales." : "No te falta ningún dorsal.";
