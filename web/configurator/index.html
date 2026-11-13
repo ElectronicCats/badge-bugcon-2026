@@ -1088,11 +1088,17 @@ function drawGafete(fb, c, avatar) {
 
 const preview = $("preview"), pvCtx = preview.getContext("2d");
 
-// Escala entera para que los píxeles se vean nítidos
+// Escala entera para que los píxeles se vean nítidos: el mayor múltiplo que cabe
+// en la tarjeta (sin pasar de 400 px). Si no cabe ni 1×, el CSS lo encoge.
+function snapCanvas(cnv) {
+  const box = cnv.parentElement, cs = getComputedStyle(box);
+  const avail = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const s = Math.max(1, Math.floor(Math.min(400, avail) / Math.max(cnv.width, cnv.height)));
+  cnv.style.width = cnv.width * s + "px";
+}
 function fitCanvas(cnv, w, h) {
   cnv.width = w; cnv.height = h;
-  const s = Math.max(1, Math.floor(400 / Math.max(w, h)));
-  cnv.style.width = w * s + "px";
+  snapCanvas(cnv);
 }
 
 function updateFullHint() {
@@ -1609,6 +1615,10 @@ function showCard(c) {
 /* plantilla "Copa BugCon": el gafete del badge (drawGafete), al tamaño del panel */
 
 const tpl = $("tpl"), tplCtx = tpl.getContext("2d", { willReadFrequently: true });
+// Al cambiar de pestaña (la tarjeta pasa de oculta a visible) o de ancho, vuelve a medir la escala
+const snapObs = new ResizeObserver(() => { snapCanvas(preview); snapCanvas(tpl); });
+snapObs.observe(preview.parentElement);
+snapObs.observe(tpl.parentElement);
 let tplBits = null;
 
 function renderTemplate() {
