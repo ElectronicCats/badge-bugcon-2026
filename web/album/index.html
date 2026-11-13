@@ -107,10 +107,13 @@ button.st:hover { border-color: var(--accent); }
 .st.got { justify-content: center; aspect-ratio: 3 / 4; color: var(--ok); }
 .st .no { font-variant-numeric: tabular-nums; font-weight: 600; }
 .st .face { width: 100%; aspect-ratio: 1; border-radius: 4px; margin-bottom: 3px; }
-.st div.face { display: flex; align-items: center; justify-content: center; background: var(--card2); font-size: 28px; font-weight: 700; color: var(--muted); }
+.st div.face { position: relative; display: flex; align-items: center; justify-content: center; background: var(--card2); font-size: 28px; font-weight: 700; color: var(--muted); }
 .st .nick { width: 100%; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st .sub { width: 100%; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st .no.tag { position: absolute; top: 6px; left: 6px; background: #000a; color: #fff; border-radius: 4px; padding: 0 4px; font-size: 11px; }
+.st .rar { position: absolute; bottom: 3px; right: 3px; background: #000a; border-radius: 4px; padding: 0 4px; font-size: 12px; line-height: 1.4; }
+.st.r1 .rar { color: var(--silver); }
+.st.r2 .rar { color: var(--gold); }
 dialog {
   margin: auto; background: var(--card); color: var(--text);
   border: 1px solid var(--border); border-radius: 12px; padding: 16px;
@@ -422,10 +425,23 @@ function sticker(it) {
     e.dataset.no = it.no;
     return e;
   }
-  const e = el("button", "st r" + (c.rarity < RARITIES.length ? c.rarity : 0) + (it.mine ? " mine" : ""));
+  const r = c.rarity < RARITIES.length ? c.rarity : 0;
+  const e = el("button", "st r" + r + (it.mine ? " mine" : ""));
   e.dataset.no = it.no;
-  e.append(el("div", "face", initial(c)), el("span", "no tag", kindName(c)), el("span", "nick", c.nickname || "—"),
+  const face = el("div", "face", initial(c)), nick = el("span", "nick", c.nickname || "—");
+  face.setAttribute("aria-hidden", "true");
+  nick.title = c.nickname;   // los largos se cortan con «…»
+  e.append(face, el("span", "no tag", kindName(c)), nick,
            el("span", "sub", it.mine ? "Mi estampa" : TEAMS[c.team] || "Sin villa"));
+  // La rareza no solo con el color del borde: ◆ Plata, ★ Oro (el nombre accesible la dice en texto).
+  if (r) {
+    const m = el("span", "rar", r === 1 ? "◆" : "★");
+    m.title = RARITIES[r];
+    face.append(m);
+  }
+  // Nombre accesible armado como texto (nunca innerHTML): «#012, Ana, Villa del Hardware, Oro».
+  e.setAttribute("aria-label", [it.mine && "Mi estampa", kindName(c), c.nickname,
+    TEAMS[c.team] || (c.type === ATTENDEE && "Sin villa"), r && RARITIES[r]].filter(Boolean).join(", "));
   e.addEventListener("click", () => showDetail(c, it.order));
   return e;
 }
