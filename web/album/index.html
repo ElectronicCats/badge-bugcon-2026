@@ -88,6 +88,10 @@ body.over #drop { border-color: var(--accent); background: var(--card2); }
 #tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 10px; }
 #tabs button { white-space: nowrap; flex: none; }
 #tabs button[aria-selected=true] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+#filter, #filter > div, #goForm { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+#filter { gap: 6px 16px; margin-bottom: 10px; }
+#filter button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+#goNo { width: 5.5em; background: var(--card2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font: inherit; }
 #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; margin-bottom: 14px; }
 #grid > p { grid-column: 1 / -1; color: var(--muted); }
 .st {
@@ -159,6 +163,17 @@ dialog::backdrop { background: #000a; }
     </div>
   </div>
   <nav id="tabs" role="tablist"></nav>
+  <div id="filter" hidden>
+    <div role="group" aria-label="Mostrar dorsales">
+      <button data-f="all" aria-pressed="true">Todas</button>
+      <button data-f="got" aria-pressed="false">Tengo</button>
+      <button data-f="missing" aria-pressed="false">Me faltan</button>
+    </div>
+    <form id="goForm">
+      <label>Ir al dorsal <input id="goNo" type="number" min="1" max="400" required></label>
+      <button>Ir</button>
+    </form>
+  </div>
   <div id="grid" role="tabpanel"></div>
 </section>
 
@@ -218,6 +233,7 @@ const isMaster = c => c.type === ATTENDEE && c.badgeNo >= MASTER_FIRST &&
 
 let album = null;   // { no, mine, entries, numbers, source }
 let tab = 0;
+let filter = "all";   // filtro de vista de «Todas»: all | got | missing
 
 function setStatus(msg, cls) {
   $("status").textContent = (cls === "ok" ? "✓ " : cls === "err" ? "⚠ " : "") + msg;
@@ -403,9 +419,11 @@ function sticker(it) {
     e.append(el("span", "no", pad(it.no)));
     if (it.got) e.append(el("span", "sub", "sin datos"));
     e.title = it.got ? "La tienes; abre el .json del configurador para ver sus datos." : "Hueco vacío";
+    e.dataset.no = it.no;
     return e;
   }
   const e = el("button", "st r" + (c.rarity < RARITIES.length ? c.rarity : 0) + (it.mine ? " mine" : ""));
+  e.dataset.no = it.no;
   e.append(el("div", "face", initial(c)), el("span", "no tag", kindName(c)), el("span", "nick", c.nickname || "—"),
            el("span", "sub", it.mine ? "Mi estampa" : TEAMS[c.team] || "Sin villa"));
   e.addEventListener("click", () => showDetail(c, it.order));
@@ -439,8 +457,15 @@ function render() {
     b.tabIndex = i === tab ? 0 : -1;
   });
   $("grid").setAttribute("aria-labelledby", "tab" + tab);
-  const items = secs[tab].items;
-  $("grid").replaceChildren(...(items.length ? items.map(sticker) : [el("p", "", "Sin estampas")]));
+  // El filtro solo decide qué se pinta de lo que ya devolvió sections().
+  $("filter").hidden = tab !== 0;
+  for (const b of $("filter").querySelectorAll("[data-f]")) b.setAttribute("aria-pressed", b.dataset.f === filter);
+  let items = secs[tab].items, empty = "Sin estampas";
+  if (tab === 0 && filter !== "all") {
+    items = items.filter(it => it.got === (filter === "got"));
+    empty = filter === "got" ? "Todavía no tienes dorsales." : "No te falta ningún dorsal.";
+  }
+  $("grid").replaceChildren(...(items.length ? items.map(sticker) : [el("p", "", empty)]));
   if (items.length) $("grid").removeAttribute("tabindex"); else $("grid").tabIndex = -1;
   const n = contacts().length;
   $("vcfBtn").disabled = !n;
@@ -459,9 +484,26 @@ $("tabs").addEventListener("keydown", ev => {
   $("tabs").children[tab].focus();
 });
 
+for (const b of $("filter").querySelectorAll("[data-f]")) {
+  b.addEventListener("click", () => { filter = b.dataset.f; render(); });
+}
+// Ir al dorsal: si el filtro lo esconde, vuelve a «Todas»; los huecos sin datos no son
+// paradas de Tab, así que se enfocan con tabindex=-1.
+$("goForm").addEventListener("submit", ev => {
+  ev.preventDefault();
+  const find = () => $("grid").querySelector('[data-no="' + $("goNo").valueAsNumber + '"]');
+  if (!find()) { filter = "all"; render(); }
+  const e = find();
+  if (!e) return;
+  if (e.tagName !== "BUTTON") e.tabIndex = -1;
+  e.scrollIntoView({ block: "center" });
+  e.focus({ preventScroll: true });
+});
+
 function show(a) {
   album = a;
   tab = 0;
+  filter = "all";
   $("owner").textContent = a.mine ? "Álbum de " + (a.mine.nickname || pad(a.no)) + " · " + pad(a.no)
                                   : "Álbum del " + pad(a.no);
   const of = a.numbers.size + " de " + ATTENDEES;
