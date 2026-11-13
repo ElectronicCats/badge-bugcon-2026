@@ -486,6 +486,67 @@ async function checkA1(browser, check, refOut) {
     empties.length === 11 && empties.at(-1)[1] === "Sin especiales todavía." && empties.slice(0, -1).every(([t, p]) =>
       p === "Todavía no tienes estampas de " + t.replace(/ · 0$/, "") + ". Intercambia por infrarrojo con alguien de esa villa."),
     JSON.stringify(empties));
+  // A4: detalle de la estampa
+  await page.setViewport({ width: 1280, height: 800 });
+  await page.goto("file://" + html);
+  await page.evaluate(hookDownloads);
+  await page.evaluate(openAll, CASES["típico .json"].map(([n, b]) => [n, b.toString("base64")]));
+  const dlg = () => page.evaluate(() => {
+    const d = $("detail"), name = id => document.getElementById(d.getAttribute(id) || "").textContent;
+    return { open: d.open, name: name("aria-labelledby"), desc: name("aria-describedby"),
+             face: $("dNoFace").getAttribute("aria-hidden"), handle: $("dHandle").textContent, msg: $("dMsg").textContent,
+             stats: [...document.querySelectorAll("#dStats .stat")].map(r => ({ sr: r.querySelector(".sr").textContent,
+               hid: [...r.children].filter(c => !c.classList.contains("sr")).every(c => c.getAttribute("aria-hidden") === "true"),
+               w: r.querySelector("i").style.width })),
+             order: [...d.querySelectorAll("#dNick, #dMeta, #dStats, #dHandle, #dVcf")].map(e => e.id).join(),
+             ae: document.activeElement.getAttribute("data-no") };
+  });
+  await page.focus('#grid [data-no="13"]');
+  await page.keyboard.press("Enter");
+  const d13 = await dlg(), c13 = await page.evaluate(() => album.entries.find(x => x.card.badgeNo === 13).card.stats);
+  check("A4.1 el diálogo se nombra con el nick y se describe con los metadatos",
+    d13.open && d13.name === "a,b;c\\d" && d13.desc.includes("PaySec LATAM"), JSON.stringify(d13));
+  check("A4.2 la inicial no se lee", d13.face === "true");
+  check("A4.3 cada estadística se lee «ATK n de 99», con la barra oculta y el mismo ancho",
+    d13.stats.length === 4 && d13.stats.every((s, i) => s.hid && s.sr === ["ATK", "DEF", "HAX", "SUE"][i] + " " + c13[i] + " de 99" &&
+      Math.abs(parseFloat(s.w) - Math.min(100, c13[i] * 100 / 99)) < 0.01), JSON.stringify(d13.stats));
+  check("A4.6 orden de lectura: nick, metadatos, estadísticas, handle, acciones",
+    d13.order === "dNick,dMeta,dStats,dHandle,dVcf", d13.order);
+  await page.click("#dVcf");
+  const m13 = await page.evaluate(() => ({ msg: $("dMsg").textContent, live: $("dMsg").getAttribute("role"),
+    inDlg: $("detail").contains($("dMsg")), dl: window.__dl.map(d => d.name) }));
+  check("A4.4 «Guardar contacto» confirma en el diálogo, en una región que se anuncia",
+    m13.msg === "✓ Descargado bugcon_13.vcf." && m13.live === "status" && m13.inDlg && m13.dl.join() === "bugcon_13.vcf",
+    JSON.stringify(m13));
+  await page.keyboard.press("Escape");
+  const e13 = await dlg();
+  check("A4.5 Esc cierra y el foco vuelve a la estampa", !e13.open && e13.ae === "13", JSON.stringify(e13));
+  await page.click('#grid [data-no="13"]');
+  check("A4.4 al abrir otra vez el mensaje anterior ya no está", (await dlg()).msg === "");
+  await page.click("#detail", { offset: { x: 5, y: 5 } });   // padding del diálogo: no cierra
+  const inPad = (await dlg()).open;
+  await page.mouse.click(5, 5);                                // fondo: cierra
+  const f13 = await dlg();
+  check("A4.5 clic en el fondo cierra, clic en el padding no; el foco vuelve a la estampa",
+    inPad && !f13.open && f13.ae === "13", JSON.stringify({ inPad, f13 }));
+  await page.evaluate(() => [...document.querySelectorAll("#tabs [role=tab]")].find(t => t.textContent.startsWith(TEAMS[3])).click());
+  await page.click(`#grid [data-no="${MASTER_FIRST + 3}"]`);
+  const dm = await dlg();
+  check("A4.6 el maestro rotula su pedazo «Pedazo de la gira de villas»",
+    dm.handle === "Pedazo de la gira de villas: A1B2 C3D4 E5F6 0718", dm.handle);
+  await page.keyboard.press("Escape");
+  await page.setViewport({ width: 360, height: 420 });
+  await page.click(`#grid [data-no="${MASTER_FIRST + 3}"]`);
+  const low = await page.evaluate(() => {
+    const d = $("detail"), r = d.getBoundingClientRect();
+    d.scrollTop = d.scrollHeight;
+    const b = d.querySelector("form button").getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, h: innerHeight, scrolls: d.scrollHeight > d.clientHeight, btn: b.bottom <= r.bottom };
+  });
+  check("A4.5 ventana baja: el diálogo cabe y se desplaza hasta «Cerrar»",
+    low.top >= 0 && low.bottom <= low.h && low.scrolls && low.btn, JSON.stringify(low));
+  await page.keyboard.press("Escape");
+  await page.setViewport({ width: 1280, height: 800 });
   // los enlaces resuelven por file:// (relativos) y vuelven
   await page.goto("file://" + html);
   await page.click("a[href='../configurator/index.html']");
