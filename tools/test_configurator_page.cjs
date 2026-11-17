@@ -1,0 +1,279 @@
+#!/usr/bin/env node
+/*
+ * test_configurator_page.cjs — Prueba del configurador (web/configurator/index.html)
+ * en Brave headless, sin badge: la plantilla y el avatar no cambian (huellas
+ * fijas), el encuadre "Encajar" de la pestaña Pantalla completa, y el estado
+ * al cambiar de pestaña.
+ *
+ * Las huellas dependen del navegador (canvas); se fijaron con Brave 1.98 /
+ * Chromium 156 en Linux. Si cambian con otro navegador, compara contra el HTML
+ * anterior con tools/configurator_ref.cjs antes de tocar la tabla.
+ *
+ * Uso (puppeteer-core instalado con npm en otra carpeta; sale 1 si algo falla):
+ *   NODE_PATH=<carpeta>/node_modules node tools/test_configurator_page.cjs [html]
+ */
+const crypto = require("crypto");
+const path = require("path");
+const puppeteer = require("puppeteer-core");
+const { pageRun: refRun } = require("./configurator_ref.cjs");
+
+const html = path.resolve(process.argv[2] ||
+  path.join(__dirname, "../web/configurator/index.html"));
+const BROWSER = process.env.BROWSER || "/usr/bin/brave-browser";
+
+const REF = {
+  tpl_sin_avatar: "c0c9def543c77db936172550a458a75fa917fbaa66082110f4798bb1df619371",
+  avtr_payload: "4919be4b874618ba45d0bc13f79c2b0af042bd294d5248591f4176bdc6428480",
+  tpl_con_avatar: "a72569295e226a4b49e78e156de2af9a5a5d61cbc8d02d44e088f3aa7ab01a28",
+  slot_400x200: "7a344c7d2604c7ab91855f8a8e435674a99dc6385dd3be4eea3cfd15fb4ac95d",
+  slot_200x400: "3107ff371f21f171a6d23f73d08516b555c6bc477f23572b8b31f316a1c68e87",
+  patron: "9e92452fd847c0e514951571702c6733422d3b8bd604b9be68db95686ec3c33b",
+};
+
+// Dentro de la página. Devuelve {nombre: booleano}.
+function fitRun() {
+  const flat = (w, h, color) => {
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const x = c.getContext("2d");
+    x.fillStyle = color; x.fillRect(0, 0, w, h);
+    return c;
+  };
+  const set = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event("change")); };
+  // suma de bits (1 = blanco) en filas [y0,y1) / columnas [x0,x1)
+  const rows = (y0, y1) => { let n = 0; for (let y = y0; y < y1; y++) for (let x = 0; x < W; x++) n += lastBits[y * W + x]; return n; };
+  const cols = (x0, x1) => { let n = 0; for (let y = 0; y < H; y++) for (let x = x0; x < x1; x++) n += lastBits[y * W + x]; return n; };
+  const ok = {};
+
+  setTarget("slot");
+  set("mode", "threshold");
+  setSource(flat(400, 200, "#202020"));
+  render();
+  ok.fill_has_no_bands = rows(0, H) === 0;
+  set("fit", "fit");
+  // 400x200 en 200x200: imagen en las filas ~50-149, bandas blancas arriba y abajo
+  ok.fit_bands_white = rows(0, 49) === 49 * W && rows(151, H) === 49 * W;
+  ok.fit_image_whole = rows(51, 149) === 0;
+  set("band", "black");
+  ok.fit_bands_black = rows(0, 49) === 0 && rows(151, H) === 0;
+  setSource(flat(400, 200, "#ffffff"));
+  render();
+  ok.black_bands_keep_white_image = rows(51, 149) === 98 * W && rows(0, 49) === 0;
+  // 200x400: bandas a los lados, simétricas ±1 px
+  set("band", "white");
+  setSource(flat(200, 400, "#202020"));
+  render();
+  ok.side_bands = cols(0, 49) === 49 * H && cols(151, W) === 49 * H && cols(51, 149) === 0;
+  // cuadrada: Rellenar y Encajar dan los mismos bits
+  set("mode", "fs");
+  setSource(flat(300, 300, "#808080"));
+  render();
+  const fitBits = lastBits.join();
+  set("fit", "fill");
+  ok.square_fill_eq_fit = fitBits === lastBits.join();
+  // la plantilla siempre rellena y el control solo vive en Pantalla completa
+  set("fit", "fit");
+  setTarget("avatar");
+  ok.template_never_fits = !fitting();
+  setTarget("slot");
+  ok.fit_kept_in_slot = fitting() && !$("bandWrap").hidden;
+  ok.packed_5000 = packBits(lastBits, panel.w, panel.h).length === 5000;
+  return ok;
+}
+
+function tabsRun() {
+  const tab = t => document.querySelector(`#tabs [data-target="${t}"]`).click();
+  const pack = b => packBits(b, W, H).join();
+  const ok = {};
+  ok.starts_in_template = target === "avatar" &&
+    document.querySelector('#tabs [data-target="avatar"]').getAttribute("aria-selected") === "true";
+  // sin imagen cargada, cambiar de pestaña no deja bits viejos que "Enviar" mande
+  tab("slot"); tab("avatar");
+  ok.no_stale_bits = lastBits === null;
+  // estampa y avatar fijos: las idas y vueltas no tocan la plantilla
+  refRun();
+  tab("avatar"); // cada pestaña conserva su imagen: vuelve el avatar de refRun
+  const tpl = tplBits.join(), av = avatarBits.join();
+  for (let i = 0; i < 10; i++) { tab("slot"); tab("avatar"); }
+  ok.round_trips_keep_template = tpl === tplBits.join() && av === avatarBits.join();
+  // una imagen propia en Pantalla completa no se vuelve el avatar, y cada pestaña conserva la suya
+  const c = document.createElement("canvas");
+  c.width = 400; c.height = 200;
+  c.getContext("2d").fillRect(0, 0, 400, 100);
+  tab("slot"); setSource(c);
+  const full = lastBits.join();
+  tab("avatar");
+  ok.full_image_not_avatar = tpl === tplBits.join() && av === avatarBits.join();
+  tab("slot");
+  ok.full_image_kept = baseImage === c && full === lastBits.join();
+  // texto fuera de cuadro se recorta al cambiar de destino
+  tab("slot");
+  textRows[0].x.value = 150; textRows[0].y.value = 180;
+  tab("avatar");
+  ok.text_inside_avatar = +textRows[0].x.value <= 95 && +textRows[0].y.value <= 95 &&
+    +textRows[0].x.max === 95;
+  tab("slot");
+  ok.slot_max_restored = +textRows[0].x.max === panel.w - 1;
+  return ok;
+}
+
+// Etiquetado y validación en línea (sin badge).
+function a11yRun() {
+  const ok = {};
+  const lbl = id => $(id).getAttribute("aria-label");
+  const type = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event("input")); };
+  ok.canvases_are_img = ["srcCanvas", "preview", "tpl"].every(id => $(id).getAttribute("role") === "img" && lbl(id));
+  ok.preview_avatar_label = lbl("preview") === "Vista previa del avatar, 96 × 96, sin imagen";
+  ok.tpl_label = lbl("tpl") === "Plantilla con tu estampa";
+  const c = document.createElement("canvas");
+  c.width = 400; c.height = 200;
+  setTarget("slot");
+  setSource(c);
+  ok.preview_slot_label = lbl("preview") === "Vista previa del slot 0, " + panel.w + " × " + panel.h;
+  ok.src_label = lbl("srcCanvas") === "Imagen original, recuadro de recorte al " + $("cropSize").value + " %";
+  $("cropSize").value = 80; $("cropSize").dispatchEvent(new Event("input"));
+  ok.src_label_follows_crop = lbl("srcCanvas") === "Imagen original, recuadro de recorte al 80 %";
+  setTarget("avatar");
+  ok.src_focusable = $("srcCanvas").tabIndex === 0;
+  // validación en línea
+  ok.no_error_at_start = $("nickErr").textContent === "" && $("nick").getAttribute("aria-invalid") === "false";
+  type("nick", "😀");
+  ok.emoji_error = $("nick").getAttribute("aria-invalid") === "true" && /😀/.test($("nickErr").textContent) &&
+    $("nick").getAttribute("aria-describedby") === "nickErr";
+  type("nick", "Ana");
+  ok.error_clears = $("nickErr").textContent === "" && $("nick").getAttribute("aria-invalid") === "false";
+  type("nick", "");
+  ok.empty_quiet_until_blur = $("nickErr").textContent === "";
+  $("nick").dispatchEvent(new Event("blur"));
+  ok.empty_after_blur = $("nickErr").textContent === "Escribe un nickname." && $("nick").getAttribute("aria-invalid") === "true";
+  $("handleOn").checked = true; type("handle", "é".repeat(11));
+  ok.handle_too_long = $("handle").getAttribute("aria-invalid") === "true" && $("handleErr").textContent !== "";
+  // estructura
+  ok.text_rows_in_fieldsets = [...document.querySelectorAll("fieldset.textline > legend")].map(l => l.textContent).join() === "Renglón 1,Renglón 2,Renglón 3";
+  ok.free_points_live = $("freeV").getAttribute("aria-live") === "polite" &&
+    statInputs.every(s => s.getAttribute("aria-describedby") === "freeV");
+  // regiones vivas: pastilla cortés, errores en #alert (y #status calla), el resto solo en #status
+  ok.pill_live = $("connState").getAttribute("aria-live") === "polite";
+  ok.lost_notice_not_alert = !$("lostNotice").hasAttribute("role");
+  setStatus("Todo bien.", "ok");
+  ok.status_ok_polite = $("status").getAttribute("aria-live") === "polite" && $("alert").textContent === "";
+  setStatus("Falló algo.", "err");
+  ok.status_err_silent = $("status").getAttribute("aria-live") === "off" && $("status").className === "err";
+  ok.alert_has_role = $("alert").getAttribute("role") === "alert";
+  setStatus("Listo.");
+  // pestañas: Fin → última, Inicio → primera, → rodea
+  const key = k => { document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true })); return target; };
+  document.querySelector('#tabs [data-target="avatar"]').focus();
+  ok.tabs_end = key("End") === "slot" && document.activeElement.id === "tabSlot";
+  ok.tabs_home = key("Home") === "avatar" && document.activeElement.id === "tabAvatar";
+  ok.tabs_wrap = key("ArrowLeft") === "slot" && key("ArrowRight") === "avatar";
+  const heads = [...document.querySelectorAll("h1,h2,h3")].map(h => +h.tagName[1]);
+  ok.headings_no_skips = heads.every((n, i) => i === 0 || n <= heads[i - 1] + 1);
+  return ok;
+}
+
+// Cada clave de FRIENDLY sale como «<operación> falló: <qué hacer>», sin la orden en crudo.
+async function friendlyRun() {
+  const ok = {};
+  port = {}; writer = { write: async () => {} };
+  for (const key of Object.keys(FRIENDLY)) {
+    await command("UPLD 0", null, async () => { throw new Error(key); });
+    const t = $("status").textContent;
+    ok["mensaje " + key] = t === "Enviar imagen falló: " + FRIENDLY[key] && /[:;] .*[a-z]/.test(FRIENDLY[key]) &&
+      !t.includes("ERR ") && $("status").className === "err";
+  }
+  await command("DEL 2", null, async () => { throw new Error("ERR empty"); });
+  ok.nombre_de_la_orden = $("status").textContent.startsWith("Vaciar slot falló:");
+  await command("CARD", null, async () => { throw new Error("timeout"); }, "Guardar la estampa");
+  ok.etiqueta_propia = $("status").textContent.startsWith("Guardar la estampa falló:");
+  port = null;
+  return ok;
+}
+
+(async () => {
+  const browser = await puppeteer.launch({ executablePath: BROWSER, headless: true });
+  let failed = 0;
+  const check = (name, pass) => { if (!pass) failed++; console.log((pass ? "ok   " : "FALLA"), name); };
+  try {
+    const run = async (fn, ...args) => {
+      const page = await browser.newPage();
+      const errors = [];
+      page.on("pageerror", e => errors.push(e.message));
+      await page.goto("file://" + html);
+      // la página no expone refRun: se inyecta como función global
+      await page.evaluate(`window.refRun = ${refRun.toString()}`);
+      const out = await page.evaluate(fn);
+      await page.close();
+      check("sin errores de página", errors.length === 0);
+      errors.forEach(e => console.log("   ", e));
+      return out;
+    };
+
+    const out = await run(refRun);
+    for (const [name, hex] of Object.entries(REF)) {
+      const got = crypto.createHash("sha256").update(Buffer.from(out[name])).digest("hex");
+      check(`huella ${name} = referencia`, got === hex);
+    }
+    check("editar en Pantalla completa no toca la plantilla",
+      out.tpl_tras_slot.join() === out.tpl_con_avatar.join());
+
+    for (const [k, v] of Object.entries(await run(fitRun))) check("encuadre: " + k, v);
+    for (const [k, v] of Object.entries(await run(tabsRun))) check("pestañas: " + k, v);
+    for (const [k, v] of Object.entries(await run(a11yRun))) check("accesibilidad: " + k, v);
+    for (const [k, v] of Object.entries(await run(friendlyRun))) check("errores: " + k, v);
+
+    // Zoom 200 % y 1024 px: sin desplazamiento horizontal en ninguna pestaña (683 = 1366 al 200 %, 960 = 1920 al 200 %)
+    for (const w of [1024, 960, 683]) for (const t of ["avatar", "slot"]) {
+      const page = await browser.newPage();
+      await page.setViewport({ width: w, height: 800 });
+      await page.goto("file://" + html);
+      const sw = await page.evaluate(t => { setTarget(t); return document.documentElement.scrollWidth; }, t);
+      await page.close();
+      check(`sin desplazamiento horizontal a ${w} px en ${t}`, sw <= w);
+    }
+
+    // Recorte con teclado = arrastre: mismos bits. Gradiente 400×200 en Pantalla completa,
+    // recuadro al 50 %; teclado: 5 × → y 2 × ↓ (8 px de imagen cada una); ratón: lo mismo en pantalla.
+    const cropBits = async drive => {
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1366, height: 900 });
+      await page.goto("file://" + html);
+      await page.evaluate(() => {
+        const c = document.createElement("canvas");
+        c.width = 400; c.height = 200;
+        const x = c.getContext("2d"), g = x.createLinearGradient(0, 0, 400, 200);
+        g.addColorStop(0, "#000"); g.addColorStop(1, "#fff");
+        x.fillStyle = g; x.fillRect(0, 0, 400, 200);
+        setTarget("slot"); setSource(c);
+        $("mode").value = "threshold"; $("mode").dispatchEvent(new Event("change"));
+        $("cropSize").value = 50; $("cropSize").dispatchEvent(new Event("input"));
+      });
+      await drive(page);
+      const bits = await page.evaluate(() => [crop.cx, crop.cy, lastBits.join("")]);
+      await page.close();
+      return bits;
+    };
+    const byKeys = await cropBits(async page => {
+      await page.focus("#srcCanvas");
+      for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowRight");
+      for (let i = 0; i < 2; i++) await page.keyboard.press("ArrowDown");
+    });
+    const byMouse = await cropBits(async page => {
+      // pantalla de un punto de imagen (x, y) y de un desplazamiento de imagen (dx, dy)
+      const at = (dx, dy) => page.evaluate((dx, dy) => {
+        const r = srcCanvas.getBoundingClientRect(), s = srcScale(), k = r.width / srcCanvas.width;
+        const ox = (srcCanvas.width - oriented.width * s) / 2, oy = (srcCanvas.height - oriented.height * s) / 2;
+        return [r.left + (ox + (crop.cx + dx) * s) * k, r.top + (oy + (crop.cy + dy) * s) * k];
+      }, dx, dy);
+      const [x0, y0] = await at(0, 0), [x1, y1] = await at(40, 16);
+      await page.mouse.move(x0, y0); await page.mouse.down();
+      await page.mouse.move(x1, y1, { steps: 4 }); await page.mouse.up();
+    });
+    check("recorte: el teclado mueve el recuadro", byKeys[0] !== 200 || byKeys[1] !== 100);
+    check("recorte: teclado = arrastre (mismos bits)", byKeys[2] === byMouse[2] &&
+      Math.abs(byKeys[0] - byMouse[0]) < 0.5 && Math.abs(byKeys[1] - byMouse[1]) < 0.5);
+  } finally {
+    await browser.close();
+  }
+  process.exit(failed ? 1 : 0);
+})().catch(e => { console.error(e.message); process.exit(1); });

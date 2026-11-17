@@ -1,0 +1,6 @@
+# Dependencias de los programas para quien tiene un badge (badge_usb.py,
+# ir_import.py, ui_shot.py, ai_tokens.py). Python 3.9 o más nuevo.
+#   pip install -r tools/requirements.txt
+pyserial>=3.5
+rich>=13.0
+Pillow>=10.0

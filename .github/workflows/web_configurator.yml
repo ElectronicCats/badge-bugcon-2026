@@ -1,0 +1,36 @@
+# Configurador USB local: al publicar un release adjunta
+# bugcon26-configurador.zip, que se descarga, se descomprime y se abre con
+# file:// (sin servidor). Enlace fijo a la última versión:
+# https://github.com/ElectronicCats/badge-bugcon-2026/releases/latest/download/bugcon26-configurador.zip
+
+name: Configurador web
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  package:
+    if: github.repository == 'ElectronicCats/badge-bugcon-2026'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: 3.x
+
+    - name: Tests
+      run: python3 -m unittest tools/test_verify_album.py tools/test_configurator.py
+
+    - name: Package
+      env:
+        TAG: ${{ github.event.release.tag_name }}
+      run: python3 tools/package_web.py dist/bugcon26-configurador.zip "$TAG"
+
+    - name: Upload asset
+      uses: softprops/action-gh-release@v2
+      with:
+        files: dist/bugcon26-configurador.zip

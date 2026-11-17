@@ -1,0 +1,2461 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configurador Copa BugCon 2026</title>
+<!--
+  Configurador del badge BugCon 2026. Un solo HTML sin dependencias,
+  abierto desde file:// (sin servidor; no hace peticiones de red).
+  Portado de e-ink-Keychain/tool/configurator.html: recorte, tono, dithering,
+  texto, vista previa exacta y Web Serial con OK/ERR y timeouts. Agrega el
+  editor de la estampa (NICK/CARD/AVTR), la plantilla "Copa BugCon" y la
+  exportación local del álbum (ALBM -> .json). Protocolo: el
+  usb_protocol.h del firmware del badge. Web Serial:
+  Chrome, Edge o Brave de escritorio, en contexto seguro (file://,
+  localhost o https); en los demás casos la página dice por qué no y qué hacer.
+-->
+<style>
+:root {
+  --bg: #14161a;
+  --card: #1e2128;
+  --card2: #262a33;
+  --text: #e8eaf0;
+  --muted: #9aa1ae;
+  --accent: #4da3ff;
+  --on-accent: #10131a;   /* texto sobre --accent */
+  --ok: #4ec97a;
+  --err: #ff6b6b;
+  --warn: #e8b04a;
+  /* fondos suaves de estado: 8 % del color sobre --card2 (texto ≥ 4.5:1) */
+  --ok-bg: #293739;
+  --err-bg: #372f37;
+  --warn-bg: #363535;
+  --border: #333845;       /* tarjetas y separadores */
+  --border-ctl: #707888;   /* borde de controles: ≥ 3:1 sobre --card y --card2 */
+  --disabled: #7d8492;     /* texto deshabilitado: ≥ 3:1 sobre --card2 */
+  /* espaciado, texto y radios */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
+  --fs-sm: 12px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 18px;
+  --r-sm: 4px; --r-md: 6px; --r-lg: 10px;
+  color-scheme: dark;   /* menús, casillas y flechas nativas en oscuro */
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: var(--fs-md)/1.45 system-ui, sans-serif;
+  padding: var(--s4);
+  max-width: 1632px;
+  margin: 0 auto;
+}
+a { color: var(--accent); }
+input, select { accent-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+header {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  margin-bottom: var(--s4);
+}
+h1 { font-size: var(--fs-xl); font-weight: 600; }
+/* título de tarjeta (h2) y subsección dentro de ella (h3) */
+h2 {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: var(--s3);
+}
+h3 {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: var(--s5) 0 var(--s2);
+}
+h3:first-child { margin-top: 0; }
+main {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--s4);
+  align-items: start;   /* cada tarjeta a su altura, sin huecos vacíos */
+  max-width: 1600px;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--s4);
+}
+/* pasos numerados: las tarjetas ocultas (display: none) no cuentan */
+main { counter-reset: step; }
+.step { counter-increment: step; }
+.step > h2::before {
+  content: counter(step) / "Paso " counter(step) ": ";
+  display: inline-grid; place-items: center;
+  width: 1.6em; height: 1.6em; margin-right: var(--s2);
+  border: 1px solid var(--accent); border-radius: 50%;
+  color: var(--accent); font-size: var(--fs-md);
+}
+#stampCard[hidden] ~ .tplOnly { display: none; }   /* Plantilla y Álbum siguen a la estampa */
+main:has(#slotCtl[hidden]) .slotOnly { display: none; }   /* «En el badge» sigue a los controles de slot */
+.row > .danger { margin-left: auto; }   /* lo destructivo, aparte y al final del grupo */
+#privacy { max-width: 1600px; margin-top: var(--s4); }
+#moreAdj { margin-bottom: var(--s2); }
+#moreAdj summary { cursor: pointer; color: var(--accent); min-height: 24px; margin-bottom: var(--s2); }
+button {
+  background: var(--card2);
+  color: var(--text);
+  border: 1px solid var(--border-ctl);
+  border-radius: var(--r-md);
+  padding: var(--s2) var(--s3);
+  min-height: 32px;
+  font: inherit;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+/* tres variantes: principal (una por bloque), secundario (el de arriba) y destructivo */
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+button.danger { color: var(--err); border-color: var(--err); }
+button.danger:hover:not(:disabled) { background: var(--err-bg); border-color: var(--err); }
+/* deshabilitado: mismo aspecto en las tres variantes, texto legible (no solo opacidad) */
+button:disabled, button.primary:disabled, button.danger:disabled {
+  background: var(--card2); border-color: var(--border); color: var(--disabled); cursor: not-allowed;
+}
+.row { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; margin-bottom: var(--s2); }
+.row > label, label:has(> input[type=checkbox]) { display: inline-flex; align-items: center; gap: var(--s2); cursor: pointer; min-height: 24px; }   /* área de clic ≥ 24×24 */
+.ctl { display: grid; grid-template-columns: 92px 1fr 44px; align-items: center; gap: var(--s2); margin-bottom: var(--s2); }
+.ctl label { color: var(--muted); }
+.ctl output { text-align: right; font-variant-numeric: tabular-nums; }
+input[type=range] { width: 100%; min-height: 24px; accent-color: var(--accent); }
+input[type=checkbox] { width: 16px; height: 16px; }
+select, input[type=text], input[type=number] {
+  background: var(--card2);
+  color: var(--text);
+  border: 1px solid var(--border-ctl);
+  border-radius: var(--r-md);
+  padding: var(--s2);
+  min-height: 32px;
+  font: inherit;
+}
+input:disabled, select:disabled { color: var(--disabled); border-color: var(--border); cursor: not-allowed; }
+/* min-width: 0 para que el control no empuje al contador fuera de la tarjeta */
+.ctl > input, .field > input, .field > select { width: 100%; min-width: 0; }
+.field { display: grid; grid-template-columns: 92px 1fr 60px; align-items: center; gap: var(--s2); margin-bottom: var(--s2); }
+.field label { color: var(--muted); }
+.field output { text-align: right; font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
+.field output.bad { color: var(--err); }
+/* mensaje de validación bajo el campo: región viva siempre presente, vacía sin ocupar sitio */
+.fielderr { color: var(--err); font-size: var(--fs-sm); margin: 0 0 var(--s2) calc(92px + var(--s2)); }
+.fielderr:empty { margin: 0; }
+input[type=text][aria-invalid=true] { border-color: var(--err); }
+#freeV { text-transform: none; }
+#freeV::before { content: "· "; }
+#cropKeys { display: block; }
+#drop {
+  border: 2px dashed var(--border-ctl);
+  border-radius: var(--r-lg);
+  padding: var(--s4);
+  text-align: center;
+  color: var(--muted);
+  margin-bottom: var(--s3);
+}
+#drop.over { border-color: var(--accent); color: var(--accent); }
+#srcWrap { position: relative; width: 100%; margin-bottom: var(--s2); }
+#srcCanvas { width: 100%; display: block; border-radius: var(--r-md); background: #000; touch-action: none; }
+#video { width: 100%; border-radius: var(--r-md); display: none; margin-bottom: var(--s2); }
+canvas.px {
+  max-width: 100%;
+  image-rendering: pixelated;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: #fff;
+  display: block;
+  margin: 0 auto var(--s3);
+}
+#tabs { display: flex; gap: var(--s2); overflow-x: auto; padding: var(--s1) var(--s1) var(--s2);   /* holgura para el contorno de foco */ margin-bottom: var(--s3); max-width: 1600px; }
+#tabs button { white-space: nowrap; flex: none; }
+#tabs button[aria-selected=true] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+#tabs .sub { display: block; font-size: var(--fs-sm); font-weight: 400; color: var(--muted); }
+.slots { display: flex; gap: var(--s2); margin-bottom: var(--s3); }
+.slots label {
+  position: relative;
+  flex: 1;
+  text-align: center;
+  padding: var(--s2) 0;
+  background: var(--card2);
+  border: 1px solid var(--border-ctl);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  color: var(--muted);
+}
+.slots input { position: absolute; opacity: 0; pointer-events: none; }   /* oculto, pero con teclado */
+.slots label:hover { border-color: var(--accent); }
+.slots label:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.slots label:has(:checked) { border-color: var(--accent); }
+.slots label { min-width: 0; }
+.slots label.used { color: var(--text); }
+.slots small { display: block; font-size: var(--fs-sm); color: var(--muted); }   /* vacío / imagen · inicio */
+.slots label.home small { color: var(--ok); }
+.slots input:checked + span { color: var(--accent); font-weight: 700; }
+#status {
+  padding: var(--s2) var(--s3);
+  background: var(--card2);
+  border-radius: var(--r-md);
+  color: var(--muted);
+  min-height: 34px;
+  flex: 1;
+}
+#status.ok { color: var(--ok); background: var(--ok-bg); }
+#status.err { color: var(--err); background: var(--err-bg); }
+/* aviso: la operación ocurrió, pero hay algo que mirar (la clase sigue siendo "err") */
+#status[data-tone=warn] { color: var(--warn); background: var(--warn-bg); }
+#alert { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#waitHint { font-size: var(--fs-sm); color: var(--muted); }
+.state { font-size: var(--fs-sm); color: var(--muted); }
+.state[data-state=dirty] { color: var(--warn); }
+.state[data-state=saved] { color: var(--ok); }
+/* resultado de la última operación, 2 s junto al botón que la pidió */
+.flash { font-size: var(--fs-sm); padding: 2px var(--s2); border-radius: var(--r-sm); }
+.flash.ok { color: var(--ok); background: var(--ok-bg); }
+.flash.err { color: var(--err); background: var(--err-bg); }
+.flash.warn { color: var(--warn); background: var(--warn-bg); }
+@media (prefers-reduced-motion: no-preference) {
+  .flash:not([hidden]) { animation: flashIn 0.25s ease-out; }
+}
+@keyframes flashIn { from { opacity: 0; } to { opacity: 1; } }
+#statusLog summary { font-size: var(--fs-sm); color: var(--muted); cursor: pointer; }
+#statusLog ol { list-style: none; margin: var(--s1) 0 0; padding: 0; max-height: 9em; overflow-y: auto; font-size: var(--fs-sm); color: var(--muted); }
+#statusLog li { padding: 2px 0; }
+#statusLog li time { margin-right: var(--s2); }
+#statusLog li.ok { color: var(--ok); }
+#statusLog li.err { color: var(--err); }
+#statusLog li.warn { color: var(--warn); }
+#prog { width: 100%; accent-color: var(--accent); }
+.textline { border: 0; padding: 0; min-width: 0; margin-bottom: var(--s3); }
+.textline legend { padding: 0; margin-bottom: var(--s1); color: var(--muted); font-size: var(--fs-sm); }
+.textmain { display: flex; gap: var(--s2); margin-bottom: var(--s1); }
+.textmain input { flex: 1; min-width: 0; }
+.textopts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); color: var(--muted); font-size: var(--fs-sm); }
+.textopts label { display: flex; align-items: center; gap: var(--s1); }
+.textopts input { width: 100%; min-width: 0; padding: var(--s1); }
+.hint { color: var(--muted); font-size: var(--fs-sm); margin-top: var(--s2); }
+footer.hint { margin-top: var(--s5); }
+#privacy li { margin: var(--s1) 0 0 var(--s5); }
+#glossary summary, .more summary { cursor: pointer; color: var(--accent); }
+.more { margin: var(--s2) 0; }
+.more > p { margin-top: var(--s1); }
+#glossary dt { font-weight: 700; color: var(--text); }
+#glossary dd { margin: 0 0 var(--s2); }
+header .hint { margin-top: 0; }
+#howto, #nowebserial, #lostNotice { flex-basis: 100%; }
+#lostNotice { margin: 0; padding: var(--s2) var(--s3); border-radius: var(--r-md); color: var(--err); background: var(--err-bg); }
+#lostNotice button { margin-left: var(--s2); }
+#nowebserial { color: var(--err); }
+/* pastilla de conexión: punto de color Y texto (el color solo no basta) */
+.pill {
+  display: inline-flex; align-items: center; gap: var(--s2);
+  padding: var(--s1) var(--s3); border-radius: 999px;
+  border: 1px solid var(--border-ctl); background: var(--card2);
+}
+.pill::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.pill[data-state=busy], .pill[data-state=warn] { background: var(--warn-bg); }
+.pill[data-state=busy]::before, .pill[data-state=warn]::before { background: var(--warn); }
+.pill[data-state=on]   { background: var(--ok-bg); }   .pill[data-state=on]::before   { background: var(--ok); }
+.pill[data-state=err]  { background: var(--err-bg); }  .pill[data-state=err]::before  { background: var(--err); }
+/* por qué los botones del badge están deshabilitados */
+.needconn { color: var(--warn); }
+/* pegada arriba: la respuesta del badge se ve aunque el botón quede abajo */
+#statusBar {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; flex-direction: column; gap: var(--s2);
+  /* sale el margen del body a cada lado y lo devuelve en padding: el contenido queda alineado con main */
+  max-width: calc(1600px + 2 * var(--s4)); margin: 0 calc(-1 * var(--s4)) var(--s4); padding: var(--s2) var(--s4);
+  background: var(--bg);
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Copa BugCon 2026 · Configurador</h1>
+  <a href="../album/index.html">Ver el álbum</a>
+  <button id="connectBtn" class="primary">Conectar</button>
+  <span id="connState" class="pill" data-state="off" aria-live="polite"><span id="connLabel">Sin conexión</span></span>
+  <span id="connInfo" class="hint" hidden></span>
+  <p id="lostNotice" hidden><span id="lostText"></span> <button id="lostClose" type="button">Cerrar</button></p>
+  <p id="howto" class="hint">Abre este archivo en Chrome, Edge o Brave de una computadora y conecta el badge con un cable USB de datos.</p>
+  <p id="nowebserial" hidden></p>
+</header>
+
+<div id="statusBar">
+  <div id="status" role="status">Listo.</div>
+  <div id="alert" role="alert"></div>
+  <progress id="prog" max="1" value="0" hidden></progress>
+  <span id="waitHint" hidden>Esperando al badge…</span>
+  <details id="statusLog"><summary>Últimos mensajes</summary><ol></ol></details>
+</div>
+
+<nav id="tabs" role="tablist" aria-label="Qué vas a preparar">
+  <button role="tab" id="tabAvatar" data-target="avatar" aria-controls="tabpanel" aria-selected="true">Plantilla Copa BugCon <span class="sub">estampa, avatar y plantilla</span></button>
+  <button role="tab" id="tabSlot" data-target="slot" aria-controls="tabpanel" aria-selected="false">Pantalla completa <span class="sub">una imagen de 200×200 en un slot</span></button>
+</nav>
+
+<main id="tabpanel" role="tabpanel" aria-labelledby="tabAvatar">
+  <!-- Pasos: el número sale de un contador CSS y salta las tarjetas ocultas de la otra pestaña.
+       Plantilla y Álbum se ocultan con #stampCard (`~ .tplOnly`) y «En el badge» con #slotCtl
+       (`.slotOnly`), que setTarget ya oculta. -->
+  <section class="card step" id="stampCard">
+    <h2>Mi estampa</h2>
+    <div class="field">
+      <label for="nick">Nickname</label>
+      <input type="text" id="nick" value="" autocomplete="off" aria-describedby="nickErr">
+      <output id="nickV">0/16 B</output>
+    </div>
+    <p class="fielderr" id="nickErr" aria-live="polite"></p>
+    <div class="field">
+      <label for="team">Villa</label>
+      <select id="team"></select><span></span>
+    </div>
+    <div class="field">
+      <label for="pos">Posición</label>
+      <select id="pos"></select><span></span>
+    </div>
+    <h3>Estadísticas <span id="freeV" aria-live="polite" aria-atomic="true"></span></h3>
+    <div id="statRows"></div>
+    <details id="glossary" class="hint">
+      <summary>¿Qué hace cada estadística en la Copa?</summary>
+      <p>Cada punto se suma al jugador (0 juega como 50, 99 como 149) y cuenta más o menos
+      según su posición.</p>
+      <dl>
+        <dt>Ataque</dt><dd>Pasar la defensa del rival y la fuerza del tiro; el de más ataque
+        tira más seguido. Al Portero no le sirve.</dd>
+        <dt>Defensa</dt><dd>Cortar los ataques del rival. El Portero ataja con su defensa; sin
+        Portero, ataja el de más defensa a la mitad.</dd>
+        <dt>Hack · control</dt><dd>Quién se queda con el balón en cada jugada. Con la táctica
+        Parche también ayuda a defender.</dd>
+        <dt>Suerte</dt><dd>Solo en el tiro contra el portero: se promedia entre los 5 y
+        ayuda a tirar y a atajar.</dd>
+      </dl>
+      <p>Cuenta más: Portero y Defensa → defensa; Medio y Pentester → hack; Delantero → ataque.</p>
+    </details>
+    <h3>Contacto (opcional)</h3>
+    <div class="row">
+      <label><input type="checkbox" id="handleOn"> Compartir mi handle en la estampa</label>
+    </div>
+    <div class="field">
+      <label for="handle">Handle</label>
+      <input type="text" id="handle" placeholder="@usuario" autocomplete="off" aria-describedby="handleErr" disabled>
+      <output id="handleV">0/20 B</output>
+    </div>
+    <p class="fielderr" id="handleErr" aria-live="polite"></p>
+    <p class="hint">El handle solo se envía a otros badges si marcas la casilla.</p>
+    <details class="more"><summary aria-label="Más información: handle">Más información</summary>
+      <p class="hint">El handle viaja por infrarrojo dentro de tu estampa a cada badge con el
+      que intercambies, y aparece en su álbum. El avatar se queda en tu badge (no viaja por IR).</p>
+    </details>
+    <div class="row">
+      <button id="readCardBtn" disabled>Leer mi estampa del badge</button>
+      <button id="saveCardBtn" class="primary" disabled>Guardar estampa</button>
+      <span id="cardState" class="state" hidden></span>
+      <span id="cardFlash" class="flash" aria-hidden="true" hidden></span>
+    </div>
+    <p class="hint needconn" id="needStamp"></p>
+  </section>
+
+  <section class="card step">
+    <h2>Imagen</h2>
+    <div id="drop">Arrastra una imagen, pégala del portapapeles<br>o usa los botones.</div>
+    <div class="row">
+      <button id="fileBtn">Abrir archivo</button>
+      <input type="file" id="file" accept="image/*" hidden>
+      <button id="camBtn">Usar la cámara</button>
+      <button id="capBtn" hidden>Capturar foto</button>
+      <button id="camOffBtn" hidden>Cancelar cámara</button>
+    </div>
+    <video id="video" autoplay playsinline></video>
+    <div id="srcWrap"><canvas id="srcCanvas" width="320" height="320" role="img" tabindex="0" aria-label="Imagen original" aria-describedby="cropKeys"></canvas></div>
+    <div class="ctl">
+      <label for="cropSize">Recorte</label>
+      <input type="range" id="cropSize" min="10" max="100" value="100">
+      <output id="cropSizeV">100</output>
+    </div>
+    <div id="fitCtl" hidden>
+      <div class="row">
+        <label for="fit">Encuadre</label>
+        <select id="fit">
+          <option value="fill" selected>Rellenar (recorta)</option>
+          <option value="fit">Encajar completa</option>
+        </select>
+        <span id="bandWrap" hidden>
+          <label for="band">Bandas</label>
+          <select id="band">
+            <option value="white" selected>Blanco</option>
+            <option value="black">Negro</option>
+          </select>
+        </span>
+      </div>
+      <p class="hint">Rellenar llena la pantalla; Encajar muestra la imagen entera y deja bandas.</p>
+      <details class="more"><summary aria-label="Más información: encuadre">Más información</summary>
+        <p class="hint">Rellenar corta lo que sobra de la imagen. Con Invertir colores, las bandas se invierten
+        igual que la imagen.</p>
+      </details>
+    </div>
+    <div class="row">
+      <button id="rotBtn">Girar imagen 90°</button>
+      <button id="flipHBtn">Voltear horizontal</button>
+      <button id="flipVBtn">Voltear vertical</button>
+    </div>
+    <p class="hint">Arrastra el recuadro para encuadrar; cambia su tamaño con el control o la rueda del ratón.
+    <span id="cropKeys">Con el teclado, enfoca la imagen: Flechas: mover · +/−: tamaño · Mayús: más rápido.</span></p>
+  </section>
+
+  <section class="card step">
+    <h2>Ajustes</h2>
+    <div class="ctl"><label for="br">Brillo</label><input type="range" id="br" min="-100" max="100" value="0"><output id="brV">0</output></div>
+    <div class="ctl"><label for="ct">Contraste</label><input type="range" id="ct" min="-100" max="100" value="0"><output id="ctV">0</output></div>
+    <details id="moreAdj">
+      <summary>Más ajustes</summary>
+      <div class="ctl"><label for="gm">Gamma</label><input type="range" id="gm" min="20" max="300" value="100"><output id="gmV">1.00</output></div>
+      <div class="ctl"><label for="bp">Punto negro</label><input type="range" id="bp" min="0" max="254" value="0"><output id="bpV">0</output></div>
+      <div class="ctl"><label for="wp">Punto blanco</label><input type="range" id="wp" min="1" max="255" value="255"><output id="wpV">255</output></div>
+      <div class="ctl"><label for="sh">Nitidez</label><input type="range" id="sh" min="0" max="200" value="0"><output id="shV">0</output></div>
+    </details>
+    <div class="row">
+      <button id="autoBtn">Ajustar niveles</button>
+      <label><input type="checkbox" id="invert"> Invertir colores</label>
+      <button id="resetBtn">Restablecer ajustes</button>
+    </div>
+
+    <h3>Tramado</h3>
+    <div class="row">
+      <select id="mode" aria-label="Tramado">
+        <option value="fs" selected>Floyd-Steinberg</option>
+        <option value="bayer4">Bayer 4x4</option>
+        <option value="bayer8">Bayer 8x8</option>
+        <option value="threshold">Umbral</option>
+      </select>
+    </div>
+    <div class="ctl" id="thrRow" style="display:none">
+      <label for="thr">Nivel</label><input type="range" id="thr" min="1" max="254" value="128"><output id="thrV">128</output>
+    </div>
+
+    <h3>Texto encima</h3>
+    <div id="textRows"></div>
+    <p class="hint">Arrastra el texto sobre la vista previa para moverlo.</p>
+  </section>
+
+  <section class="card step">
+    <h2 id="pvTitle">Vista previa</h2>
+    <canvas id="preview" class="px" width="96" height="96" role="img" aria-label="Vista previa"></canvas>
+    <p class="hint">Lo que ves es exactamente lo que recibe el badge.</p>
+
+    <div id="slotCtl" hidden>
+      <p class="hint needconn" id="needSlot"></p>
+      <p class="hint" id="fullHint"></p>
+      <details class="more"><summary aria-label="Más información: pantalla completa y slots">Más información</summary>
+        <p class="hint" id="fullMore"></p>
+      </details>
+      <div class="slots" id="slots"></div>
+      <p class="hint">Elige el slot de destino.</p>
+      <div id="homeCtl" hidden>
+        <div class="row">
+          <label><input type="checkbox" id="homeUse"> Usar como inicio</label>
+          <span id="homeState" class="hint"></span>
+          <button class="homeOffBtn" hidden>Volver a la plantilla</button>
+        </div>
+        <p class="hint">El inicio es lo que muestra el badge en reposo: la imagen reemplaza a la plantilla.</p>
+        <details class="more"><summary aria-label="Más información: inicio">Más información</summary>
+          <p class="hint">La imagen se ve con la franja de la selección arriba y el pie abajo encima.
+          En el inicio, ← y → pasan entre la plantilla y los slots con imagen (el pie dice cuál se
+          ve: «&lt;Plantilla&gt;» o «&lt;Slot n&gt;») y lo dejan como inicio. Se apaga con «Volver a la
+          plantilla», en el badge con ←/→ hasta la plantilla o en Ajustes &gt; Pantalla de inicio.
+          La estampa de campeón la reemplaza al cierre del evento.</p>
+        </details>
+      </div>
+      <label><input type="checkbox" id="guides"> Mostrar guías</label>
+      <p class="hint">Las líneas rojas marcan lo que tapan los textos del badge. Es solo una guía: no se envía.</p>
+      <details class="more"><summary aria-label="Más información: guías">Más información</summary>
+        <p class="hint">La línea roja marca la franja de abajo que tapan «Luz» y «Salir» al entrar al Marco
+        hasta que pulsas un botón. Con «Usar como inicio» marca también la de arriba: son las que tapan
+        la selección y el pie.</p>
+      </details>
+      <div class="row">
+        <button id="sendBtn" class="primary" disabled>Enviar al slot 0</button>
+        <button id="loadSlotBtn" disabled>Editar la imagen del slot 0</button>
+        <button id="testBtn" disabled>Enviar patrón de prueba</button>
+        <span id="slotFlash" class="flash" aria-hidden="true" hidden></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card step slotOnly" id="badgeCard">
+    <h2>En el badge</h2>
+    <p class="hint">Actúa sobre el slot elegido en la vista previa, sin enviar nada del editor.</p>
+    <div class="row">
+      <button id="showBtn" disabled>Mostrar slot 0</button>
+      <button id="clrBtn" disabled>Pantalla en blanco</button>
+      <button id="delBtn" class="danger" disabled>Vaciar slot 0</button>
+    </div>
+    <p class="hint needconn" id="needBadge"></p>
+    <p class="hint">«Enviar» y «Mostrar» abren la imagen en el badge; B la cierra.</p>
+    <details class="more"><summary aria-label="Más información: en el badge">Más información</summary>
+      <p class="hint">Sin tocar botones, el badge vuelve solo al inicio al minuto. «Vaciar slot» borra
+      la imagen del badge y deja el slot sin nada (si era el inicio, el badge vuelve a la plantilla).</p>
+    </details>
+  </section>
+
+  <section class="card step tplOnly" id="tplCard">
+    <h2>Plantilla</h2>
+    <canvas id="tpl" class="px" width="200" height="200" role="img" aria-label="Plantilla con tu estampa"></canvas>
+    <p class="hint">Así se ve la plantilla de inicio de tu badge. Se actualiza al guardar la estampa
+    (paso 1) y al enviar el avatar; las imágenes en slots se manejan en la pestaña Pantalla completa.</p>
+    <div class="row" id="tplHomeNote" hidden>
+      <span class="hint" id="tplHomeText"></span>
+      <button class="homeOffBtn">Volver a la plantilla</button>
+    </div>
+    <div id="avatarCtl">
+      <div class="row"><button id="avatarBtn" class="primary" disabled>Enviar avatar</button>
+        <span id="avatarState" class="state" hidden></span>
+        <span id="avatarFlash" class="flash" aria-hidden="true" hidden></span></div>
+      <p class="hint needconn" id="needAvatar"></p>
+    </div>
+  </section>
+
+  <section class="card step tplOnly" id="albumCard">
+    <h2>Álbum</h2>
+    <div class="row">
+      <button id="jsonBtn" class="primary" disabled>Guardar álbum (.json)</button>
+      <span id="jsonFlash" class="flash" aria-hidden="true" hidden></span>
+    </div>
+    <p class="hint needconn" id="needAlbum"></p>
+    <p class="hint">Guarda en tu computadora tu estampa y las de tu álbum; no se envía a
+    ningún lado. Incluye el nickname y el handle que cada quien compartió en su estampa.</p>
+    <p class="hint"><a href="../album/index.html" target="_blank">Ver el álbum</a>:
+    abre ahí el .json guardado para ver tus estampas por villa y descargar los contactos.</p>
+  </section>
+</main>
+
+<section class="card" id="privacy">
+  <h2>Privacidad</h2>
+  <ul class="hint">
+    <li>No hay servidor ni almacenamiento central: tu estampa, tu avatar y tu álbum
+    se guardan solo en tu badge. Nadie, ni la organización, recibe una copia.</li>
+    <li>Al intercambiar, tu estampa (nickname, villa, posición, estadísticas y dorsal) viaja
+    por infrarrojo al otro badge y se queda en su álbum; no se puede retirar de un badge
+    ajeno. Tu handle solo va si marcas "Compartir mi handle". El avatar y la plantilla no
+    salen de tu badge.</li>
+    <li>El .json de "Guardar álbum (.json)" incluye el nickname y el handle de quienes los
+    compartieron contigo: guárdalo para ti y no lo publiques.</li>
+    <li>Para borrar tu estampa, tu avatar, tu álbum y las imágenes que enviaste a los slots:
+    en el badge, Ajustes &gt; "Borrar datos".</li>
+  </ul>
+</section>
+
+<footer class="hint">Licencia GPL-3.0 · Código fuente: github.com/ElectronicCats/badge-bugcon-2026</footer>
+
+<script>
+"use strict";
+
+/* ================================================================
+   Capas: estado y UI, pipeline de imagen (funciones puras), estampa,
+   transporte (Web Serial).
+   Formato de imagen: 1 bpp, filas completas (ancho redondeado a bytes),
+   MSB primero, 1 = blanco. El mismo para slots y avatar.
+   ================================================================ */
+
+// Igual que el firmware: services/card.cpp (TEAMS, POSITIONS, RARITIES) y
+// cfg::card de badge_config.h. El índice viaja en la estampa: no reordenar,
+// solo agregar al final. tools/test_configurator.py revisa que coincidan.
+const TEAMS = ["La villa del Hardware",    "RF Village MX",    "Rookie Village", "OT Village CDMX",      "PaySec LATAM",
+    "BugBounty",   "WoSEC México", "APT", "Nación Hacker", "Live Hacking Villa"];
+const POSITIONS = ["Portero", "Defensa", "Medio", "Delantero", "Pentester"];
+const RARITIES = ["Común", "Plata", "Oro"];
+const STATS = ["ATK", "DEF", "HAX", "SUE"];
+// Lo que lee la persona en el formulario; STATS (siglas) es el catálogo del firmware.
+const STAT_LABELS = ["Ataque", "Defensa", "Hack", "Suerte"];
+const STAT_MAX = 99, STAT_BUDGET = 200;
+const AVATAR_W = 96, AVATAR_H = 96;
+const AVATAR_BYTES = ((AVATAR_W + 7) >> 3) * AVATAR_H;
+const CARD_FLAG_AVATAR = 0x01;   // card::FLAG_AVATAR: el badge tiene avatar (AVRD lo devuelve)
+const NICK_BYTES = 16, HANDLE_BYTES = 20, NONE = 0xFF;
+const CARD_VERSION = 1, CARD_FIELDS_BYTES = 48, CARD_BYTES = 64;
+const ALBUM_HEADER_BYTES = 80;
+const OPEN_WAIT_MS = 300;   // el badge descarta lo que llega en los primeros 200 ms
+
+const $ = id => document.getElementById(id);
+
+/* ---------------- estado ---------------- */
+
+let panel = { w: 200, h: 200 };   // de INFO (panel=WxH); 200x200 = panel del badge
+let numSlots = 4;
+let target = "avatar";            // "avatar" | "slot"
+let W = AVATAR_W, H = AVATAR_H;   // tamaño del destino actual
+
+let baseImage = null;      // original como canvas
+let oriented = null;       // baseImage con giro y espejo aplicados
+let slotSource = false;    // baseImage se leyó de un slot: no es una imagen de la persona ni su avatar
+let rot = 0, flipH = false, flipV = false;
+let crop = { cx: 0, cy: 0, size: 0 };   // centro + alto, en coordenadas de `oriented`
+let lastBits = null;       // Uint8Array(W*H), 1 = blanco, resultado de render()
+let avatarBits = null;     // último render del avatar, para la plantilla
+let badgeAvatar = null;    // el avatar guardado en el badge (AVRD); null = no tiene
+
+let myCard = null;         // 64 B de la estampa leída del badge (ALBM)
+let info = null;           // último INFO
+
+/* ---------------- pipeline: funciones puras ---------------- */
+
+// Luminancia Rec. 709
+function toGray(imgData) {
+  const d = imgData.data, n = W * H, g = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    g[i] = 0.2126 * d[i*4] + 0.7152 * d[i*4+1] + 0.0722 * d[i*4+2];
+  }
+  return g;
+}
+
+function applyTone(g, p) {
+  const n = g.length;
+  const range = Math.max(1, p.wp - p.bp);
+  const cf = (259 * (p.contrast * 2.55 + 255)) / (255 * (259 - p.contrast * 2.55));
+  const invGamma = 1 / p.gamma;
+  for (let i = 0; i < n; i++) {
+    let v = (g[i] - p.bp) / range * 255;
+    v = Math.min(255, Math.max(0, v));
+    v = 255 * Math.pow(v / 255, invGamma);
+    v = v + p.brightness;
+    v = cf * (v - 128) + 128;
+    if (p.invert) v = 255 - v;
+    g[i] = Math.min(255, Math.max(0, v));
+  }
+  return g;
+}
+
+// Máscara de enfoque: g + amount * (g - boxblur3x3(g))
+function applySharpen(g, amount) {
+  if (amount <= 0) return g;
+  const blur = new Float32Array(W * H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      let sum = 0, cnt = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= H) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= W) continue;
+          sum += g[yy * W + xx];
+          cnt++;
+        }
+      }
+      blur[y * W + x] = sum / cnt;
+    }
+  }
+  for (let i = 0; i < W * H; i++) {
+    g[i] = Math.min(255, Math.max(0, g[i] + amount * (g[i] - blur[i])));
+  }
+  return g;
+}
+
+// Recorte del 1 % del histograma; devuelve [negro, blanco]
+function autoLevels(g) {
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < g.length; i++) hist[Math.round(g[i])]++;
+  const clip = g.length * 0.01;
+  let lo = 0, hi = 255, acc = 0;
+  for (; lo < 255; lo++) { acc += hist[lo]; if (acc > clip) break; }
+  acc = 0;
+  for (; hi > 0; hi--) { acc += hist[hi]; if (acc > clip) break; }
+  if (hi <= lo) { lo = 0; hi = 255; }
+  return [lo, hi];
+}
+
+// Matrices de Bayer canónicas (Bayer 1973)
+const BAYER4 = [
+  [ 0,  8,  2, 10],
+  [12,  4, 14,  6],
+  [ 3, 11,  1,  9],
+  [15,  7, 13,  5]];
+const BAYER8 = [
+  [ 0, 32,  8, 40,  2, 34, 10, 42],
+  [48, 16, 56, 24, 50, 18, 58, 26],
+  [12, 44,  4, 36, 14, 46,  6, 38],
+  [60, 28, 52, 20, 62, 30, 54, 22],
+  [ 3, 35, 11, 43,  1, 33,  9, 41],
+  [51, 19, 59, 27, 49, 17, 57, 25],
+  [15, 47,  7, 39, 13, 45,  5, 37],
+  [63, 31, 55, 23, 61, 29, 53, 21]];
+
+// gris -> bits, 1 = blanco
+function dither(g, mode, threshold) {
+  const bits = new Uint8Array(W * H);
+  if (mode === "threshold") {
+    for (let i = 0; i < W * H; i++) bits[i] = g[i] >= threshold ? 1 : 0;
+  } else if (mode === "bayer4" || mode === "bayer8") {
+    const m = mode === "bayer4" ? BAYER4 : BAYER8;
+    const n = m.length, lv = n * n;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const t = (m[y % n][x % n] + 0.5) / lv * 255;
+        bits[y * W + x] = g[y * W + x] >= t ? 1 : 0;
+      }
+    }
+  } else {   // Floyd-Steinberg, 7/16 3/16 5/16 1/16
+    const e = Float32Array.from(g);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        const on = e[i] >= 128 ? 1 : 0;
+        bits[i] = on;
+        const err = e[i] - (on ? 255 : 0);
+        if (x + 1 < W)              e[i + 1]     += err * 7 / 16;
+        if (y + 1 < H) {
+          if (x > 0)                e[i + W - 1] += err * 3 / 16;
+                                    e[i + W]     += err * 5 / 16;
+          if (x + 1 < W)            e[i + W + 1] += err * 1 / 16;
+        }
+      }
+    }
+  }
+  return bits;
+}
+
+// Texto después del tramado, con umbral duro para que los bordes queden nítidos
+function overlayText(bits, lines) {
+  const cnv = document.createElement("canvas");
+  cnv.width = W; cnv.height = H;
+  const ctx = cnv.getContext("2d");
+  for (const ln of lines) {
+    if (!ln.text) continue;
+    ctx.clearRect(0, 0, W, H);
+    ctx.font = "bold " + ln.size + "px sans-serif";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "#fff";
+    ctx.fillText(ln.text, ln.x, ln.y);
+    const a = ctx.getImageData(0, 0, W, H).data;
+    const v = ln.white ? 1 : 0;
+    for (let i = 0; i < W * H; i++) {
+      if (a[i * 4 + 3] >= 128) bits[i] = v;
+    }
+  }
+  return bits;
+}
+
+// bits (w*h) -> bytes con filas completas, MSB primero, 1 = blanco
+function packBits(bits, w, h) {
+  const row = (w + 7) >> 3, out = new Uint8Array(row * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (bits[y * w + x]) out[y * row + (x >> 3)] |= 0x80 >> (x & 7);
+    }
+  }
+  return out;
+}
+
+function unpackBytes(bytes, w, h) {
+  const row = (w + 7) >> 3, bits = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      bits[y * w + x] = (bytes[y * row + (x >> 3)] >> (7 - (x & 7))) & 1;
+    }
+  }
+  return bits;
+}
+
+function testPatternBits(w, h) {
+  const bits = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let v = ((x >> 3) + (y >> 3)) & 1;                 // tablero de 8 px
+      if (x === 0 || y === 0 || x === w-1 || y === h-1) v = 0;  // borde
+      if (x < 24 && y < 24) v = 0;                       // marca arriba a la izquierda
+      bits[y * w + x] = v;
+    }
+  }
+  return bits;
+}
+
+/* ---------------- estampa: campos y validación ---------------- */
+
+const utf8 = new TextEncoder();
+
+// Igual que cleanText() del firmware: sin espacios en los extremos.
+const cleanText = s => s.replace(/^ +| +$/g, "");
+
+// Error en español o null. La fuente del badge es Latin-1 (gfx/font).
+function textError(s, maxBytes, name) {
+  const n = utf8.encode(s).length;
+  if (n > maxBytes) return `el ${name} mide ${n} B de UTF-8; caben ${maxBytes}`;
+  if (/[\x00-\x1f\x7f-\x9f]/.test(s)) return `el ${name} tiene caracteres de control`;
+  const bad = s.match(/[^\x20-\x7e\xa0-\xff]/u);
+  if (bad) return `el badge no puede dibujar «${bad[0]}» (solo Latin-1: letras, acentos y ñ)`;
+  return null;
+}
+
+// 64 B de la estampa v1 -> objeto
+function parseCard(b) {
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const text = (off, len) => {
+    const s = b.subarray(off, off + len), end = s.indexOf(0);
+    return new TextDecoder().decode(end < 0 ? s : s.subarray(0, end));
+  };
+  return {
+    version: b[0], type: b[1], badgeNo: dv.getUint16(2, true),
+    nickname: text(4, NICK_BYTES), team: b[20], position: b[21],
+    stats: Array.from(b.subarray(22, 26)), rarity: b[26], flags: b[27],
+    handle: text(28, HANDLE_BYTES),
+  };
+}
+
+// Payload de CARD: bytes 0..47 de la estampa. type, badge_no, rarity y flags
+// los pone el badge; se copian de la actual para no mandar basura.
+function packCardFields(c) {
+  const out = new Uint8Array(CARD_FIELDS_BYTES);
+  const dv = new DataView(out.buffer);
+  out[0] = CARD_VERSION;
+  out[1] = c.type || 0;
+  dv.setUint16(2, c.badgeNo || 0, true);
+  out.set(utf8.encode(c.nickname), 4);
+  out[20] = c.team;
+  out[21] = c.position;
+  out.set(c.stats, 22);
+  out[26] = c.rarity || 0;
+  out[27] = c.flags || 0;
+  out.set(utf8.encode(c.handle), 28);
+  return out;
+}
+
+/* ---------------- UI: controles de imagen ---------------- */
+
+const params = () => ({
+  brightness: +$("br").value,
+  contrast:   +$("ct").value,
+  gamma:      +$("gm").value / 100,
+  bp:         +$("bp").value,
+  wp:         +$("wp").value,
+  sharpen:    +$("sh").value / 100,
+  invert:     $("invert").checked,
+  mode:       $("mode").value,
+  threshold:  +$("thr").value,
+});
+
+const SLIDERS = [["br","brV",v=>v],["ct","ctV",v=>v],["gm","gmV",v=>(v/100).toFixed(2)],
+  ["bp","bpV",v=>v],["wp","wpV",v=>v],["sh","shV",v=>v],["thr","thrV",v=>v],
+  ["cropSize","cropSizeV",v=>v]];
+for (const [id, out, fmt] of SLIDERS) {
+  $(id).addEventListener("input", () => { $(out).textContent = fmt(+$(id).value); onControl(id); });
+}
+$("invert").addEventListener("change", render);
+$("mode").addEventListener("change", () => {
+  $("thrRow").style.display = $("mode").value === "threshold" ? "" : "none";
+  render();
+});
+
+function onControl(id) {
+  if (id === "cropSize") {
+    updateCropFromSlider();
+    drawSource();
+  } else if (id === "bp" && +$("bp").value >= +$("wp").value) {
+    $("wp").value = +$("bp").value + 1; $("wpV").textContent = $("wp").value;
+  } else if (id === "wp" && +$("wp").value <= +$("bp").value) {
+    $("bp").value = +$("wp").value - 1; $("bpV").textContent = $("bp").value;
+  }
+  render();
+}
+
+$("autoBtn").addEventListener("click", () => {
+  if (!oriented) return;
+  let g = toGray(cropToTarget().getImageData(0, 0, W, H));
+  const r = imageRect();   // en Encajar, el histograma es solo de la imagen
+  if (r) {
+    const x0 = Math.max(0, Math.ceil(r.x)), x1 = Math.min(W, Math.floor(r.x + r.w));
+    const y0 = Math.max(0, Math.ceil(r.y)), y1 = Math.min(H, Math.floor(r.y + r.h));
+    const inner = [];
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) inner.push(g[y * W + x]);
+    if (inner.length) g = inner;
+  }
+  const [lo, hi] = autoLevels(g);
+  $("bp").value = lo; $("bpV").textContent = lo;
+  $("wp").value = hi; $("wpV").textContent = hi;
+  render();
+});
+
+// «Niveles auto» mueve Punto negro y Punto blanco: abre «Más ajustes» para que se vea qué cambió
+$("autoBtn").addEventListener("click", () => { if (oriented) $("moreAdj").open = true; });
+
+$("resetBtn").addEventListener("click", () => {
+  for (const [id, out, fmt] of SLIDERS) {
+    if (id === "cropSize") continue;
+    $(id).value = $(id).defaultValue;
+    $(out).textContent = fmt(+$(id).value);
+  }
+  $("invert").checked = false;
+  render();
+});
+
+// Renglones de texto encima de la imagen
+const textRows = [];
+for (let i = 0; i < 3; i++) {
+  const div = document.createElement("fieldset");
+  div.className = "textline";
+  div.innerHTML =
+    '<legend>Renglón ' + (i+1) + '</legend>' +
+    '<div class="textmain">' +
+      '<input type="text" placeholder="Texto" aria-label="Texto">' +
+      '<select aria-label="Color"><option value="black">Negro</option><option value="white">Blanco</option></select>' +
+    '</div>' +
+    '<div class="textopts">' +
+      '<label>Tamaño <input type="number" min="6" max="80" value="20"></label>' +
+      '<label>X <input type="number" min="0" max="399" value="10"></label>' +
+      '<label>Y <input type="number" min="0" max="399" value="' + (10 + i * 30) + '"></label>' +
+    '</div>';
+  $("textRows").appendChild(div);
+  const text = div.querySelector("input[type=text]");
+  const [size, x, y] = div.querySelectorAll("input[type=number]");
+  const color = div.querySelector("select");
+  for (const el of [text, size, x, y, color]) el.addEventListener("input", render);
+  textRows.push({ text, size, x, y, color });
+}
+
+function textLines() {
+  return textRows.map(r => ({
+    text: r.text.value,
+    size: Math.max(6, +r.size.value || 20),
+    x: +r.x.value || 0,
+    y: +r.y.value || 0,
+    white: r.color.value === "white",
+  }));
+}
+
+/* ---------------- gafete: home.cpp y card_face.cpp del firmware ----------------
+   Misma geometría, fuentes y escudos que el badge, para que la plantilla
+   "Copa BugCon" sea la pantalla del gafete píxel por píxel. Sin la estampa de campeón
+   (solo existe tras el cierre del evento). */
+
+// BEGIN badge_gfx: generado por tools/embed_gfx.py desde el firmware, no editar.
+const BADGE_GFX = {
+  "teams": ["La villa del Hardware", "RF Village MX", "Rookie Village", "OT Village CDMX", "PaySec LATAM", "BugBounty", "WoSEC México", "APT", "Nación Hacker", "Live Hacking Villa"],
+  "masterFirst": 901,
+  "barHeight": 14,
+  "event": "Copa BugCon 2026",
+  "menuHint": "A: menú",
+  "masterHint": "Maestro",
+  "shields": [{"w": 24, "h": 14, "ink": "BAAgDwDgD4HwD//wB//gB//gB//gbnx2DjxwDxjw////B//gef+eQH4C"}, {"w": 24, "h": 13, "ink": "ABgAIBgESAASkBAKlBhKpRCppQippTAplAhKkAgSSCASYBAEIAAA"}, {"w": 24, "h": 22, "ink": "ADwAAMIAAcngA+fAA+CAA4AMA2QQAMQAAOCcDnMEHNwADdgAG5gAGz8AG38AGMdwA8e4A448Axg+D/BOOAAHYAAA"}, {"w": 24, "h": 19, "ink": "AAgAAB4AAD8AAD/AAD/gAD/wAD/4AL/4A//4B//wgB/9gH/NH//wfPgO8//B0//D08/L0Z2L4Cx2"}, {"w": 14, "h": 24, "ink": "ABwA/AP8D/wfwD+Ev4xXjA+cD7wP/A/4D/APwB+AHwAPAB8AHgCeAB4AHgAOAAwA"}, {"w": 24, "h": 12, "ink": "AA/wAf/wH//+Pn/+f+A+fB/+f//+fn/+f////4A/+D/////+"}, {"w": 19, "h": 24, "ink": "AOAAB/Ag//Vg//Ug//Ug//Ug//Ug/+1g/+1g/9tg/9tg/zZg/Obgw87gP53AfznAePPAI+eAH8+AHz8ADP4AA/wAAfAAAMAA"}, {"w": 24, "h": 24, "ink": "AAAAAQBAASRgAzxgBz5/DzZ+Dzf4CzfwC7ZgD75gHz5gez1gGbFgGbBwGfh4GfgwGTAwGTAwGhAwCBAgCBggAAgAAAgAAAgA"}, {"w": 8, "h": 24, "ink": "8/P7+/vb29/Pz88AAMbGxsbu/sbGxsbG"}, {"w": 22, "h": 24, "ink": "gHgEA/+AD//AH//gD//QI/+QIf4QKHxQLzvQJ5PYJ4bYM4eYOBAwPzPwPznwH3ngHzvgDgHADn3AB32ABwOAA/8AAf4YAHgA"}],
+  "fonts": {"5x8": {"first": 32, "lineHeight": 8, "ascent": 7, "glyphs": "AAAFCAD5BQgABQgA+QUQAAUIAPkFGAAFCAD5BSAABQgA+QUoAAUIAPkFMAAFCAD5BTgABQgA+QVAAAUIAPkFSAAFCAD5BVAABQgA+QVYAAUIAPkFYAAFCAD5BWgABQgA+QVwAAUIAPkFeAAFCAD5BYAABQgA+QWIAAUIAPkFkAAFCAD5BZgABQgA+QWgAAUIAPkFqAAFCAD5BbAABQgA+QW4AAUIAPkFwAAFCAD5BcgABQgA+QXQAAUIAPkF2AAFCAD5BeAABQgA+QXoAAUIAPkF8AAFCAD5BfgABQgA+QUAAQUIAPkFCAEFCAD5BRABBQgA+QUYAQUIAPkFIAEFCAD5BSgBBQgA+QUwAQUIAPkFOAEFCAD5BUABBQgA+QVIAQUIAPkFUAEFCAD5BVgBBQgA+QVgAQUIAPkFaAEFCAD5BXABBQgA+QV4AQUIAPkFgAEFCAD5BYgBBQgA+QWQAQUIAPkFmAEFCAD5BaABBQgA+QWoAQUIAPkFsAEFCAD5BbgBBQgA+QXAAQUIAPkFyAEFCAD5BdABBQgA+QXYAQUIAPkF4AEFCAD5BegBBQgA+QXwAQUIAPkF+AEFCAD5BQACBQgA+QUIAgUIAPkFEAIFCAD5BRgCBQgA+QUgAgUIAPkFKAIFCAD5BTACBQgA+QU4AgUIAPkFQAIFCAD5BUgCBQgA+QVQAgUIAPkFWAIFCAD5BWACBQgA+QVoAgUIAPkFcAIFCAD5BXgCBQgA+QWAAgUIAPkFiAIFCAD5BZACBQgA+QWYAgUIAPkFoAIFCAD5BagCBQgA+QWwAgUIAPkFuAIFCAD5BcACBQgA+QXIAgUIAPkF0AIFCAD5BdgCBQgA+QXgAgUIAPkF6AIFCAD5BfACBQgA+QUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD4AgUIAPkFAAMFCAD5BQgDBQgA+QUQAwUIAPkFGAMFCAD5BSADBQgA+QUoAwUIAPkFMAMFCAD5BTgDBQgA+QVAAwUIAPkFSAMFCAD5BVADBQgA+QVYAwUIAPkFYAMFCAD5BWgDBQgA+QVwAwUIAPkFeAMFCAD5BYADBQgA+QWIAwUIAPkFkAMFCAD5BZgDBQgA+QWgAwUIAPkFqAMFCAD5BbADBQgA+QW4AwUIAPkFwAMFCAD5BcgDBQgA+QXQAwUIAPkF2AMFCAD5BeADBQgA+QXoAwUIAPkF8AMFCAD5BfgDBQgA+QUABAUIAPkFCAQFCAD5BRAEBQgA+QUYBAUIAPkFIAQFCAD5BSgEBQgA+QUwBAUIAPkFOAQFCAD5BUAEBQgA+QVIBAUIAPkFUAQFCAD5BVgEBQgA+QVgBAUIAPkFaAQFCAD5BXAEBQgA+QV4BAUIAPkFgAQFCAD5BYgEBQgA+QWQBAUIAPkFmAQFCAD5BaAEBQgA+QWoBAUIAPkFsAQFCAD5BbgEBQgA+QXABAUIAPkFyAQFCAD5BdAEBQgA+QXYBAUIAPkF4AQFCAD5BegEBQgA+QXwBAUIAPkF+AQFCAD5BQAFBQgA+QUIBQUIAPkFEAUFCAD5BRgFBQgA+QUgBQUIAPkFKAUFCAD5BTAFBQgA+QU4BQUIAPkFQAUFCAD5BUgFBQgA+QVQBQUIAPkFWAUFCAD5BWAFBQgA+QVoBQUIAPkFcAUFCAD5BXgFBQgA+QWABQUIAPkFiAUFCAD5BZAFBQgA+QWYBQUIAPkFoAUFCAD5BagFBQgA+QWwBQUIAPkFuAUFCAD5BcAFBQgA+QXIBQUIAPkF0AUFCAD5BdgFBQgA+QXgBQUIAPkF6AUFCAD5BfAFBQgA+QU=", "bitmap": "AAAAAAAAAAAAICAgIAAgAABQUFAAAAAAUFD4UPhQUAAgcKBwKHAgAABAUCBQEAAAQKCgQKCgUAAAICAgAAAAAAAgQEBAQCAAAEAgICAgQAAAAJBg8GCQAAAAICD4ICAAAAAAAAAwIEAAAAAA8AAAAAAAAAAAIHAgABAQIECAgAAAIFBQUFAgAAAgYCAgIHAAAGCQEGCA8AAA8CBgEJBgAAAgYKDwICAAAPCA4BCQYAAAYIDgkJBgAADwECAgQEAAAGCQYJCQYAAAYJCQcBBgAAAAYGAAYGAAAAAwMAAwIEAAECBAQCAQAAAAAPAA8AAAAEAgEBAgQAAAIFAQIAAgADBImKiokEAwAGCQkPCQkAAA4JDgkJDgAABgkICAkGAAAOCQkJCQ4AAA8IDggIDwAADwgOCAgIAAAGCQgLCQYAAAkJDwkJCQAABwICAgIHAAAHAgICCgQAAAkKDAoKCQAACAgICAgPAAAJDw8JCQkAAAkNDwsLCQAABgkJCQkGAAAOCQkOCAgAAAYJCQ0LBgEADgkJDgkJAAAGCQQCCQYAAAcCAgICAgAACQkJCQkGAAAJCQkJBgYAAAkJCQ8PCQAACQkGBgkJAAAIiIUCAgIAAA8BAgQIDwAABwQEBAQHAAAICAQCAQEAAAcBAQEBBwAAAgUAAAAAAAAAAAAAAAAPAAQCAAAAAAAAAAAHCQkHAAAICA4JCQ4AAAAAAwQEAwAAAQEHCQkHAAAAAAYLDAYAAAIFBA4EBAAAAAAGCQcBBgAICA4JCQkAAAIABgICBwAAAQABAQEFAgAICAkOCQkAAAYCAgICBwAAAAANCoqKgAAAAA4JCQkAAAAABgkJBgAAAAAOCQ4ICAAAAAcJBwEBAAAACg0ICAAAAAADBgEGAAAEBA4EBQIAAAAACQkJBwAAAAAFBQUCAAAAAAiKioUAAAAACQYGCQAAAAAJCQcJBgAAAA8CBA8AAwQCDAIEAwAAAgICAgICAAwCBAMEAgwAAAUKAAAAAAAAAAAAAAAAAAACAAICAgIAAAACBwoKBwIAAgUOBAUKAAAACIcFBwiAAAiFD4IPggACAgIAAgICAAcIDgkHAQ4AAAUAAAAAAAAABwqMjIqHAAMFAwAHAAAAAAAABQoFAAAAAAAABwEBAAAAAAAHAAAAAAcOjY6NhwAABwAAAAAAAAACBQIAAAAAAAACBwIABwACBQECBwAAAAYBBgEGAAAAAAIEAAAAAAAAAAAJCQkOCAAHjo6GgoKAAAAAAAIAAAAAAAAAAAACBAIGAgIHAAAAAgUCAAcAAAAAAAAKBQoAAAgICAoGDwIACAgKDQECBwAIBAgGCg8CAAACAAIEBQIABAIGCQ8JCQACBAYJDwkJAAYJBgkPCQkABQoGCQ8JCQAJAAYJDwkJAAYJBgkPCQkAAAcKCg8KCwAABgkICAkGBAQCDwgOCA8AAgQPCA4IDwAGCQ8IDggPAAkADwgOCA8ABAIHAgICBwABAgcCAgIHAAIFBwICAgcABQAHAgICBwAABwSOhISHAAUKCQ0LCQkABAIGCQkJBgACBAYJCQkGAAYJBgkJCQYABQoGCQkJBgAJAAYJCQkGAAAAAAAFAgUAAAcLCw0NDgAEAgkJCQkGAAIECQkJCQYABgkJCQkJBgAJAAkJCQkGAAECCIUCAgIAAAgOCQkOCAAABgkKCgkKAAQCAAcJCQcAAgQABwkJBwACBQAHCQkHAAUKAAcJCQcAAAUABwkJBwAGCQYHCQkHAAAAAA8GiweAAAAAAwQEAwIEAgAGCwwGAAIEAAYLDAYABgkABgsMBgAABQAGCwwGAAQCAAYCAgcAAQIABgICBwACBQAGAgIHAAAFAAYCAgcACgQKAQcJBgAFCgAOCQkJAAQCAAYJCQYAAgQABgkJBgAGCQAGCQkGAAUKAAYJCQYAAAkABgkJBgAAAAIABwACAAAAAAcLDQ4ABAIACQkJBwACBAAJCQkHAAYJAAkJCQcAAAkACQkJBwACBAAJCQcJBgAICA4JDggIAAkACQkHCQYA=="}, "6x12": {"first": 32, "lineHeight": 12, "ascent": 10, "glyphs": "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", "bitmap": "gICAgIAAgICgoKBQUPhQUPhQUCBwqKBwKKhwIEioUBAgKFRIIFBQIGiQkGiAgIAgQICAgIBAIIBAICAgIECAUCD4IFAgIPggIEBAgPiAgBAQICBAQICAcIiYqMiIiHBAwEBAQEBA4HCIiAgQIED4cIgIMAgIiHAIGChIiPgICPiAgPAICIhwcICA8IiIiHD4CAgQECAgIHCIiHCIiIhwcIiIiHgICHCAgAAAgIBAQAAAQECAECBAgEAgEPgAAPiAQCAQIECAcIiIECAAICBwiJioqJiAeHCIiIj4iIiI8IiI8IiIiPBwiICAgICIcOCQiIiIiJDg+ICA8ICAgPj4gIDwgICAgHCIgIC4iIhwiIiI+IiIiIjgQEBAQEBA4DgQEBAQkJBgiJCgwMCgkIiAgICAgICA+IjYqKiIiIiIiIjIqJiIiIhwiIiIiIiIcPCIiIjwgICAcIiIiIiIqHAI8IiIiPCgkIhwiIBwCAiIcPggICAgICAgiIiIiIiIiHCIiIhQUFAgIIiIiIioqNiIiIhQICBQiIiIiFBQICAgIPgIECBAgID44ICAgICAgOCAgEBAICAQEOAgICAgICDgIFCI+IBAcAh4iIh4gIDwiIiIiPBwiICAiHAICHiIiIiIeHCI+ICAeDBA4EBAQEBAeIiIiIh4CHCAgPCIiIiIiEBAAMBAQEBA4BAQADAQEBAQEJBggICQoMDAoJDAQEBAQEBA4PCoqKioqPCIiIiIiHCIiIiIcPCIiIiI8ICAeIiIiIh4CAi4wICAgIB4gHAICPBAQOBAQEBAMIiIiIiIeIiIUFAgIIiIqKiocIhQICBQiIiIiIiIeAhw+BAgQID4MEBAgEBAQDCAgICAgICAgMAgIBAgICDASKiQgIAAgICAgIAgcKigoKhwIDBIQPBAQEj4kGCQkGCQiIhQIHAgcCCAgIAAAICAgGCQQKCQUCCQYKCgeIS0pKS0hHhgEHCQcADwFChQoFAoFPgICAj4eIS0rLSshHjgQKBAICD4ICAA+GCQIEDw4BBgEOBAgIiIiIiY6ICAeKioqGgoKCiAgEBAgEDAQEDgYJCQkGAA8KBQKBQoUKBAwERIUCBImCh4CAhAwERIUCBAmCQIEDzgEGAU6BAkTJQ8BAQgIAAgQIiIcEAgcIiIiPiIiIgQIHCIiIj4iIiIIFBwiIiI+IiIiChQcIiIiPiIiIhQUHCIiIj4iIiIIFBwiIiI+IiIiHyQkPyQkJCccIiAgICAiHAgQEAg+ICA8ICAgPgQIPiAgPCAgID4IFD4gIDwgICA+FBQ+ICA8ICAgPiAQOBAQEBAQEDgIEDgQEBAQEBA4ECg4EBAQEBAQOCgoOBAQEBAQEDg4JCI6IiIkOAoUIiIyKiYiIiIQCBwiIiIiIiIcBAgcIiIiIiIiHAgUHCIiIiIiIhwKFBwiIiIiIiIcFBQcIiIiIiIiHCIUCBQiHSImKjIiIhwQCCIiIiIiIiIcBAgiIiIiIiIiHAgUIiIiIiIiIhwUFCIiIiIiIiIcBAgiIhQUCAgICCA8IiIiPCAgOCQkPCIiMiwQCBwCHiIiHgQIHAIeIiIeCBQcAh4iIh4KFBwCHiIiHhQUHAIeIiIeCBQcAh4iIh4cChosKB4cIiAgIhwIEBAIHCI+ICAeBAgcIj4gIB4IFBwiPiAgHhQUHCI+ICAeIBAwEBAQEDgIEDAQEBAQOBAoMBAQEBA4KCgwEBAQEDgoECgcIiIiIhwKFDwiIiIiIhAIHCIiIiIcBAgcIiIiIhwIFBwiIiIiHAoUHCIiIiIcFBQcIiIiIhwICAA+AAgIHSYqMiIcEAgiIiIiIh4ECCIiIiIiHggUIiIiIiIeFBQiIiIiIh4ECCIiIiIiHgIcICA8IiIiIjwgIBQUIiIiIiIeAhw"}, "8x16b": {"first": 32, "lineHeight": 16, "ascent": 12, "glyphs": "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", "bitmap": "wMDAwMDAwADAwMzMzGxsbP5sbP5sbGwQEHzW0NB8FhbWfBAQZtZsDBgYMDZrZjhsbDh23MzM3HbAwMAwYMDAwMDAwGAwwGAwMDAwMDBgwGw4/jhsMDD8MDBgYMD+wMAMDBgYMDBgYMDAfMbGzt725sbGfDBw8DAwMDAwMPx8xsYGDBgwYMD+fMbGBjwGBsbGfAYOHjZmxv4GBgb+wMDA/AYGBsZ8PGDAwPzGxsbGfP4GBgwMGBgwMDB8xsbGfMbGxsZ8fMbGxsZ+BgYMeMDAAAAAwMBgYAAAAGBgwAwYMGDAYDAYDP4AAP7AYDAYDBgwYMB8xsbGDBgYABgYfMbO1tbW1s7AfnzGxsbG/sbGxsb8xsbG/MbGxsb8fMbGwMDAwMbGfPjMxsbGxsbGzPj+wMDA+MDAwMD+/sDAwPjAwMDAwHzGxsDA3sbGxnzGxsbG/sbGxsbG8GBgYGBgYGBg8B4MDAwMDAzMzHjGxszY8PDYzMbGwMDAwMDAwMDA/oLG7v7WxsbGxsbGxsbm9t7OxsbGfMbGxsbGxsbGfPzGxsbG/MDAwMB8xsbGxsbGxt58BvzGxsbG/PDYzMZ8xsDAfAYGxsZ8/xgYGBgYGBgYGMbGxsbGxsbGxnzGxsbGxmxsbDg4xsbGxsbW/u7GgsbGbGw4OGxsxsbDw2ZmPBgYGBgY/gYGDBgwYMDA/vDAwMDAwMDAwPDAwGBgMDAYGAwM8DAwMDAwMDAw8DB4zP7AYHwGfsbGxn7AwMD8xsbGxsb8fMbAwMDGfAYGBn7GxsbGxn58xsb+wMB8HjAw/DAwMDAwMH7GxsbGxn4GBnzAwMD8xsbGxsbGYGAA4GBgYGBg8AwMABwMDAwMDAzMzHjAwMDGzNjw2MzG4GBgYGBgYGBg8PzW1tbW1tb8xsbGxsbGfMbGxsbGfPzGxsbGxvzAwMB+xsbGxsZ+BgYG3vDgwMDAwH7AwHwGBvwwMDD8MDAwMDAexsbGxsbGfsbGxmxsODjGxtbW1tZ8xsZsOGzGxsbGxsbGxn4GBnz+DBgwYMD+OGBgYMBgYGBgOMDAwMDAwMDAwMDgMDAwGDAwMDDgc9vOwMAAwMDAwMDAwBAQfNbQ0NDWfBAQOGxgYPhgYGBm/sx4zMzMeMzDw2Y8GH4YfhgYwMDAwAAAwMDAwHjMwHDYzMxsOAzMeNjYfoGZpaGlmYF+eAx8zHwA/Bs2bNhsNhv+BgYG/n6BuaW5qaWBfvhw2NhwMDD8MDAA/HDYGDBg+PAYcBgY8GDAxsbGxsbO9sDAwH7W1tbWdhYWFhbAwGBgwGDgYGBg8HjMzMx4APzYbDYbNmzYYOBiZmwYMGbOmj4GBmDgYmZsGDBg3LYMGD7gMGI27BgwZs6aPgYGMDAAMDBgxsbGfDAYAHzGxsb+xsbGxhgwAHzGxsb+xsbGxjhsAHzGxsb+xsbGxnbcAHzGxsb+xsbGxmxsAHzGxsb+xsbGxjhsOHzGxsb+xsbGxn7Y2Nj+2NjY2N58xsbAwMDAxsZ8MDBgMBgA/sDAwPjAwMD+GDAA/sDAwPjAwMD+OGwA/sDAwPjAwMD+bGwA/sDAwPjAwMD+wGAA8GBgYGBgYGDwMGAA8GBgYGBgYGDwcNgAeDAwMDAwMDB4zMwAeDAwMDAwMDB4eGxmZvZmZmZseHbcAMbG5vbezsbGxjAYAHzGxsbGxsbGfBgwAHzGxsbGxsbGfDhsAHzGxsbGxsbGfHbcAHzGxsbGxsbGfGxsAHzGxsbGxsbGfMZsODhsxnzHxs7e9ubGxnwwGMbGxsbGxsbGxnwYMMbGxsbGxsbGxnw4bADGxsbGxsbGxnxsbADGxsbGxsbGxnwMGMPDZmY8GBgYGBjAwPzGxsbG/MDAeMzMyPzGxsbm3DAYAHwGfsbGxn4YMAB8Bn7GxsZ+OGwAfAZ+xsbGfnbcAHwGfsbGxn5sbAB8Bn7GxsZ+OGw4fAZ+xsbGfmwWFn7Q0Gx8xsDAwMZ8MDBgMBgAfMbG/sDAfBgwAHzGxv7AwHw4bAB8xsb+wMB8bGwAfMbG/sDAfMBgAOBgYGBgYPAwYADgYGBgYGDwcNgAcDAwMDAweNjYAHAwMDAwMHhoMFh8xsbGxsZ8dtwA/MbGxsbGxjAYAHzGxsbGxnwYMAB8xsbGxsZ8OGwAfMbGxsbGfHbcAHzGxsbGxnxsbAB8xsbGxsZ8MDAA/AAwMD1nbn525rwwGADGxsbGxsZ+GDAAxsbGxsbGfjhsAMbGxsbGxn5sbADGxsbGxsZ+GDAAxsbGxsbGfgYGfMDAwPzGxsbGxvzAwMBsbADGxsbGxsZ+BgZ8"}, "10x20b": {"first": 32, "lineHeight": 20, "ascent": 16, "glyphs": "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", "bitmap": "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w8PDw8PDw34MGAB+w8PDw8PDw8PDw8N+PGYAfsPDw8PDw8PDw8PDfnfcAH7Dw8PDw8PDw8PDw35mZgB+w8PDw8PDw8PDw8N+w2Y8GDxmwz8AYYBhwGGAY4BngG2AeYBxgGGA4YBhgD8AMBgAw8PDw8PDw8PDw8PDfgwYAMPDw8PDw8PDw8PDw348ZgDDw8PDw8PDw8PDw8N+ZmYAw8PDw8PDw8PDw8PDfgwYAMPDw2ZmZjwYGBgYGBjAwMD+w8PDw8P+wMDAfMbGxsT+w8PDw8Pj3jAYAH4DA3/Dw8PDfwwYAH4DA3/Dw8PDfzxmAH4DA3/Dw8PDf3fcAH4DA3/Dw8PDf2ZmAH4DA3/Dw8PDfzxmPH4DA3/Dw8PDf3uADMAMwHzAz8DMAMwAzMB3gH7DwMDAwMDDfhgYMDAYAH7Dw8P/wMDDfgwYAH7Dw8P/wMDDfjxmAH7Dw8P/wMDDfmZmAH7Dw8P/wMDDfsBgAOBgYGBgYGBg8DBgAOBgYGBgYGBg8HjMAHAwMDAwMDAweMzMAHAwMDAwMDAweGx42Ax+w8PDw8PDw3533AD+w8PDw8PDw8MwGAB+w8PDw8PDw34MGAB+w8PDw8PDw348ZgB+w8PDw8PDw3533AB+w8PDw8PDw35mZgB+w8PDw8PDw34YGAAA/wAAGBg/QGGAY4BngG2AeYBxgGGAvwAwGADDw8PDw8PDw38MGADDw8PDw8PDw388ZgDDw8PDw8PDw39mZgDDw8PDw8PDw38MGADDw8PDw8PDw38DA37AwMDA/sPDw8PDw8P+wMDAZmYAw8PDw8PDw8N/AwN+"}, "12x24b": {"first": 32, "lineHeight": 24, "ascent": 19, "glyphs": "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", "bitmap": "wMDAwMDAwMDAwAAAwMDAzMzMzMwzADMAMwAzAP/AMwAzADMAMwAzAP/AMwAzADMAMwAMAAwAPwBtgMzAzADMAGwAPwANgAzADMDMwG2APwAMAAwAcYDZgNsAcwAGAAYADAAMABgAGAAzgDbAZsBjgBwANgBjAGMAYwA2ABwAPMBmwMOAwYDBgMOAZsA8wMDAwMDAGDBgYMDAwMDAwMBgYDAYwGAwMBgYGBgYGBgwMGDAYMAxgBsADgD/4A4AGwAxgGDADAAMAAwADAD/wAwADAAMAAwAYGBgYMD/wMDAwAMDBgYMDBgYMDBgYMDAPwBhgMDAwMDBwMPAxsDMwNjA8MDgwMDAwMBhgD8AGDh42BgYGBgYGBgYGBj/PwBhgMDAwMDAwADAAYADAAYADAAYADAAYADAAP/APwBhgMDAAMAAwADAAYAfAAGAAMAAwADAwMBhgD8AAMABwAPABsAMwBjAMMBgwMDAwMDAwP/AAMAAwADA/8DAAMAAwADAAMAA/wABgADAAMAAwADAwMBhgD8AP4BgAMAAwADAAMAA/wDBgMDAwMDAwMDAwMBhgD8A/8DAwMDAAMABgAGAAwADAAYABgAMAAwADAAMAAwAPwBhgMDAwMDAwMDAYYA/AGGAwMDAwMDAwMBhgD8APwBhgMDAwMDAwMDAwMBgwD/AAMAAwADAAMABgH8AwMDAAAAAAMDAwGBgYAAAAABgYGBgwAGAAwAGAAwAGAAwAGAAwABgADAAGAAMAAYAAwABgP/AAAAAAAAAAAD/wMAAYAAwABgADAAGAAMAAYADAAYADAAYADAAYADAAD8AYYDAwMDAwMABgAMABgAMAAwAAAAAAAwADAAMAD+AYMDAYMPgxmDMYMxgzGDMYMxgxmDD4MAAYAA/4D8AYYDAwMDAwMDAwMDAwMD/wMDAwMDAwMDAwMDAwP8AwYDAwMDAwMDBgP8AwYDAwMDAwMDAwMDAwYD/AD8AYYDAwMDAwADAAMAAwADAAMAAwADAwMDAYYA/AP8AwYDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwYD/AP/AwADAAMAAwADAAMAA/wDAAMAAwADAAMAAwAD/wP/AwADAAMAAwADAAMAA/wDAAMAAwADAAMAAwADAAD8AYYDAwMDAwADAAMAAx8DAwMDAwMDAwMDAYYA/AMDAwMDAwMDAwMDAwMDA/8DAwMDAwMDAwMDAwMDAwPwwMDAwMDAwMDAwMDAw/AfgAYABgAGAAYABgAGAAYABgAGAwYDBgMGAYwA+AMDAwYDDAMYAzADYAPAA4ADwANgAzADGAMMAwYDAwMAAwADAAMAAwADAAMAAwADAAMAAwADAAMAAwAD/wIAgwGDg4PHg22DOYMRgwGDAYMBgwGDAYMBgwGDAYMDAwMDAwMDA4MDwwNjAzMDGwMPAwcDAwMDAwMDAwD8AYYDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAYYA/AP8AwYDAwMDAwMDAwMGA/wDAAMAAwADAAMAAwADAAD8AYYDAwMDAwMDAwMDAwMDAwMDAwMDAwMzAZ4A/AAGAAMD/AMGAwMDAwMDAwMDBgP8A8ADYAMwAxgDDAMGAwMA/AGGAwMDAAMAAwABgAD8AAYAAwADAAMDAwGGAPwD/wAwADAAMAAwADAAMAAwADAAMAAwADAAMAAwADADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwGGAPwDAwMDAwMDAwGGAYYBhgGGAMwAzADMAHgAeAAwADADAYMBgwGDAYMBgwGDAYMBgxGDOYNtg8eDg4MBggCDAwMDAYYBhgDMAMwAeAAwAHgAzADMAYYBhgMDAwMDAwMDAYYBhgDMAMwAeAB4ADAAMAAwADAAMAAwADAD/wADAAMAAwAGAAwAGAAwAGAAwAGAAwADAAMAA/8D4wMDAwMDAwMDAwMDAwPjAwGBgMDAYGAwMBgYDA/gYGBgYGBgYGBgYGBgY+AwAHgAzAGGAwMD/wMBgMH8AAYAAwADAP8BgwMDAwMDAwGDAP8DAAMAAwADAAP8AwYDAwMDAwMDAwMDAwMDAwMGA/wA/AGGAwMDAAMAAwADAAMAAwMBhgD8AAMAAwADAAMA/wGDAwMDAwMDAwMDAwMDAwMBgwD/APwBhgMDAwMDAwP/AwADAAMAAYMA/gA+AGAAYABgA/wAYABgAGAAYABgAGAAYABgAGAAYAD/AYMDAwMDAwMDAwMDAwMDAwGHAP8AAwADAAYB/AMAAwADAAMAA/wDBgMDAwMDAwMDAwMDAwMDAwMDAwDAwMADwMDAwMDAwMDAw/AMDAwAPAwMDAwMDAwMDA8PDZjzAAMAAwADAAMGAwwDGAMwA2ADwANgAzADGAMMAwYDwMDAwMDAwMDAwMDAwMPz/AM2AzMDMwMzAzMDMwMzAzMDMwMzA/wDBgMDAwMDAwMDAwMDAwMDAwMDAwD8AYYDAwMDAwMDAwMDAwMDAwGGAPwD/AMGAwMDAwMDAwMDAwMDAwMDBgP8AwADAAMAAwAA/wGDAwMDAwMDAwMDAwMDAwMBgwD/AAMAAwADAAMDPwNgA8ADgAMAAwADAAMAAwADAAMAAf4DAwMAAwADAAH+AAMAAwADAwMB/gBgAGAAYABgA/wAYABgAGAAYABgAGAAYABgAGAAPgMDAwMDAwMDAwMDAwMDAwMDAwGDAP8DAwMDAwMBhgGGAMwAzAB4AHgAMAAwAwMDAwMDAwMDMwMzAzMDMwMzAzMB/gMDAwMBhgDMAHgAMAB4AMwBhgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMBhwD/AAMAAwAGAfwD/wADAAYADAAYADAAYADAAYADAAP/ADhgwMDAwMOAwMDAwMBgOwMDAwMDAwMDAwMDAwMDA4DAYGBgYGA4YGBgYGDDgeMDMwMzAx4DAwMAAAMDAwMDAwMDAwMAMAAwAPwBtgMzAzADMAMwAzADMAMzAbYA/AAwADAAeADMAYYBgAGAAYABgAP4AYABgAGAAYABgwGDA/8DAYGDAP4BgwGDAYMBgwGDAYMA/gGDAwGDAwMDAYYBhgDMAMwAeAAwADAB/gAwADAB/gAwADADAwMDAwMAAAADAwMDAwMB8xsDAeMzGxsbGZjwGBsZ8zMzMP4BAQJ8gsaCxoLAgsCCxoLGgnyBAQD+AfwABgAGAf4DBgMGAwYDBgH+AAAD/gAZgDMAZgDMAZgDMAGYAMwAZgAzABmD/wADAAMAAwADAAMD/wD+AQEC/ILGgsaCxoL8gtiCzILGgQEA/gP98xsbGxnwMAAwADAAMAP/ADAAMAAwADAAAAAAA/8B8xsYGDBgwYP58xgYGPAYGxnwwYMDAwMDAwMDAwMDAwMDAwMDAwcDDwP7AwADAAMAAwAB/wMzAzMDMwMzAzMDMwHzADMAMwAzADMAMwAzADMDAwMBgYGDAMHDwMDAwMDD8PgBjAMGAwYDBgMGAwYBjAD4AAAD/gMwAZgAzABmADMAGYAzAGYAzAGYAzAAYADgAeAAYABhAGMAZgAMABgAMwBnAM8BmwMzAj8AAwADAGAA4AHgAGEAYwBmAGwAGAAwAGAA3gGzAzMCBgAMABgAPwHgAzAAMADgADEDMwHmAAwAGAAzAGcAzwGbAzMCPwADAAMAMAAwADAAAAAAADAAMABgAMABgAMDAwMDAwGGAPwAwABgADAAAAD8AYYDAwMDAwMDAwMDAwMD/wMDAwMDAwMDAwMDAwAMABgAMAAAAPwBhgMDAwMDAwMDAwMDAwP/AwMDAwMDAwMDAwMDADAAeADMAAAA/AGGAwMDAwMDAwMDAwMDA/8DAwMDAwMDAwMDAwMA5gG2AZwAAAD8AYYDAwMDAwMDAwMDAwMD/wMDAwMDAwMDAwMDAwDMAMwAzAAAAPwBhgMDAwMDAwMDAwMDAwP/AwMDAwMDAwMDAwMDAHgAzADMAHgA/AGGAwMDAwMDAwMDAwMDA/8DAwMDAwMDAwMDAwMA/8GMAwwDDAMMAwwDDAP/wwwDDAMMAwwDDAMMAw/A/AGGAwMDAwMAAwADAAMAAwADAAMAAwMDAwGGAPwAMAAwADAAYADAAGAAMAAAA/8DAAMAAwADAAMAAwAD/AMAAwADAAMAAwADAAP/AAwAGAAwAAAD/wMAAwADAAMAAwADAAP8AwADAAMAAwADAAMAA/8AMAB4AMwAAAP/AwADAAMAAwADAAMAA/wDAAMAAwADAAMAAwAD/wDMAMwAzAAAA/8DAAMAAwADAAMAAwAD/AMAAwADAAMAAwADAAP/AwGAwAPwwMDAwMDAwMDAwMDAw/AwYMAD8MDAwMDAwMDAwMDAwMPwweMwA/DAwMDAwMDAwMDAwMDD8zMzMAPwwMDAwMDAwMDAwMDAw/H+AYMBgYGBgYGBgYGBg/mBgYGBgYGBgYGBgYMB/gDmAbYBnAAAAwMDAwMDAwMDgwPDA2MDMwMbAw8DBwMDAwMDAwMDAMAAYAAwAAAA/AGGAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwGGAPwADAAYADAAAAD8AYYDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAYYA/AAwAHgAzAAAAPwBhgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMBhgD8AOYBtgGcAAAA/AGGAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwGGAPwAzADMAMwAAAD8AYYDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAYYA/AMDAYYAzAB4ADAAeADMAYYDAwB+AMMBgcGBgYOBh4GNgZmBsYHhgcGBgYOBgMMAfgDAAGAAMAAAAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMBhgD8AAwAGAAwAAADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwGGAPwAMAB4AMwAAAMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAYYA/ADMAMwAzAAAAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMBhgD8AAwAGAAwAAADAwMDAYYBhgDMAMwAeAB4ADAAMAAwADAAMAAwADADAAMAAwAD/AMGAwMDAwMDAwMDBgP8AwADAAMAAwAB+AMMAwYDBgMGAwwD/AMGAwMDAwMDAwMDgwNGA3wAwABgADAAAAH8AAYAAwADAP8BgwMDAwMDAwGDAP8ADAAYADAAAAH8AAYAAwADAP8BgwMDAwMDAwGDAP8AMAB4AMwAAAH8AAYAAwADAP8BgwMDAwMDAwGDAP8A5gG2AZwAAAH8AAYAAwADAP8BgwMDAwMDAwGDAP8AzADMAMwAAAH8AAYAAwADAP8BgwMDAwMDAwGDAP8AeADMAMwAeAH8AAYAAwADAP8BgwMDAwMDAwGDAP8B74A4wBjAGMH4wx/DGAMYAxgDHMH3gPwBhgMDAwADAAMAAwADAAMDAYYA/AAwADAAMABgAMAAYAAwAAAA/AGGAwMDAwMDA/8DAAMAAwABgwD+AAwAGAAwAAAA/AGGAwMDAwMDA/8DAAMAAwABgwD+ADAAeADMAAAA/AGGAwMDAwMDA/8DAAMAAwABgwD+AMwAzADMAAAA/AGGAwMDAwMDA/8DAAMAAwABgwD+AwGAwAPAwMDAwMDAwMDD8DBgwAPAwMDAwMDAwMDD8MHjMAPAwMDAwMDAwMDD8zMzMAPAwMDAwMDAwMDD8bAA4AGwABgA/AGGAwMDAwMDAwMDAwMDAwMBhgD8AOYBtgGcAAAD/AMGAwMDAwMDAwMDAwMDAwMDAwMDAMAAYAAwAAAA/AGGAwMDAwMDAwMDAwMDAwMBhgD8AAwAGAAwAAAA/AGGAwMDAwMDAwMDAwMDAwMBhgD8ADAAeADMAAAA/AGGAwMDAwMDAwMDAwMDAwMBhgD8AOYBtgGcAAAA/AGGAwMDAwMDAwMDAwMDAwMBhgD8AMwAzADMAAAA/AGGAwMDAwMDAwMDAwMDAwMBhgD8ADAAMAAwAAAAAAP/AAAAAAAwADAAMAD9AYYDBwMPAxsDMwNjA8MDgwGGAvwAwABgADAAAAMDAwMDAwMDAwMDAwMDAwMDAwGDAP8ADAAYADAAAAMDAwMDAwMDAwMDAwMDAwMDAwGDAP8AMAB4AMwAAAMDAwMDAwMDAwMDAwMDAwMDAwGDAP8AzADMAMwAAAMDAwMDAwMDAwMDAwMDAwMDAwGDAP8ADAAYADAAAAMDAwMDAwMDAwMDAwMDAwMDAwGHAP8AAwADAAYB/AMAAwADAAMAA/wDBgMDAwMDAwMDAwMDAwMDAwYD/AMAAwADAAMAAMwAzADMAAADAwMDAwMDAwMDAwMDAwMDAwMBhwD/AAMAAwAGAfwA="}, "14x28b": {"first": 32, "lineHeight": 28, "ascent": 22, "glyphs": "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", "bitmap": "wMDAwMDAwMDAwMDAAADAwMDAxsbGxsbGMYAxgDGAMYD/4P/gMYAxgDGAMYAxgDGA/+D/4DGAMYAxgDGABgAGAAYAP8B/4OZwxjDGAMYA5gB/wD/gBnAGMAYwxjDmcH/gP8AGAAYABgB4YPxgzMD8wHmAAYADAAMABgAGAAwADAAYABngM/AzMGPwYeAeAD8Ac4BhgGGAc4A/AB4AHAA+MHdw4+DBwMHAwcDj4H9wPjDAwMDAwMAYMGBgwMDAwMDAwMDAwGBgMBjAYDAwGBgYGBgYGBgYGDAwYMBxwDuAHwAOAP/g/+AOAB8AO4BxwAYABgAGAAYABgD/8P/wBgAGAAYABgAGADAwMDBgwP/g/+DAwMDAAMAAwAGAAYADAAMABgAGAAwADAAYABgAMAAwAGAAYADAAMAAP4B/wODgwGDA4MHgw+DHYM5g3GD4YPBg4GDAYMBg4OB/wD+AGDh4+BgYGBgYGBgYGBgYGP//P4B/wODgwGDAYMBgAGAA4AHAA4AHAA4AHAA4AHAA4AD/4P/gP4B/wODgwGAAYABgAGAA4B/AH8AA4ABgAGAAYMBg4OB/wD+AAGAA4AHgA+AHYA5gHGA4YHBg4GDAYMBg/+D/4ABgAGAAYABg/+D/4MAAwADAAMAAwAD/gP/AAOAAYABgAGAAYMBg4OB/wD+AP8B/wOAAwADAAMAAwAD/gP/AwODAYMBgwGDAYMBg4OB/wD+A/+D/4MBgwGDAYADAAMABgAGAAwADAAYABgAGAAYABgAGAAYAP4B/wODgwGDAYMBgwGDg4H/Af8Dg4MBgwGDAYMBg4OB/wD+AP4B/wODgwGDAYMBgwGDAYOBgf+A/4ABgAGAAYABgAOB/wH+AwMDAwAAAAAAAwMDAwDAwMDAAAAAAADAwMDBgwADgAcADgAcADgAcADgAcADgAHAAOAAcAA4ABwADgAHAAOD/4P/gAAAAAAAAAAD/4P/g4ABwADgAHAAOAAcAA4ABwADgAcADgAcADgAcADgAcADgAD+Af8Dg4MBgwGDAYADgAcADgAcABgAGAAAAAAAGAAYABgAGAD/Af+DgcMAww/DH8M4wzDDMMMwwzDDOMMfww9DAAOAAf/A/8D+Af8Dg4MBgwGDAYMBgwGDAYP/g/+DAYMBgwGDAYMBgwGDAYP+A/8DA4MBgwGDAYMDA/4D/gMDAwGDAYMBgwGDAYMDg/8D/gD+Af8Dg4MBgwGDAAMAAwADAAMAAwADAAMAAwGDAYODgf8A/gP4A/4DBwMDAwGDAYMBgwGDAYMBgwGDAYMBgwGDAwMHA/4D+AP/g/+DAAMAAwADAAMAAwAD/AP8AwADAAMAAwADAAMAA/+D/4P/g/+DAAMAAwADAAMAAwAD/AP8AwADAAMAAwADAAMAAwADAAD+Af8Dg4MBgwGDAAMAAwADH4MfgwGDAYMBgwGDAYODgf8A/gMBgwGDAYMBgwGDAYMBgwGD/4P/gwGDAYMBgwGDAYMBgwGDAYPz8MDAwMDAwMDAwMDAwMDD8/APwA/AAwADAAMAAwADAAMAAwADAAMAAwMDAwMDAwOHAf4A/AMBgwODBwMOAxwDOANwA+ADwAPAA+ADcAM4AxwDDgMHAwODAYMAAwADAAMAAwADAAMAAwADAAMAAwADAAMAAwADAAMAA/+D/4MAwwDDgcPDw+fDfsM8wxjDAMMAwwDDAMMAwwDDAMMAwwDDAMMBgwGDAYMBg4GDwYPhg3GDOYMdgw+DB4MDgwGDAYMBgwGDAYD+Af8Dg4MBgwGDAYMBgwGDAYMBgwGDAYMBgwGDAYODgf8A/gP+A/8DA4MBgwGDAYMBgwGDA4P/A/4DAAMAAwADAAMAAwADAAD+Af8Dg4MBgwGDAYMBgwGDAYMBgwGDAYMBgwGDHYOPgf8A/wADgAHD/gP/AwODAYMBgwGDAYMBgwOD/wP+A+ADcAM4AxwDDgMHAwOA/gH/A4ODAYMAAwADAAOAAf4A/wADgAGAAYABgwGDg4H/AP4D/8P/wBgAGAAYABgAGAAYABgAGAAYABgAGAAYABgAGAAYABgDAYMBgwGDAYMBgwGDAYMBgwGDAYMBgwGDAYMBgwGDg4H/AP4DAYMBgwGDAYGDAYMBgwGDAMYAxgDGAMYAbABsAGwAOAA4ADgDAMMAwwDDAMMAwwDDAMMAwwDDAMMYwzzDfsPnw8PDgcMAwwDDAYMBgYMBgwDGAMYAbABsADgAOABsAGwAxgDGAYMBgwMBgwGDAMMAwYGBgYDDAMMAZgBmADwAPAAYABgAGAAYABgAGAAYABgD/4P/gAGAAYADgAcADgAcADgAcADgAcADgAMAAwADAAP/g/+D8/MDAwMDAwMDAwMDAwMDA/PzAAMAAYABgADAAMAAYABgADAAMAAYABgADAAMAAYABgADAAMD8/AwMDAwMDAwMDAwMDAwM/PwEAA4AHwA7gHHA4OD/4P/g4HA4P4A/wADgAGA/4H/g4GDAYMBgwGDgYH/gP+DAAMAAwADAAMAA/4D/wMDgwGDAYMBgwGDAYMBgwGDA4P/A/4A/gH/A4ODAAMAAwADAAMAAwADAAODgf8A/gABgAGAAYABgAGA/4H/g4GDAYMBgwGDAYMBgwGDAYOBgf+A/4D+Af8Dg4MBgwGD/4P/gwADAAMAA4OB/wD+AD8AfwBgAGAAYAP8A/wAYABgAGAAYABgAGAAYABgAGAAYABgAP+B/4OBgwGDAYMBgwGDAYMBgwGDgYH/gP+AAYABgAOB/wH+AwADAAMAAwADAAP+A/8DA4MBgwGDAYMBgwGDAYMBgwGDAYMBgMDAwAADw8DAwMDAwMDAwMPz8AYABgAGAAAAAAAeAB4ABgAGAAYABgAGAAYABgAGAAYABgAGAwYDBgOOAfwA+AMAAwADAAMAAwADBwMOAxwDOANwA+ADwAPgA3ADOAMcAw4DBwPDwMDAwMDAwMDAwMDAwMDD8/P/A/+DGcMYwxjDGMMYwxjDGMMYwxjDGMMYw/4D/wMDgwGDAYMBgwGDAYMBgwGDAYMBgwGA/gH/A4ODAYMBgwGDAYMBgwGDAYODgf8A/gP+A/8DA4MBgwGDAYMBgwGDAYMBgwOD/wP+AwADAAMAAwADAAD/gf+DgYMBgwGDAYMBgwGDAYMBg4GB/4D/gAGAAYABgAGAAYM/g3+D4APAA4ADAAMAAwADAAMAAwADAAMAAP4B/wODgwADgAH+AP8AA4ABgAGDg4H/AP4AYABgAGAAYABgA/wD/ABgAGAAYABgAGAAYABgAGAAYAB+AD4DAYMBgwGDAYMBgwGDAYMBgwGDAYOBgf+A/4MBgwGDAYGDAYMBgwDGAMYAxgBsAGwAOAA4AwDDAMMAwwDDGMMYwxjDGMMYwxjDmcH/gP8DAYMBg4OBxwDuAHwAOAB8AO4BxwODgwGDAYMBgwGDAYMBgwGDAYMBgwGDAYMBg4GB/4D/gAGAAYADgf8B/gP/g/+AA4AHAA4AHAA4AHAA4AHAA4AD/4P/gDh44MDAwMDDg4DAwMDAwOB4OwMDAwMDAwMDAwMDAwMDAwMDA4PA4GBgYGBgODhgYGBgYOPDgeGD8YM5gx+DDwMDAwMAAAMDAwMDAwMDAwMDAwAwADAA/AH+AzMDMAMwAzADMAMwAzADMAMzAf4A/AAwADAAeAD8AcYBhgGAAYABgAGAA/gD+AGAAYABgAGAAYMBgwP/A/8DAMOBwf+A/wHDgYGBgYGBgcOA/wH/g4HDAMMAwwDBgYGBgMMAwwBmAGYAPAAYAf+B/4AYABgB/4H/gBgAGAMDAwMDAwMAAAAAAwMDAwMDAwDx+58DgeHzOx8PD43M+HgcD5348xsbGP+B/8OA4z5jf2NjY2BjYGNjY39jPmOA4f/A/4H8Af4ABwD/Af8DgwMDA4MB/wD/AAAD/wP/AA5wHOA5wHOA5wHOA5wBzgDnAHOAOcAc4A5z/4P/gAGAAYABgAGAAYP/g/+A/4H/w4DjfmN/Y2NjY2N+Y3xjZmNjY4Dh/8D/g/v58/sbGxv58BgAGAAYABgAGAP/w//AGAAYABgAGAAYAAAAAAP/w//B8/sYGDhw4cP7+fP4GBjw+Bgb+fDhw4MBgwGDAYMBgwGDAYMBgwGDA4MHgw+D/YP5gwADAAMAAwADAAH/w//DGMMYwxjDGMMYwxjDGMP4wfjAGMAYwBjAGMAYwBjAGMMDAwMAwMDBgwDBw8DAwMDAw/Pw/AH+A4cDAwMDAwMDAwOHAf4A/AAAA/8D/wOcAc4A5wBzgDnAHOAOcBzgOcBzgOcBzgOcAMABwAPAAMDAwcDDgMcAzgAcADmAc4Dngc2DmYM/gD+AAYABgMABwAPAwMHAw4DHAM4A3AA4AHAA74Hfw5jDAYADAAYAD8AfwfAD+AAYAPAA+MAZw/uB9wAOABzAOcBzwObBzMOfwx/AAMAAwDAAMAAwADAAAAAAADAAMAAwAGAAwAGAAwGDAYMBg4OB/wD+AOAAcAA4AAAA/gH/A4ODAYMBgwGDAYMBgwGD/4P/gwGDAYMBgwGDAYMBgwGADgAcADgAAAD+Af8Dg4MBgwGDAYMBgwGDAYP/g/+DAYMBgwGDAYMBgwGDAYA4AHwA7gAAAP4B/wODgwGDAYMBgwGDAYMBg/+D/4MBgwGDAYMBgwGDAYMBgPMB/wGeAAAA/gH/A4ODAYMBgwGDAYMBgwGD/4P/gwGDAYMBgwGDAYMBgwGAxgDGAMYAAAD+Af8Dg4MBgwGDAYMBgwGDAYP/g/+DAYMBgwGDAYMBgwGDAYA8AGYAZgA8AP4B/wODgwGDAYMBgwGDAYMBg/+D/4MBgwGDAYMBgwGDAYMBgP/h/+OMAwwDDAMMAwwDDAP/w//DDAMMAwwDDAMMAwwDD+MP4P4B/wODgwGDAYMAAwADAAMAAwADAAMAAwADAYMBg4OB/wD+ADAAMAAwAGAAwADgAHAAOAAAA/+D/4MAAwADAAMAAwADAAP8A/wDAAMAAwADAAMAAwAD/4P/gA4AHAA4AAAD/4P/gwADAAMAAwADAAMAA/wD/AMAAwADAAMAAwADAAP/g/+AOAB8AO4AAAP/g/+DAAMAAwADAAMAAwAD/AP8AwADAAMAAwADAAMAA/+D/4DGAMYAxgAAA/+D/4MAAwADAAMAAwADAAP8A/wDAAMAAwADAAMAAwAD/4P/g4HA4APz8MDAwMDAwMDAwMDAwMDD8/Bw4cAD8/DAwMDAwMDAwMDAwMDAw/Pw4fO4Afn4YGBgYGBgYGBgYGBgYGH5+xsbGAH5+GBgYGBgYGBgYGBgYGBh+fn8Af8Bg4GBgYDBgMGAwYDD+MP4wYDBgMGAwYDBgYGDgf8B/ADzAf8BngAAAwGDAYMBgwGDgYPBg+GDcYM5gx2DD4MHgwODAYMBgwGDAYMBgOAAcAA4AAAA/gH/A4ODAYMBgwGDAYMBgwGDAYMBgwGDAYMBgwGDg4H/AP4ADgAcADgAAAD+Af8Dg4MBgwGDAYMBgwGDAYMBgwGDAYMBgwGDAYODgf8A/gA4AHwA7gAAAP4B/wODgwGDAYMBgwGDAYMBgwGDAYMBgwGDAYMBg4OB/wD+APMB/wGeAAAA/gH/A4ODAYMBgwGDAYMBgwGDAYMBgwGDAYMBgwGDg4H/AP4AxgDGAMYAAAD+Af8Dg4MBgwGDAYMBgwGDAYMBgwGDAYMBgwGDAYODgf8A/gMBg4OBxwDuAHwAOAB8AO4BxwODgwGAfwD/gcHBgOGB4YPBh8GOwZzBuMHwweDBwMOAw4DBwcD/gH8A4ABwADgAAAMBgwGDAYMBgwGDAYMBgwGDAYMBgwGDAYMBgwGDAYODgf8A/gAOABwAOAAAAwGDAYMBgwGDAYMBgwGDAYMBgwGDAYMBgwGDAYMBg4OB/wD+ADgAfADuAAADAYMBgwGDAYMBgwGDAYMBgwGDAYMBgwGDAYMBgwGDg4H/AP4AxgDGAMYAAAMBgwGDAYMBgwGDAYMBgwGDAYMBgwGDAYMBgwGDAYODgf8A/gAOABwAOAAAAwDDAMGBgYGAwwDDAGYAZgA8ADwAGAAYABgAGAAYABgAGAAYAwADAAMAA/4D/wMDgwGDAYMBgwGDAYMDg/8D/gMAAwADAAMAAfwD/gMHAwMDAwMDAwYD/gP/AwODAYMBgwGDAYOBg8ODfwM+AOAAcAA4AAAA/gD/AAOAAYD/gf+DgYMBgwGDAYOBgf+A/4AOABwAOAAAAP4A/wADgAGA/4H/g4GDAYMBgwGDgYH/gP+AOAB8AO4AAAD+AP8AA4ABgP+B/4OBgwGDAYMBg4GB/4D/gPMB/wGeAAAA/gD/AAOAAYD/gf+DgYMBgwGDAYOBgf+A/4DGAMYAxgAAAP4A/wADgAGA/4H/g4GDAYMBgwGDgYH/gP+APABmAGYAPAD+AP8AA4ABgP+B/4OBgwGDAYMBg4GB/4D/gfeB/8Ac4Axg/GH/44/jDAMMAwwDjmH/4PvA/gH/A4ODAAMAAwADAAMAAwADAAODgf8A/gAwADAAMABgAMAA4ABwADgAAAD+Af8Dg4MBgwGD/4P/gwADAAMAA4OB/wD+AA4AHAA4AAAA/gH/A4ODAYMBg/+D/4MAAwADAAODgf8A/gA4AHwA7gAAAP4B/wODgwGDAYP/g/+DAAMAAwADg4H/AP4AxgDGAMYAAAD+Af8Dg4MBgwGD/4P/gwADAAMAA4OB/wD+A4HA4AHh4GBgYGBgYGBgYfn4cOHAA8PAwMDAwMDAwMDD8/Dh87gB4eBgYGBgYGBgYGH5+xsbGAHh4GBgYGBgYGBgYfn5zAD4APABuAAcAP4B/wODgwGDAYMBgwGDAYMBgwGDg4H/AP4B4wP/Ax4AAAP+A/8DA4MBgwGDAYMBgwGDAYMBgwGDAYMBgOAAcAA4AAAA/gH/A4ODAYMBgwGDAYMBgwGDAYODgf8A/gAOABwAOAAAAP4B/wODgwGDAYMBgwGDAYMBgwGDg4H/AP4AOAB8AO4AAAD+Af8Dg4MBgwGDAYMBgwGDAYMBg4OB/wD+APMB/wGeAAAA/gH/A4ODAYMBgwGDAYMBgwGDAYODgf8A/gDGAMYAxgAAAP4B/wODgwGDAYMBgwGDAYMBgwGDg4H/AP4AGAAYABgAGAAAAAAD/8P/wAAAAAAYABgAGAAYAH9g/+GBwYPBh8GOwZzBuMHwweDBwMP/g38A4ABwADgAAAMBgwGDAYMBgwGDAYMBgwGDAYMBg4GB/4D/gA4AHAA4AAADAYMBgwGDAYMBgwGDAYMBgwGDAYOBgf+A/4A4AHwA7gAAAwGDAYMBgwGDAYMBgwGDAYMBgwGDgYH/gP+AxgDGAMYAAAMBgwGDAYMBgwGDAYMBgwGDAYMBg4GB/4D/gA4AHAA4AAADAYMBgwGDAYMBgwGDAYMBgwGDAYOBgf+A/4ABgAGAA4H/Af4DAAMAAwADAAMAA/4D/wMDgwGDAYMBgwGDAYMBgwGDA4P/A/4DAAMAAwADAAMAAMYAxgDGAAADAYMBgwGDAYMBgwGDAYMBgwGDAYOBgf+A/4ABgAGAA4H/Af4A="}, "16x32b": {"first": 32, "lineHeight": 32, "ascent": 26, "glyphs": "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", "bitmap": "4ODg4ODg4ODg4ODg4AAAAODg4ODjgOOA44DjgOOA44A44DjgOOA44Djg//j/+DjgOOA44DjgOOA44P/4//g44DjgOOA44DjgBwAHAAcAP+B/8Pd45zjnAOcA5wD3AH/gP/AHeAc4BzgHOOc493h/8D/gBwAHAAcAfHD+cO7g7uD/wH3AA4ADgAcABwAOAA4AHAAcADvgP/B3cHdw5/Dj4B+AP8Bw4HDgcOBw4HDgOcAfgB8AP5xx3OD44HDgcOBw4HDw+H/cP5zg4ODg4OAOHDhwcODg4ODg4ODg4OBwcDgcDuBwOBwcDg4ODg4ODg4ODhwcOHDgcHA44B3AD4AHAP/4//gHAA+AHcA44HBwBwAHAAcABwAHAP/4//gHAAcABwAHAAcAODg4OHDg//j/+ODg4OAAcABwAOAA4AHAAcADgAOABwAHAA4ADgAcABwAOAA4AHAAcADgAOAAP+B/8PB44DjgOOB44Pjh+OO45zjuOPw4+DjwOOA44DjgOPB4f/A/4BwAPAB8APwA/AAcABwAHAAcABwAHAAcABwAHAAcABwAHAAcAP+A/4A/4H/w8HjgOOA44DjgOAA4AHAA4AHAA4AHAA4AHAA4AHAA4AD/+P/4P+B/8PB44DjgOAA4ADgAOAB4H/Af8AB4ADgAOAA44DjgOPB4f/A/4AA4AHgA+AH4A7gHOA44HDg4OHA44DjgOOA4//j/+AA4ADgAOAA4ADj/+P/44ADgAOAA4ADgAOAA/+D/8AB4ADgAOAA4ADgAOOA48Dh/8D/gP/B/8PAA4ADgAOAA4ADgAP/g//DgeOA44DjgOOA44DjgOPB4f/A/4P/4//jgOOA44DjgcABwAOAA4AHAAcADgAOABwAHAAcABwAHAAcABwA/4H/w8HjgOOA44DjgOOA48Hh/8H/w8HjgOOA44DjgOOA48Hh/8D/gP+B/8PB44DjgOOA44DjgOOA48Dh/+D/4ADgAOAA4ADgAOAB4f/B/4ODg4OAAAAAAAADg4ODgODg4OAAAAAAAADg4ODhw4ABwAOABwAOABwAOABwAOABwAOAA4ABwADgAHAAOAAcAA4ABwADgAHD/+P/4AAAAAAAAAAD/+P/44ABwADgAHAAOAAcAA4ABwADgAHAAcADgAcADgAcADgAcADgAcADgAD/gf/DweOA44DjgOOA4AHAA4AHAA4AHAAcABwAAAAAABwAHAAcABwA/8H/48BzgDOP85/zvHO4c7hzuHO4c7hzuHO885/zj7OAA8AB//D/8P+B/8PB44DjgOOA44DjgOOA44Dj/+P/44DjgOOA44DjgOOA44DjgOP/g//DgeOA44DjgOOA44HD/4P/g4HDgOOA44DjgOOA44DjgeP/w/+A/4H/w8HjgOOA44ADgAOAA4ADgAOAA4ADgAOAA4ADgOOA48Hh/8D/g/4D/4ODw4HDgOOA44DjgOOA44DjgOOA44DjgOOA44DjgcODw/+D/gP/4//jgAOAA4ADgAOAA4ADgAP/A/8DgAOAA4ADgAOAA4ADgAP/4//j/+P/44ADgAOAA4ADgAOAA4AD/wP/A4ADgAOAA4ADgAOAA4ADgAOAAP+B/8PB44DjgOOAA4ADgAOAA4/jj+OA44DjgOOA44DjgOPB4f/A/4OA44DjgOOA44DjgOOA44DjgOP/4//jgOOA44DjgOOA44DjgOOA44Dj+/jg4ODg4ODg4ODg4ODg4ODj+/gH8AfwAcABwAHAAcABwAHAAcABwAHAAcABwAHDgcOBw4HDw8H/gP8DgGOA44HDg4OHA44DnAO4A/AD4APgA/ADuAOcA44DhwODg4HDgOOAY4ADgAOAA4ADgAOAA4ADgAOAA4ADgAOAA4ADgAOAA4ADgAOAA//j/+OAc4BzwPPh8/Pz8/O/c55znnOMc4BzgHOAc4BzgHOAc4BzgHOAc4BzgOOA44DjgOOA48Dj4OPw47jjnOOO44fjg+OB44DjgOOA44DjgOOA4P+B/8PB44DjgOOA44DjgOOA44DjgOOA44DjgOOA44DjgOPB4f/A/4P/g//DgeOA44DjgOOA44DjgOOB4//D/4OAA4ADgAOAA4ADgAOAA4AA/4H/w8HjgOOA44DjgOOA44DjgOOA44DjgOOA44DjgOOc48/h/8D/gAHAAOP/g//DgeOA44DjgOOA44DjgOOB4//D/4PwA7gDnAOOA4cDg4OBw4Dg/4H/w8HjgOOA44ADgAOAA8AB/4D/wAHgAOAA4ADjgOOA48Hh/8D/g//j/+AcABwAHAAcABwAHAAcABwAHAAcABwAHAAcABwAHAAcABwAHAOA44DjgOOA44DjgOOA44DjgOOA44DjgOOA44DjgOOA44DjweH/wP+DgOOA44DjgOOA4cHBwcHBwcHBwcDjgOOA44DjgHcAdwB3AD4APgA+A4BzgHOAc4BzgHOAc4BzgHOAc4BzjHOec55zv3Pz8/Pz4fPA84BzgHOA44DhwcHBwOOA44B3AHcAPgA+AD4APgB3AHcA44DjgcHBwcOA44DjgOOA44DhwcHBwOOA44B3AHcAPgA+ABwAHAAcABwAHAAcABwAHAAcA//j/+AA4ADgAOABwAOABwAOABwAOABwAOABwAOAA4ADgAOAA//j/+P//4ODg4ODg4ODg4ODg4ODg4P//4ADgAHAAcAA4ADgAHAAcAA4ADgAHAAcAA4ADgAHAAcAA4ADgAHAAcP//BwcHBwcHBwcHBwcHBwcHB///BwAPgB3AOOBwcOA4//j/+OBwOBx/4H/wAHgAOAA4P/h/+PA44DjgOOA48Dh/+D/44ADgAOAA4ADgAOAA/+D/8OB44DjgOOA44DjgOOA44DjgOOB4//D/4D/gf/DweOA44ADgAOAA4ADgAOAA4DjweH/wP+AAOAA4ADgAOAA4ADg/+H/48DjgOOA44DjgOOA44DjgOOA48Dh/+D/4P+B/8PB44DjgOOA4//j/+OAA4ADgAPA4f/g/8AP4B/gPAA4ADgAOAP/g/+AOAA4ADgAOAA4ADgAOAA4ADgAOAA4ADgA/+H/48DjgOOA44DjgOOA44DjgOOA48Dh/+D/4ADgAOAB4f/B/4OAA4ADgAOAA4ADgAP/g//DgeOA44DjgOOA44DjgOOA44DjgOOA44Dg4ODg4AAD4+Dg4ODg4ODg4ODj+/gDgAOAA4ADgAAAAAAPgA+AA4ADgAOAA4ADgAOAA4ADgAOAA4ADgAODg4ODg8eB/wD+A4ADgAOAA4ADgAOAA4HDg4OHA44DnAO4A/AD8AO4A5wDjgOHA4ODgcPj4ODg4ODg4ODg4ODg4ODg4OP7+/+D/8Od45zjnOOc45zjnOOc45zjnOOc45zjnOP/g//DgeOA44DjgOOA44DjgOOA44DjgOOA44Dg/4H/w8HjgOOA44DjgOOA44DjgOOA48Hh/8D/g/+D/8OB44DjgOOA44DjgOOA44DjgOOB4//D/4OAA4ADgAOAA4AA/+H/48DjgOOA44DjgOOA44DjgOOA48Dh/+D/4ADgAOAA4ADgAOOf47/j8APgA8ADgAOAA4ADgAOAA4ADgAOAA4AA/4H/w8HjgAOAA8AB/4D/wAHgAOAA48Hh/8D/gDgAOAA4ADgAOAA4A/+D/4A4ADgAOAA4ADgAOAA4ADgAOAA8AB/gD+OA44DjgOOA44DjgOOA44DjgOOA44DjwOH/4P/jgOOA44DhwcHBwcHA44DjgOOAdwB3AD4APgA+A4DjgOOA44DjnOOc45zjnOOc45zjnOPd4f/A/4OA44DjgOHBwOOAdwA+AD4AdwDjgcHDgOOA44DjgOOA44DjgOOA44DjgOOA44DjgOOA48Dh/+D/4ADgAOAB4f/B/4P/4//gAcADgAcADgAcADgAcADgAcADgAP/4//gHwA/AHgAcABwAHAAcABwAHAD4APgAHAAcABwAHAAcABwAHgAPwAfA4ODg4ODg4ODg4ODg4ODg4ODg4OD4APwAHgAOAA4ADgAOAA4ADgAHwAfADgAOAA4ADgAOAA4AHgD8APgAPDh+OO8457jj8OHg4ODg4AAA4ODg4ODg4ODg4ODg4OAHAAcABwA/4H/w93jnOOcA5wDnAOcA5wDnAOc493h/8D/gBwAHAAcAD8Af4DzwOHA4ADgAOAA4ADgA/8D/wDgAOAA4ADgAOAA4ODg4//j/+OA4cHA/4D/gcHBwcHBwcHBwcHBwP+A/4HBw4DjgOOA4cHBwcDjgOOAdwB3AD4APgAcABwB/8H/wBwAHAH/wf/AHAAcA4ODg4ODg4OAAAAAA4ODg4ODg4OA/AH+A88DhwOAA8AB+AH8A54DjwOHA4cDhwPHAecA/gB+AA8ABwOHA88B/gD8A44DjgOOA44A/8H/44BzPzN/s3OzcDNwM3AzcDNzs3+zPzOAcf/g/8H+Af8AA4ADgP+B/4ODg4ODg4H/gP+AAAAAA/+D/4AOcBzgOcBzgOcBzgOcA5wBzgDnAHOAOcAc4A5z/+P/4ADgAOAA4ADgAOAA4//j/+D/wf/jgHN/M3+zc7Nzs3OzfzN+M34zdzNzs4Bx/+D/w/4D/gH8A/4DjgOOA44DjgP+AfwAHAAcABwAHAAcA//j/+AcABwAHAAcABwAAAAAA//j/+H8A/4DjgOOABwAOABwAOABwAP+A/4B/AP+A44ADgB8AHwADgAOA44D/gH8AHDhw4OA44DjgOOA44DjgOOA44DjgOOB44Pjh+P+4/zjgAOAA4ADgAOAAP/x//POc45zjnOOc45zjnPOcf5w/nAOcA5wDnAOcA5wDnAOcA5wDnODg4OA4ODhw4Dh4+Pg4ODg4OP7+P4B/wODg4ODg4ODg4ODg4ODgf8A/gAAAAAD/4P/g5wBzgDnAHOAOcAc4A5wDnAc4DnAc4DnAc4DnABwAPAB8ABwAHAwcHBw4HHAc4AHAA5wHPA58HPw53HOc5/zH/AAcABw4AHgA+Aw4HDg4OHA44DnAO4AHAA4AHfg7/HOc45zAOABwAOAB/AP8fwD/gOOAHwAfAAOM45z/uH9wAOAB3AO8B3wO/B3cO5x3/Of8wBwAHAcABwAHAAcAAAAAAAcABwAHAA4AHAA4AHAA4DjgOOA44DjweH/wP+A4ABwADgAHAAAAP+B/8PB44DjgOOA44DjgOOA44Dj/+P/44DjgOOA44DjgOOA44DjgOADgAcADgAcAAAA/4H/w8HjgOOA44DjgOOA44DjgOP/4//jgOOA44DjgOOA44DjgOOA4BwAPgB3AOOAAAD/gf/DweOA44DjgOOA44DjgOOA4//j/+OA44DjgOOA44DjgOOA44Dg+cHdwd3Bz4AAAP+B/8PB44DjgOOA44DjgOOA44Dj/+P/44DjgOOA44DjgOOA44DjgODjgOOA44DjgAAA/4H/w8HjgOOA44DjgOOA44DjgOP/4//jgOOA44DjgOOA44DjgOOA4D4AdwB3AHcAPgD/gf/DweOA44DjgOOA44DjgOOA4//j/+OA44DjgOOA44DjgOOA44Dg//n/+8cDhwOHA4cDhwOHA4cD//v/+4cDhwOHA4cDhwOHA4cDh/uH+P+B/8PB44DjgOOAA4ADgAOAA4ADgAOAA4ADgAOAA4DjgOPB4f/A/4AcABwAHAA4AHAA4ABwADgAHAAAA//j/+OAA4ADgAOAA4ADgAOAA/8D/wOAA4ADgAOAA4ADgAOAA//j/+ADgAcADgAcAAAD/+P/44ADgAOAA4ADgAOAA4AD/wP/A4ADgAOAA4ADgAOAA4AD/+P/4BwAPgB3AOOAAAP/4//jgAOAA4ADgAOAA4ADgAP/A/8DgAOAA4ADgAOAA4ADgAP/4//g44DjgOOA44AAA//j/+OAA4ADgAOAA4ADgAOAA/8D/wOAA4ADgAOAA4ADgAOAA//j/+OBwOBwAf38cHBwcHBwcHBwcHBwcHBwcf38HDhw4AP7+ODg4ODg4ODg4ODg4ODg4OP7+HAA+AHcA44AAAH8AfwAcABwAHAAcABwAHAAcABwAHAAcABwAHAAcABwAHAAcAH8AfwDjgOOA44DjgAAAfwB/ABwAHAAcABwAHAAcABwAHAAcABwAHAAcABwAHAAcABwAfwB/AH/Af/BweHA4cBxwHHAccBxwHP+c/5xwHHAccBxwHHAccDhweH/wf8A+cHdwd3Bz4AAA4DjgOOA44DjgOPA4+Dj8OO445zjjuOH44PjgeOA44DjgOOA44DjgODgAHAAOAAcAAAA/4H/w8HjgOOA44DjgOOA44DjgOOA44DjgOOA44DjgOOA48Hh/8D/gAOABwAOABwAAAD/gf/DweOA44DjgOOA44DjgOOA44DjgOOA44DjgOOA44DjweH/wP+AHAA+AHcA44AAAP+B/8PB44DjgOOA44DjgOOA44DjgOOA44DjgOOA44DjgOPB4f/A/4D5wd3B3cHPgAAA/4H/w8HjgOOA44DjgOOA44DjgOOA44DjgOOA44DjgOOA48Hh/8D/gOOA44DjgOOAAAD/gf/DweOA44DjgOOA44DjgOOA44DjgOOA44DjgOOA44DjweH/wP+DgHHA4OHAc4A/AB4AHgA/AHOA4cHA44Bwf8D/4eD5wHnAccDxwfHD8cdxznHccfhx8HHgccBzwHPAceDw/+B/wOAAcAA4ABwAAAOA44DjgOOA44DjgOOA44DjgOOA44DjgOOA44DjgOOA44DjweH/wP+AA4AHAA4AHAAAA4DjgOOA44DjgOOA44DjgOOA44DjgOOA44DjgOOA44DjgOPB4f/A/4AcAD4AdwDjgAADgOOA44DjgOOA44DjgOOA44DjgOOA44DjgOOA44DjgOOA48Hh/8D/gOOA44DjgOOAAAOA44DjgOOA44DjgOOA44DjgOOA44DjgOOA44DjgOOA44DjweH/wP+AA4AHAA4AHAAAA4DjgOOA4cHBwcDjgOOAdwB3AD4APgAcABwAHAAcABwAHAAcABwAHAOAA4ADgAOAA/+D/8OB44DjgOOA44DjgOOA44Hj/8P/g4ADgAOAA4AB/wP/g4PDgcOBw4HDgcODg/+D/4OBw4DjgOOA44DjgOPA4+Hjv8OfgOAAcAA4ABwAAAAAAf+B/8AB4ADgAOD/4f/jwOOA44DjgOPA4f/g/+ADgAcADgAcAAAAAAH/gf/AAeAA4ADg/+H/48DjgOOA44DjwOH/4P/gHAA+AHcA44AAAAAB/4H/wAHgAOAA4P/h/+PA44DjgOOA48Dh/+D/4PnB3cHdwc+AAAAAAf+B/8AB4ADgAOD/4f/jwOOA44DjgOPA4f/g/+DjgOOA44DjgAAAAAH/gf/AAeAA4ADg/+H/48DjgOOA44DjwOH/4P/gPgB3AHcAdwA+AAAB/4H/wAHgAOAA4P/h/+PA44DjgOOA48Dh/+D/4fvh//AOeA44Djj+Of/7z/uOA44DjgPPOf/4+/D/gf/DweOA44ADgAOAA4ADgAOAA4DjweH/wP+AHAAcABwAOABwAOAAcAA4ABwAAAAAAP+B/8PB44DjgOOA4//j/+OAA4ADgAPA4f/g/8ADgAcADgAcAAAAAAD/gf/DweOA44DjgOP/4//jgAOAA4ADwOH/4P/AHAA+AHcA44AAAAAA/4H/w8HjgOOA44Dj/+P/44ADgAOAA8Dh/+D/wOOA44DjgOOAAAAAAP+B/8PB44DjgOOA4//j/+OAA4ADgAPA4f/g/8OBwOBwAAHx8HBwcHBwcHBwcHH9/Bw4cOAAA+Pg4ODg4ODg4ODg4/v4cAD4AdwDjgAAAAAB8AHwAHAAcABwAHAAcABwAHAAcABwAHAB/AH8A44DjgOOA44AAAAAAfAB8ABwAHAAcABwAHAAcABwAHAAcABwAfwB/ADuAHwA+AHcAA4ABwD/gf/DweOA44DjgOOA44DjgOOA44DjweH/wP+A+cHdwd3Bz4AAAAAD/4P/w4HjgOOA44DjgOOA44DjgOOA44DjgOOA4OAAcAA4ABwAAAAAAP+B/8PB44DjgOOA44DjgOOA44DjgOPB4f/A/4ADgAcADgAcAAAAAAD/gf/DweOA44DjgOOA44DjgOOA44DjweH/wP+AHAA+AHcA44AAAAAA/4H/w8HjgOOA44DjgOOA44DjgOOA48Hh/8D/gPnB3cHdwc+AAAAAAP+B/8PB44DjgOOA44DjgOOA44DjgOPB4f/A/4DjgOOA44DjgAAAAAD/gf/DweOA44DjgOOA44DjgOOA44DjweH/wP+AHAAcABwAHAAAAAAD/+P/4AAAAAAcABwAHAAcAH/Y//ng8cHxw/HHcc5x3HH4cfBx4HHg8//jf8DgAHAAOAAcAAAAAAOA44DjgOOA44DjgOOA44DjgOOA44DjwOH/4P/gA4AHAA4AHAAAAAADgOOA44DjgOOA44DjgOOA44DjgOOA48Dh/+D/4BwAPgB3AOOAAAAAA4DjgOOA44DjgOOA44DjgOOA44DjgOPA4f/g/+DjgOOA44DjgAAAAAOA44DjgOOA44DjgOOA44DjgOOA44DjwOH/4P/gA4AHAA4AHAAAAAADgOOA44DjgOOA44DjgOOA44DjgOOA48Dh/+D/4ADgAOAB4f/B/4OAA4ADgAOAA4ADgAP/g//DgeOA44DjgOOA44DjgOOA44DjgeP/w/+DgAOAA4ADgAOAAOOA44DjgOOAAAAAA4DjgOOA44DjgOOA44DjgOOA44DjgOPA4f/g/+AA4ADgAeH/wf+A="}},
+};
+// END badge_gfx
+
+const idiv = (a, b) => Math.trunc(a / b);   // división entera de C
+const fromB64 = s => Uint8Array.from(atob(s), ch => ch.charCodeAt(0));
+const GFX = {};
+for (const [name, f] of Object.entries(BADGE_GFX.fonts)) {
+  const g = fromB64(f.glyphs), dv = new DataView(g.buffer), glyphs = [];
+  for (let i = 0; i < g.length; i += 7) {
+    glyphs.push({ offset: dv.getUint16(i, true), w: g[i+2], h: g[i+3],
+                  xo: dv.getInt8(i+4), yo: dv.getInt8(i+5), adv: g[i+6] });
+  }
+  GFX[name] = { first: f.first, lineHeight: f.lineHeight, ascent: f.ascent,
+                glyphs, bitmap: fromB64(f.bitmap) };
+}
+const SHIELDS = BADGE_GFX.shields.map(s => s && { w: s.w, h: s.h, ink: fromB64(s.ink) });
+const FONT = GFX["6x12"];   // theme::FONT
+const DISPLAY_FONTS = ["16x32b", "14x28b", "12x24b", "10x20b", "8x16b"].map(n => GFX[n]);
+const utf8dec = new TextDecoder();
+
+// fb = { w, h, px: Uint8Array(w*h) }, 1 = blanco, como drawBits
+function setPx(fb, x, y, white) {
+  if (x >= 0 && y >= 0 && x < fb.w && y < fb.h) fb.px[y * fb.w + x] = white ? 1 : 0;
+}
+function fillRect(fb, x, y, w, h, white) {
+  for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) setPx(fb, x + c, y + r, white);
+}
+function blit(fb, x, y, bits, off, w, h, white) {
+  const stride = (w + 7) >> 3;
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      if (bits[off + r * stride + (c >> 3)] & (0x80 >> (c & 7))) setPx(fb, x + c, y + r, white);
+    }
+  }
+}
+// Fuera de la fuente (y fuera de Latin-1) se dibuja '?', como el firmware
+function glyphFor(font, cp) {
+  const g = font.glyphs[cp - font.first];
+  if (g && g.adv) return g;
+  return cp === 63 ? null : glyphFor(font, 63);
+}
+function textWidth(text, font) {
+  let widest = 0, line = 0;
+  for (const ch of text) {
+    if (ch === "\n") { line = 0; continue; }
+    const g = glyphFor(font, ch.codePointAt(0));
+    line += g ? g.adv : 0;
+    widest = Math.max(widest, line);
+  }
+  return widest;
+}
+function drawText(fb, x, y, text, font, white = false) {
+  let cursor = x;
+  for (const ch of text) {
+    if (ch === "\n") { cursor = x; y += font.lineHeight; continue; }
+    const g = glyphFor(font, ch.codePointAt(0));
+    if (!g) continue;
+    blit(fb, cursor + g.xo, y + font.ascent + g.yo, font.bitmap, g.offset, g.w, g.h, white);
+    cursor += g.adv;
+  }
+}
+function drawCentered(fb, area, y, text, white = false, font = FONT) {
+  drawText(fb, area.x + idiv(area.w - textWidth(text, font), 2), y, text, font, white);
+}
+function fitFont(text, maxW, maxH) {
+  const lines = text.split("\n").length;
+  return DISPLAY_FONTS.find(f => lines * f.lineHeight <= maxH && textWidth(text, f) <= maxW) || FONT;
+}
+// theme::drawBigText: un renglón o dos partidos en el espacio más cercano a
+// la mitad (medido en bytes UTF-8, como splitPoint)
+function drawBigText(fb, box, text) {
+  let font = fitFont(text, box.w, box.h), lines = [text];
+  const b = utf8.encode(text);
+  let cut = -1;
+  for (let i = 1; i < b.length - 1; i++) {
+    if (b[i] === 32 && (cut < 0 || Math.abs(2 * i - b.length) < Math.abs(2 * cut - b.length))) cut = i;
+  }
+  if (cut >= 0) {
+    const two = [utf8dec.decode(b.subarray(0, cut)), utf8dec.decode(b.subarray(cut + 1))];
+    const split = fitFont(two.join("\n"), box.w, box.h);
+    if (split.lineHeight > font.lineHeight) { font = split; lines = two; }
+  }
+  const y = box.y + idiv(box.h - lines.length * font.lineHeight, 2);
+  lines.forEach((t, i) => drawCentered(fb, box, y + i * font.lineHeight, t, false, font));
+}
+// card_face::statsLine
+function statsLine(stats, maxW) {
+  const fmt = (v, sep) => STATS.map((s, i) => s + sep + v[i]).join(" ");
+  for (const font of [FONT, GFX["5x8"]]) {
+    for (const sep of [" ", ""]) {
+      if (textWidth(fmt([99, 99, 99, 99], sep), font) <= maxW) return { font, text: fmt(stats, sep) };
+    }
+  }
+  return { font: GFX["5x8"], text: fmt(stats, "") };
+}
+// card_face::drawAvatar: 1:1 si cabe; si no, cada píxel es negro si lo es la
+// mayoría de los que cubre.
+function drawAvatar(fb, x, y, side, avatar) {
+  const w = Math.min(side, AVATAR_W), h = Math.min(side, AVATAR_H);
+  x += idiv(side - w, 2); y += idiv(side - h, 2);
+  for (let dy = 0; dy < h; dy++) {
+    const y0 = idiv(dy * AVATAR_H, h), y1 = Math.max(y0 + 1, idiv((dy + 1) * AVATAR_H, h));
+    for (let dx = 0; dx < w; dx++) {
+      const x0 = idiv(dx * AVATAR_W, w), x1 = Math.max(x0 + 1, idiv((dx + 1) * AVATAR_W, w));
+      let white = 0;
+      for (let sy = y0; sy < y1; sy++) for (let sx = x0; sx < x1; sx++) white += avatar[sy * AVATAR_W + sx];
+      if (2 * white < (x1 - x0) * (y1 - y0)) setPx(fb, x + dx, y + dy, false);
+    }
+  }
+}
+// card_face::draw
+function drawCardFace(fb, area, c, avatar, nickFont) {
+  let stats = c.handle, statsFont = FONT;
+  if (c.type === 0) {
+    ({ font: statsFont, text: stats } = statsLine(c.stats, area.w - 2));
+  } else if (textWidth(stats, statsFont) > area.w - 2) {
+    statsFont = GFX["5x8"];
+  }
+  let bottom = area.y + area.h - statsFont.lineHeight;
+  drawCentered(fb, area, bottom, stats, false, statsFont);
+
+  const position = POSITIONS[c.position], rarity = RARITIES[c.rarity] || "";
+  const info = position ? position + " · " + rarity : rarity;
+  const shield = SHIELDS[c.team];
+  if (!shield) {
+    bottom -= FONT.lineHeight;
+    drawCentered(fb, area, bottom, info);
+  } else {
+    const SIDE = 24, GAP = 4;   // theme::LOGO_SHIELD
+    bottom -= SIDE;
+    const x = area.x + idiv(area.w - SIDE - GAP - textWidth(info, FONT), 2);
+    blit(fb, x + SIDE / 2 - idiv(shield.w, 2), bottom + SIDE / 2 - idiv(shield.h, 2),
+         shield.ink, 0, shield.w, shield.h, false);
+    drawText(fb, x + SIDE + GAP, bottom + idiv(SIDE - FONT.lineHeight, 2), info, FONT);
+  }
+
+  const band = { x: area.x + 2, y: area.y, w: area.w - 4, h: bottom - area.y };
+  const side = Math.min(Math.min(Math.max(AVATAR_W, AVATAR_H), band.h),
+                        Math.min(idiv(band.w, 2), band.w - 2 - textWidth(c.nickname, nickFont)));
+  if (avatar && side >= 24) {   // AVATAR_MIN
+    drawAvatar(fb, band.x, band.y + idiv(band.h - side, 2), side, avatar);
+    band.x += side + 2;
+    band.w -= side + 2;
+  }
+  drawBigText(fb, band, c.nickname);
+}
+// home::draw: franja con la villa, la estampa y al pie "A: menú" y el dorsal
+function drawGafete(fb, c, avatar) {
+  const area = { x: 0, y: 0, w: fb.w, h: fb.h }, bar = BADGE_GFX.barHeight, MARGIN = 2;
+  const first = BADGE_GFX.masterFirst;
+  const master = c.badgeNo >= first && c.badgeNo < first + BADGE_GFX.teams.length;
+  const team = BADGE_GFX.teams[master ? c.badgeNo - first : c.team];
+  fillRect(fb, area.x, area.y, area.w, bar, false);
+  drawCentered(fb, area, area.y + 1, team || BADGE_GFX.event, true);
+  const bottom = area.y + area.h - bar;
+  fillRect(fb, area.x, bottom + 1, area.w, 1, false);
+  drawCentered(fb, area, bottom + 2, master ? BADGE_GFX.masterHint : BADGE_GFX.menuHint);
+  if (c.badgeNo) {
+    const no = "#" + c.badgeNo;
+    drawText(fb, area.x + area.w - MARGIN - textWidth(no, FONT), bottom + 2, no, FONT);
+  }
+  const top = area.y + bar;
+  drawCardFace(fb, { x: area.x, y: top, w: area.w, h: bottom - top }, c, avatar, GFX["12x24b"]);
+}
+
+/* ---------------- UI: destino (avatar o slot) ---------------- */
+
+const preview = $("preview"), pvCtx = preview.getContext("2d");
+
+// Escala entera para que los píxeles se vean nítidos: el mayor múltiplo que cabe
+// en la tarjeta (sin pasar de 400 px). Si no cabe ni 1×, el CSS lo encoge.
+function snapCanvas(cnv) {
+  const box = cnv.parentElement, cs = getComputedStyle(box);
+  const avail = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const s = Math.max(1, Math.floor(Math.min(400, avail) / Math.max(cnv.width, cnv.height)));
+  cnv.style.width = cnv.width * s + "px";
+}
+function fitCanvas(cnv, w, h) {
+  cnv.width = w; cnv.height = h;
+  snapCanvas(cnv);
+}
+
+function updateFullHint() {
+  $("fullHint").textContent = "Imagen para toda la pantalla (" + panel.w + " × " + panel.h + ").";
+  $("fullMore").textContent = "«Enviar» la guarda en el slot elegido y la abre en el badge; después la ves con «Mostrar» " +
+    "o en Herramientas > Escritorio > Marco" +
+    (info && info.home !== null ? ". Para dejarla fija en el badge, marca «Usar como inicio»." : ".") +
+    " Si el editor está vacío, al elegir un slot se carga su imagen; si ya tienes una, no se pierde: " +
+    "usa «Editar la imagen del slot n».";
+}
+
+// Cada pestaña tiene su propia imagen, con su giro, espejo y recorte: el avatar y la
+// imagen de pantalla completa son trabajos distintos. Los ajustes y el texto se comparten.
+const tabImage = {};
+function swapImage(from, to) {
+  tabImage[from] = { baseImage, oriented, rot, flipH, flipV, crop, slotSource, cropPct: $("cropSize").value };
+  const s = tabImage[to] || { baseImage: null, oriented: null, rot: 0, flipH: false, flipV: false,
+                              crop: { cx: 0, cy: 0, size: 0 }, slotSource: false, cropPct: "100" };
+  ({ baseImage, oriented, rot, flipH, flipV, crop, slotSource } = s);
+  $("cropSize").value = s.cropPct; $("cropSizeV").textContent = s.cropPct;
+}
+
+function setTarget(t) {
+  const swap = t !== target;
+  if (swap) swapImage(target, t);
+  target = t;
+  [W, H] = t === "avatar" ? [AVATAR_W, AVATAR_H] : [panel.w, panel.h];
+  $("avatarCtl").hidden = t !== "avatar";
+  $("slotCtl").hidden = t === "avatar";
+  $("stampCard").hidden = t !== "avatar";
+  $("fitCtl").hidden = t === "avatar";
+  $("bandWrap").hidden = !fitting();
+  for (const b of $("tabs").children) {
+    const on = b.dataset.target === t;
+    b.setAttribute("aria-selected", on);
+    b.tabIndex = on ? 0 : -1;
+    if (on) $("tabpanel").setAttribute("aria-labelledby", b.id);
+  }
+  updateFullHint();
+  $("pvTitle").textContent = "Vista previa (" + W + " × " + H + ")";
+  fitCanvas(preview, W, H);
+  work.width = W; work.height = H;
+  // El texto no puede quedar fuera del destino (el avatar es más chico que el panel)
+  for (const r of textRows) {
+    for (const [el, max] of [[r.x, W - 1], [r.y, H - 1]]) {
+      el.max = max;
+      if (+el.value > max) el.value = max;
+    }
+  }
+  lastBits = null;
+  pvCtx.fillStyle = "#fff";
+  pvCtx.fillRect(0, 0, W, H);
+  if (oriented && !swap) updateCropFromSlider();   // el tamaño máximo cambia con el panel
+  drawSource();
+  rebuildOriented(false);
+  showBadgeAvatar();
+  showSelectedSlot();
+}
+
+// Con el editor vacío, Pantalla completa muestra lo que tiene el slot ya marcado
+function showSelectedSlot() {
+  if (target === "slot" && !oriented) return readSlot(selectedSlot());
+}
+
+for (const b of $("tabs").children) {
+  b.addEventListener("click", () => setTarget(b.dataset.target));
+}
+// ←/→ pasan a la otra pestaña; Inicio/Fin a la primera/última (patrón WAI-ARIA de tabs)
+$("tabs").addEventListener("keydown", (e) => {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+  e.preventDefault();
+  const tabs = [...$("tabs").children], i = tabs.indexOf(document.activeElement);
+  const next = tabs[e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : (i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+  setTarget(next.dataset.target);
+  next.focus();
+});
+
+/* ---------------- UI: fuente, recorte y orientación ---------------- */
+
+function setSource(canvas) {
+  baseImage = canvas;
+  slotSource = false;
+  rot = 0; flipH = false; flipV = false;
+  rebuildOriented(true);
+}
+
+const aspect = () => W / H;   // ancho/alto del recorte = el del destino
+// Encajar solo existe en Pantalla completa; en la plantilla el avatar siempre rellena
+const fitting = () => target === "slot" && $("fit").value === "fit";
+const maxCropH = () => fitting()
+  ? Math.max(oriented.height, oriented.width / aspect())   // el recuadro contiene toda la imagen
+  : Math.min(oriented.height, oriented.width / aspect());
+
+function rebuildOriented(resetCrop) {
+  if (!baseImage) return;
+  const swap = rot % 2 === 1;
+  const w = swap ? baseImage.height : baseImage.width;
+  const h = swap ? baseImage.width : baseImage.height;
+  const cnv = document.createElement("canvas");
+  cnv.width = w; cnv.height = h;
+  const ctx = cnv.getContext("2d");
+  ctx.translate(w / 2, h / 2);
+  ctx.rotate(rot * Math.PI / 2);
+  ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+  ctx.drawImage(baseImage, -baseImage.width / 2, -baseImage.height / 2);
+  oriented = cnv;
+  if (resetCrop) {
+    crop = { cx: w / 2, cy: h / 2, size: maxCropH() };
+    $("cropSize").value = 100; $("cropSizeV").textContent = "100";
+  } else {
+    crop.size = Math.min(crop.size || Infinity, maxCropH());
+    clampCrop();
+  }
+  drawSource();
+  render();
+}
+
+$("rotBtn").addEventListener("click", () => { rot = (rot + 1) % 4; rebuildOriented(false); });
+$("flipHBtn").addEventListener("click", () => { flipH = !flipH; rebuildOriented(false); });
+$("flipVBtn").addEventListener("click", () => { flipV = !flipV; rebuildOriented(false); });
+
+function clampCrop() {
+  if (!oriented) return;
+  const hw = crop.size * aspect() / 2, hh = crop.size / 2;
+  // si el recuadro es más grande que la imagen en un eje, se centra en él
+  const lim = (c, half, len) => half * 2 >= len ? len / 2 : Math.min(len - half, Math.max(half, c));
+  crop.cx = lim(crop.cx, hw, oriented.width);
+  crop.cy = lim(crop.cy, hh, oriented.height);
+}
+
+function refit() {
+  if (!oriented) return;
+  updateCropFromSlider();
+  drawSource();
+  render();
+}
+$("fit").addEventListener("change", () => { $("bandWrap").hidden = !fitting(); refit(); });
+$("band").addEventListener("change", render);
+$("guides").addEventListener("change", render);
+$("homeUse").addEventListener("change", () => { render(); applyHome(); });
+
+function updateCropFromSlider() {
+  if (!oriented) return;
+  crop.size = Math.max(10, maxCropH() * (+$("cropSize").value / 100));
+  clampCrop();
+}
+
+// Vista de la fuente: imagen ajustada al canvas y el recuadro del recorte
+const srcCanvas = $("srcCanvas"), srcCtx = srcCanvas.getContext("2d");
+function srcScale() {
+  return Math.min(srcCanvas.width / oriented.width, srcCanvas.height / oriented.height);
+}
+function drawSource() {
+  srcCtx.fillStyle = "#000";
+  srcCtx.fillRect(0, 0, srcCanvas.width, srcCanvas.height);
+  if (!oriented) {
+    srcCtx.fillStyle = "#555";
+    srcCtx.font = "16px sans-serif";
+    srcCtx.textAlign = "center";
+    srcCtx.fillText("sin imagen", srcCanvas.width / 2, srcCanvas.height / 2);
+    srcCtx.textAlign = "start";
+    return;
+  }
+  const s = srcScale();
+  const dw = oriented.width * s, dh = oriented.height * s;
+  const ox = (srcCanvas.width - dw) / 2, oy = (srcCanvas.height - dh) / 2;
+  // en Encajar, lo que el recuadro tiene fuera de la imagen son las bandas
+  const cw = crop.size * aspect();
+  const rx = ox + (crop.cx - cw / 2) * s;
+  const ry = oy + (crop.cy - crop.size / 2) * s;
+  const rw = cw * s, rh = crop.size * s;
+  if (fitting()) {
+    srcCtx.fillStyle = bandColor();
+    srcCtx.fillRect(rx, ry, rw, rh);
+  }
+  // tablero de fondo para que se vea lo transparente y lo negro
+  // (el pipeline pinta lo transparente de blanco)
+  for (let y = 0; y < dh; y += 12) {
+    for (let x = 0; x < dw; x += 12) {
+      srcCtx.fillStyle = ((x + y) / 12) % 2 ? "#3a3f4a" : "#5a6170";
+      srcCtx.fillRect(ox + x, oy + y, Math.min(12, dw - x), Math.min(12, dh - y));
+    }
+  }
+  srcCanvas.style.cursor = "move";
+  srcCtx.drawImage(oriented, ox, oy, dw, dh);
+  // oscurecer fuera del recorte
+  srcCtx.fillStyle = "rgba(0,0,0,0.55)";
+  srcCtx.fillRect(0, 0, srcCanvas.width, ry);
+  srcCtx.fillRect(0, ry + rh, srcCanvas.width, srcCanvas.height - ry - rh);
+  srcCtx.fillRect(0, ry, rx, rh);
+  srcCtx.fillRect(rx + rw, ry, srcCanvas.width - rx - rw, rh);
+  srcCtx.strokeStyle = "#fff";
+  srcCtx.lineWidth = 2;
+  srcCtx.strokeRect(rx, ry, rw, rh);
+}
+
+// arrastrar mueve el recorte, la rueda lo cambia de tamaño
+let dragging = false, dragOff = { x: 0, y: 0 };
+srcCanvas.addEventListener("pointerdown", e => {
+  if (!oriented) return;
+  dragging = true;
+  srcCanvas.setPointerCapture(e.pointerId);
+  const p = srcToImage(e);
+  dragOff.x = p.x - crop.cx;
+  dragOff.y = p.y - crop.cy;
+});
+srcCanvas.addEventListener("pointermove", e => {
+  if (!dragging || !oriented) return;
+  const p = srcToImage(e);
+  crop.cx = p.x - dragOff.x;
+  crop.cy = p.y - dragOff.y;
+  clampCrop();
+  drawSource();
+  render();
+});
+srcCanvas.addEventListener("pointerup", () => { dragging = false; });
+srcCanvas.addEventListener("wheel", e => {
+  if (!oriented) return;
+  e.preventDefault();
+  const max = maxCropH();
+  crop.size = Math.min(max, Math.max(10, crop.size * (e.deltaY > 0 ? 0.95 : 1.05)));
+  $("cropSize").value = Math.round(crop.size / max * 100);
+  $("cropSizeV").textContent = $("cropSize").value;
+  clampCrop();
+  drawSource();
+  render();
+}, { passive: false });
+
+function srcToImage(e) {
+  const r = srcCanvas.getBoundingClientRect();
+  const s = srcScale();
+  const dw = oriented.width * s, dh = oriented.height * s;
+  const ox = (srcCanvas.width - dw) / 2, oy = (srcCanvas.height - dh) / 2;
+  const x = (e.clientX - r.left) * (srcCanvas.width / r.width);
+  const y = (e.clientY - r.top) * (srcCanvas.height / r.height);
+  return { x: (x - ox) / s, y: (y - oy) / s };
+}
+
+/* ---------------- render ---------------- */
+
+const work = document.createElement("canvas");
+const workCtx = work.getContext("2d", { willReadFrequently: true });
+
+const bandColor = () => fitting() && $("band").value === "black" ? "#000" : "#fff";
+
+// Rectángulo (px del destino) que ocupa la imagen en Encajar; null en Rellenar
+function imageRect() {
+  if (!fitting()) return null;
+  const cw = crop.size * aspect(), k = W / cw;
+  const x0 = (cw / 2 - crop.cx) * k, y0 = (crop.size / 2 - crop.cy) * k;
+  return { x: x0, y: y0, w: oriented.width * k, h: oriented.height * k };
+}
+
+function cropToTarget() {
+  workCtx.imageSmoothingEnabled = true;
+  workCtx.imageSmoothingQuality = "high";
+  workCtx.fillStyle = bandColor();
+  workCtx.fillRect(0, 0, W, H);
+  const r = imageRect();
+  if (r && bandColor() === "#000") {   // lo transparente de la imagen sigue siendo blanco
+    workCtx.fillStyle = "#fff";
+    workCtx.fillRect(r.x, r.y, r.w, r.h);
+  }
+  const cw = crop.size * aspect();
+  workCtx.drawImage(oriented,
+    crop.cx - cw / 2, crop.cy - crop.size / 2, cw, crop.size,
+    0, 0, W, H);
+  return workCtx;
+}
+
+function drawBits(ctx, bits, w, h) {
+  const img = ctx.createImageData(w, h);
+  for (let i = 0; i < w * h; i++) {
+    const v = bits[i] ? 255 : 0;
+    img.data[i*4] = img.data[i*4+1] = img.data[i*4+2] = v;
+    img.data[i*4+3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function render() {
+  if (!oriented) return;
+  const p = params();
+  let g = toGray(cropToTarget().getImageData(0, 0, W, H));
+  g = applyTone(g, p);
+  g = applySharpen(g, p.sharpen);
+  let bits = dither(g, p.mode, p.threshold);
+  bits = overlayText(bits, textLines());
+  lastBits = bits;
+  drawBits(pvCtx, bits, W, H);
+  if (target === "slot" && $("guides").checked) {
+    // franja que tapan «Luz»/«Salir» al entrar al Marco: cfg::ui::BAR_HEIGHT del firmware
+    const BAR_HEIGHT = 14;
+    pvCtx.strokeStyle = "#e33";
+    pvCtx.lineWidth = 1;
+    pvCtx.setLineDash([4, 3]);
+    pvCtx.beginPath();
+    pvCtx.moveTo(0, H - BAR_HEIGHT + 0.5);
+    pvCtx.lineTo(W, H - BAR_HEIGHT + 0.5);
+    if ($("homeUse").checked) {   // como imagen de inicio también tapan la franja de arriba
+      pvCtx.moveTo(0, BAR_HEIGHT - 0.5);
+      pvCtx.lineTo(W, BAR_HEIGHT - 0.5);
+    }
+    pvCtx.stroke();
+    pvCtx.setLineDash([]);
+  }
+  if (target === "avatar") {
+    avatarBits = bits;
+    renderTemplate();
+  }
+}
+
+/* nombres accesibles de los lienzos: se repintan cada vez que se repinta el lienzo, desde aquí
+   y no dentro de drawSource/render (envueltas abajo) */
+
+function setLabel(el, text) {
+  if (el.getAttribute("aria-label") !== text) el.setAttribute("aria-label", text);
+}
+function paintLabels() {
+  setLabel($("srcCanvas"), oriented
+    ? "Imagen original, recuadro de recorte al " + $("cropSize").value + " %"
+    : "Imagen original: todavía no hay imagen");
+  setLabel($("preview"), (target === "avatar" ? "Vista previa del avatar" : "Vista previa del slot " + selectedSlot()) +
+    ", " + W + " × " + H + (oriented ? "" : ", sin imagen"));
+}
+for (const name of ["drawSource", "render"]) {
+  const inner = globalThis[name];
+  globalThis[name] = function () { const r = inner.apply(this, arguments); paintLabels(); return r; };
+}
+
+// Recorte con teclado: lo mismo que el arrastre y la rueda, sobre crop.cx/cy/size
+srcCanvas.addEventListener("keydown", e => {
+  if (!oriented || e.ctrlKey || e.altKey || e.metaKey) return;
+  const step = (e.shiftKey ? 0.10 : 0.02) * Math.max(oriented.width, oriented.height);
+  const move = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  const zoom = { "+": 1.05, "=": 1.05, "-": 0.95, "_": 0.95 }[e.key];
+  if (!move && !zoom) return;
+  e.preventDefault();
+  if (move) { crop.cx += move[0] * step; crop.cy += move[1] * step; }
+  else {
+    const max = maxCropH();
+    crop.size = Math.min(max, Math.max(10, crop.size * zoom));
+    $("cropSize").value = Math.round(crop.size / max * 100);
+    $("cropSizeV").textContent = $("cropSize").value;
+  }
+  clampCrop();
+  drawSource();
+  render();
+});
+
+/* arrastrar los renglones de texto sobre la vista previa */
+
+const measureCtx = document.createElement("canvas").getContext("2d");
+
+function textBoxes() {
+  const boxes = [];
+  textLines().forEach((ln, i) => {
+    if (!ln.text) return;
+    measureCtx.font = "bold " + ln.size + "px sans-serif";
+    boxes.push({ i, x: ln.x, y: ln.y,
+                 w: measureCtx.measureText(ln.text).width,
+                 h: ln.size * 1.2 });
+  });
+  return boxes;
+}
+
+function previewPos(e) {
+  const r = preview.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * (W / r.width),
+           y: (e.clientY - r.top) * (H / r.height) };
+}
+
+function boxAt(p) {
+  const boxes = textBoxes(), pad = 4;
+  for (let k = boxes.length - 1; k >= 0; k--) {
+    const b = boxes[k];
+    if (p.x >= b.x - pad && p.x <= b.x + b.w + pad &&
+        p.y >= b.y - pad && p.y <= b.y + b.h + pad) return b;
+  }
+  return null;
+}
+
+let dragText = null;   // { row, dx, dy }
+preview.addEventListener("pointerdown", e => {
+  const b = boxAt(previewPos(e));
+  if (!b) return;
+  const p = previewPos(e);
+  dragText = { row: textRows[b.i], dx: p.x - b.x, dy: p.y - b.y };
+  preview.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+preview.addEventListener("pointermove", e => {
+  const p = previewPos(e);
+  if (dragText) {
+    dragText.row.x.value = Math.round(Math.min(W - 1, Math.max(0, p.x - dragText.dx)));
+    dragText.row.y.value = Math.round(Math.min(H - 1, Math.max(0, p.y - dragText.dy)));
+    render();
+  } else {
+    preview.style.cursor = boxAt(p) ? "move" : "default";
+  }
+});
+preview.addEventListener("pointerup", () => { dragText = null; });
+
+/* ---------------- fuentes de imagen ---------------- */
+
+function loadBlob(blob) {
+  createImageBitmap(blob).then(bmp => {
+    const cnv = document.createElement("canvas");
+    cnv.width = bmp.width; cnv.height = bmp.height;
+    cnv.getContext("2d").drawImage(bmp, 0, 0);
+    setSource(cnv);
+    setStatus("Imagen cargada (" + bmp.width + " x " + bmp.height + ").", "");
+  }).catch(() => setStatus("No se pudo leer esa imagen: prueba con otra (JPG, PNG o similar).", "err"));
+}
+
+$("fileBtn").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", () => {
+  if ($("file").files[0]) loadBlob($("file").files[0]);
+  $("file").value = "";   // elegir el mismo archivo otra vez también lo carga
+});
+
+const drop = $("drop");
+for (const ev of ["dragover", "dragenter"]) {
+  document.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); });
+}
+for (const ev of ["dragleave", "drop"]) {
+  document.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); });
+}
+const NOT_IMAGE = "Ese archivo no es una imagen: elige un JPG, PNG o similar.";
+document.addEventListener("drop", e => {
+  const f = e.dataTransfer && e.dataTransfer.files[0];
+  if (!f) return;
+  if (f.type.startsWith("image/")) loadBlob(f);
+  else setStatus(NOT_IMAGE, "err");
+});
+document.addEventListener("paste", e => {
+  for (const item of e.clipboardData.items) {
+    if (item.type.startsWith("image/")) { loadBlob(item.getAsFile()); return; }
+  }
+  if (e.clipboardData.files.length) setStatus(NOT_IMAGE, "err");   // un archivo, no texto
+});
+
+// cámara
+let camStream = null;
+const video = $("video");
+if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+  $("camBtn").hidden = true;
+}
+$("camBtn").addEventListener("click", async () => {
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640 } });
+  } catch (err) {
+    setStatus("Cámara no disponible (" + err.message + "): permite el acceso en el navegador o usa «Abrir archivo».", "err");
+    return;
+  }
+  video.srcObject = camStream;
+  video.style.display = "block";
+  $("capBtn").hidden = false;
+  $("camOffBtn").hidden = false;
+});
+function camStop() {
+  if (camStream) for (const t of camStream.getTracks()) t.stop();
+  camStream = null;
+  video.style.display = "none";
+  $("capBtn").hidden = true;
+  $("camOffBtn").hidden = true;
+}
+$("capBtn").addEventListener("click", () => {
+  const cnv = document.createElement("canvas");
+  cnv.width = video.videoWidth; cnv.height = video.videoHeight;
+  cnv.getContext("2d").drawImage(video, 0, 0);
+  camStop();
+  setSource(cnv);
+  setStatus("Capturada de la cámara.", "");
+});
+$("camOffBtn").addEventListener("click", camStop);
+
+/* ---------------- editor de la estampa ---------------- */
+
+function fillSelect(sel, names) {
+  sel.innerHTML = "";
+  sel.add(new Option("Ninguna", NONE));
+  names.forEach((n, i) => sel.add(new Option(n, i)));
+}
+fillSelect($("team"), TEAMS);
+fillSelect($("pos"), POSITIONS);
+
+const statInputs = STATS.map((name, i) => {
+  const div = document.createElement("div");
+  div.className = "ctl";
+  div.innerHTML = '<label for="st' + i + '">' + STAT_LABELS[i] + '</label>' +
+    '<input type="range" id="st' + i + '" min="0" max="' + STAT_MAX + '" value="0">' +
+    '<output id="st' + i + 'V">0</output>';
+  $("statRows").appendChild(div);
+  const input = div.querySelector("input");
+  input.setAttribute("aria-describedby", "freeV");   // cuántos puntos quedan por repartir
+  // el presupuesto se respeta al mover: no deja pasar de STAT_BUDGET
+  input.addEventListener("input", () => {
+    const others = statValues().reduce((a, v) => a + v, 0) - +input.value;
+    if (+input.value + others > STAT_BUDGET) input.value = STAT_BUDGET - others;
+    onCardEdit();
+  });
+  return input;
+});
+const statValues = () => statInputs.map(s => +s.value);
+
+function editedCard() {
+  const base = myCard ? parseCard(myCard) : { type: 0, badgeNo: info ? info.no : 0, rarity: 0, flags: 0 };
+  return Object.assign(base, {
+    nickname: cleanText($("nick").value),
+    team: +$("team").value,
+    position: +$("pos").value,
+    stats: statValues(),
+    handle: $("handleOn").checked ? cleanText($("handle").value) : "",
+  });
+}
+
+function cardErrors(c) {
+  const errs = [];
+  if (!c.nickname) errs.push("escribe un nickname");
+  const e1 = textError(c.nickname, NICK_BYTES, "nickname");
+  if (e1) errs.push(e1);
+  const e2 = textError(c.handle, HANDLE_BYTES, "handle");
+  if (e2) errs.push(e2);
+  return errs;
+}
+
+function onCardEdit() {
+  statInputs.forEach((s, i) => { $("st" + i + "V").textContent = s.value; });
+  const used = statValues().reduce((a, v) => a + v, 0);
+  $("freeV").textContent = "puntos libres: " + (STAT_BUDGET - used);
+  const c = editedCard();
+  const nb = utf8.encode(c.nickname).length, hb = utf8.encode(c.handle).length;
+  $("nickV").textContent = nb + "/" + NICK_BYTES + " B";
+  $("nickV").classList.toggle("bad", !!textError(c.nickname, NICK_BYTES, "nickname") || !nb);
+  $("handleV").textContent = hb + "/" + HANDLE_BYTES + " B";
+  $("handleV").classList.toggle("bad", !!textError(c.handle, HANDLE_BYTES, "handle"));
+  $("handle").disabled = !$("handleOn").checked;
+  paintFieldErrors(c, nb);
+  renderTemplate();
+}
+
+// Mensaje bajo nickname y handle (el texto de textError) y aria-invalid. «Escribe un nickname»
+// solo después de salir del campo o de intentar guardar; los demás errores salen al escribir.
+const touchedNick = { v: false };
+const sentence = s => s ? s[0].toUpperCase() + s.slice(1) + "." : "";
+function paintFieldErrors(c, nb) {
+  const msgs = {
+    nick: sentence(textError(c.nickname, NICK_BYTES, "nickname")) || (!nb && touchedNick.v ? "Escribe un nickname." : ""),
+    handle: sentence(textError(c.handle, HANDLE_BYTES, "handle")),
+  };
+  for (const id of ["nick", "handle"]) {
+    if ($(id + "Err").textContent !== msgs[id]) $(id + "Err").textContent = msgs[id];
+    $(id).setAttribute("aria-invalid", !!msgs[id]);
+  }
+}
+for (const [id, ev] of [["nick", "blur"], ["saveCardBtn", "click"]]) {
+  $(id).addEventListener(ev, () => { touchedNick.v = true; onCardEdit(); });
+}
+for (const id of ["nick", "team", "pos", "handle", "handleOn"]) {
+  $(id).addEventListener("input", onCardEdit);
+}
+
+function showCard(c) {
+  $("nick").value = c.nickname;
+  $("team").value = c.team < TEAMS.length ? c.team : NONE;
+  $("pos").value = c.position < POSITIONS.length ? c.position : NONE;
+  statInputs.forEach((s, i) => { s.value = c.stats[i]; });
+  $("handleOn").checked = c.handle !== "";
+  $("handle").value = c.handle;
+  onCardEdit();
+}
+
+/* plantilla "Copa BugCon": el gafete del badge (drawGafete), al tamaño del panel */
+
+const tpl = $("tpl"), tplCtx = tpl.getContext("2d", { willReadFrequently: true });
+// Al cambiar de pestaña (la tarjeta pasa de oculta a visible) o de ancho, vuelve a medir la escala
+const snapObs = new ResizeObserver(() => { snapCanvas(preview); snapCanvas(tpl); });
+snapObs.observe(preview.parentElement);
+snapObs.observe(tpl.parentElement);
+let tplBits = null;   // lo leen las pruebas (tools/test_configurator_page.cjs)
+
+function renderTemplate() {
+  const w = panel.w, h = panel.h;
+  if (tpl.width !== w || tpl.height !== h || !tpl.style.width) fitCanvas(tpl, w, h);
+  const fb = { w, h, px: new Uint8Array(w * h).fill(1) };
+  drawGafete(fb, editedCard(), avatarBits);
+  tplBits = fb.px;
+  drawBits(tplCtx, tplBits, w, h);
+  paintDirty();
+}
+
+// Qué falta guardar: solo lee (myCard, badgeAvatar) y pinta.
+const sameBytes = (a, b) => !!a && !!b && a.length === b.length && a.every((v, i) => v === b[i]);
+function paintDirty() {
+  const card = $("cardState"), av = $("avatarState");
+  card.hidden = !port || !myCard;
+  if (!card.hidden) {
+    const c = editedCard();
+    const saved = !cardErrors(c).length && sameBytes(packCardFields(c), myCard.subarray(0, CARD_FIELDS_BYTES));
+    card.dataset.state = saved ? "saved" : "dirty";
+    card.textContent = saved ? "Guardada en el badge" : "Sin guardar";
+  }
+  av.hidden = !port || !avatarBits || sameBytes(avatarBits, badgeAvatar);
+  av.dataset.state = "dirty";
+  av.textContent = "Sin enviar";
+}
+
+// Resultado de la operación que acaba de terminar (lo que dejó #status), 2 s junto a su botón.
+const flashTimers = {};
+function flashResult(id) {
+  const el = $(id), st = $("status");
+  const tone = st.dataset.tone || st.className;
+  el.className = "flash " + (tone || "ok");
+  el.textContent = tone === "err" ? "No se completó" : tone === "warn" ? "Revisa el aviso" : "Listo";
+  el.hidden = false;
+  clearTimeout(flashTimers[id]);
+  flashTimers[id] = setTimeout(() => { el.hidden = true; }, 2000);
+}
+/* ---------------- transporte: Web Serial ---------------- */
+
+// Web Serial solo existe en Chromium de escritorio (Chrome, Edge, Brave)
+// y en contexto seguro: file://, localhost o https. Por http desde una IP de
+// la red el navegador lo esconde aunque lo tenga. Sin servidor, el
+// camino es abrir el archivo local; en el teléfono, el Wi-Fi del badge.
+const UA_DATA = navigator.userAgentData;
+const IS_MOBILE = UA_DATA ? UA_DATA.mobile : /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent);
+const IS_LINUX = /linux/i.test((UA_DATA && UA_DATA.platform) || navigator.platform) && !IS_MOBILE;
+const BROWSER = navigator.brave ? "brave" : /Edg\//.test(navigator.userAgent) ? "edge" : "chrome";
+const BADGE_USB_VENDOR = 0x303a;   // Hardware CDC del ESP32-S3 (303A:1001)
+
+function noSerialReason() {
+  const offline = " Sin badge todavía puedes preparar la imagen.";
+  if (IS_MOBILE)   // antes que el contexto seguro: en el teléfono no ayuda
+    return "Desde el teléfono no se puede conectar el badge por USB: usa una computadora con " +
+           "Chrome, Edge o Brave, o configura tu estampa desde el teléfono con el Wi-Fi del badge.";
+  if (!isSecureContext)
+    return "Web Serial solo funciona en una página segura: descarga este archivo y ábrelo " +
+           "directamente en el navegador (file://), sin servidor." + offline;
+  if (navigator.brave)
+    return "Este Brave no tiene Web Serial: actualízalo o usa Chrome o Edge." + offline;
+  return "Este navegador no tiene Web Serial (Firefox y Safari no lo incluyen): abre este " +
+         "archivo en Chrome, Edge o Brave de escritorio. Desde el teléfono, configura tu " +
+         "estampa con el Wi-Fi del badge." + offline;
+}
+
+// Motivo de un requestPort()/open() fallido, con qué hacer.
+function connectError(err) {
+  if (err.name === "NotFoundError")
+    return "No se eligió ningún badge. Si la lista sale vacía, revisa que el cable sea de " +
+           "datos (no solo de carga) y que el badge esté encendido. Si la ventana para elegirlo " +
+           "no aparece, el navegador tiene bloqueados los puertos serie: actívalos en " +
+           BROWSER + "://settings/content/serialPorts.";
+  if (err.name === "SecurityError")
+    return "El navegador no permite Web Serial en esta página (" + err.message + ").";
+  let msg = "No se pudo abrir el puerto del badge: ciérralo en otros programas o pestañas " +
+            "(Arduino IDE, monitor serie, otro configurador), espera unos segundos y vuelve a intentar.";
+  if (IS_LINUX)
+    msg += " En Linux tu usuario debe estar en el grupo dialout: sudo usermod -aG dialout $USER " +
+           "y vuelve a iniciar sesión (si el navegador es snap o flatpak, además necesita permiso para USB).";
+  return msg + " (" + err.message + ")";
+}
+
+const hasSerial = "serial" in navigator;
+if (!hasSerial) {
+  $("nowebserial").textContent = noSerialReason();
+  $("nowebserial").hidden = false;
+  $("howto").hidden = true;    // el motivo de arriba ya dice qué navegador usar
+  $("connectBtn").disabled = true;
+}
+
+let port = null, writer = null, reader = null, readerLoopDone = null;
+let rxChunks = [], rxNotify = null;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// El aviso de panel lento (expectOk) llega como "err"; aquí se ve como aviso sin cambiar la clase.
+const SLOW_RE = /^.*: se mostró, pero el panel tardó/;
+function setStatus(msg, cls) {
+  const tone = cls === "err" && SLOW_RE.test(msg) ? "warn" : (cls || "");
+  $("status").textContent = msg;
+  $("status").className = cls || "";
+  $("status").dataset.tone = tone;
+  // Los errores se anuncian en #alert (asertiva); #status deja de ser región viva para no leerlos dos veces.
+  // El texto vacío entre medias hace que un mismo error repetido se vuelva a anunciar.
+  $("status").setAttribute("aria-live", cls === "err" ? "off" : "polite");
+  $("alert").textContent = "";
+  if (cls === "err") setTimeout(() => { $("alert").textContent = msg; }, 50);
+  // historial: los últimos 10, el más nuevo arriba
+  const ol = $("statusLog").querySelector("ol");
+  const li = document.createElement("li");
+  li.className = tone;
+  const t = document.createElement("time");
+  t.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  li.append(t, msg);
+  ol.prepend(li);
+  while (ol.children.length > 10) ol.lastChild.remove();
+}
+
+// Pastilla de conexión y avisos "por qué está deshabilitado". Solo pinta: el modo lo
+// fijan la conexión, refreshInfo y disconnect en los mismos puntos donde ya cambiaban el texto.
+// off | opening | reading | on | lost | noserial
+let connMode = hasSerial ? "off" : "noserial";
+let lostMsg = "";   // aviso fijo junto a «Conectar» tras perder la conexión (el mismo texto de #status)
+const NEEDS = {   // aviso -> botones del badge que describe
+  needStamp:  ["readCardBtn", "saveCardBtn"],
+  needAlbum:  ["jsonBtn"],
+  needAvatar: ["avatarBtn"],
+  needSlot:   ["sendBtn", "loadSlotBtn", "testBtn"],
+  needBadge:  ["showBtn", "clrBtn", "delBtn"],
+};
+function paintConn() {
+  const mode = connMode, on = mode === "on";
+  const [state, label] = {
+    off: ["off", "Sin conexión"], opening: ["busy", "Conectando…"], reading: ["busy", "Leyendo el badge…"],
+    lost: ["err", "Conexión perdida"], noserial: ["err", "Sin Web Serial"],
+    on: info ? ["on", "Conectado · Badge #" + info.no] : ["warn", "Conectado · sin identificar"],
+  }[mode];
+  $("connState").dataset.state = state;
+  $("connLabel").textContent = label;
+  const detail = info ? "fw " + info.fw + " · panel " + info.w + "x" + info.h +
+                        " · álbum " + info.album + "/" + info.total : "";
+  $("connInfo").textContent = detail;
+  $("connInfo").hidden = !detail;
+  $("lostText").textContent = lostMsg;
+  $("lostNotice").hidden = mode !== "lost";
+  const offline = mode === "off" || mode === "lost" || mode === "noserial";
+  const why = mode === "noserial" ? "Sin Web Serial no se puede conectar el badge: mira el aviso de arriba."
+                                  : "Conecta el badge para guardar, enviar o leer.";
+  for (const [id, btns] of Object.entries(NEEDS)) {
+    $(id).hidden = !offline;
+    $(id).textContent = why;
+    for (const b of btns) {
+      if (offline) $(b).setAttribute("aria-describedby", id);
+      else $(b).removeAttribute("aria-describedby");
+    }
+  }
+  paintDirty();
+}
+
+const DEVICE_BUTTONS = ["sendBtn", "loadSlotBtn", "showBtn", "clrBtn", "delBtn", "testBtn", "avatarBtn",
+                        "readCardBtn", "saveCardBtn", "jsonBtn"];
+function deviceButtons(enabled) {
+  for (const id of DEVICE_BUTTONS) $(id).disabled = !enabled;
+  paintBusy();
+}
+
+// Ocupado: command() ya llama a deviceButtons() al empezar y al terminar, así que aquí se
+// pinta sin tocarlo. sendPayload mueve la barra mientras manda bytes; en cuanto llega al
+// final (o no hay payload) pasa a indeterminada, y a los ~2 s aparece "Esperando al badge…".
+let busyTimer = null, busySince = 0;
+function paintBusy() {
+  $("tabpanel").setAttribute("aria-busy", busy);
+  if (!busy) {
+    clearInterval(busyTimer); busyTimer = null;
+    $("waitHint").hidden = true;
+    return;
+  }
+  if (busyTimer) return;
+  busySince = Date.now();
+  busyTimer = setInterval(() => {
+    const p = $("prog");
+    if (p.hidden || (p.hasAttribute("value") && p.value >= p.max)) {
+      p.removeAttribute("value");
+      p.hidden = false;
+    }
+    $("waitHint").hidden = Date.now() - busySince < 2000 || p.hasAttribute("value");
+  }, 150);
+}
+paintConn();
+
+async function readerLoop(rd) {
+  let lost = null;
+  try {
+    for (;;) {
+      const { value, done } = await rd.read();
+      if (done) break;   // reader.cancel() de disconnect()
+      if (value && value.length) {
+        rxChunks.push(value);
+        if (rxNotify) { rxNotify(); rxNotify = null; }
+      }
+    }
+  } catch (e) { lost = e; }
+  rd.releaseLock();
+  // Lectura perdida sin que nadie desconectara: cable suelto, o en Linux el tty
+  // quedó con VMIN=0 (pyserial y esptool lo dejan así) y Chromium toma el
+  // read() vacío por "device has been lost" en cuanto abre: escribe pero nunca
+  // lee. Sin await: disconnect() espera a este mismo loop.
+  if (lost && rd === reader && port) disconnect(lost);
+}
+
+function rxAvailable() {
+  return rxChunks.reduce((a, c) => a + c.length, 0);
+}
+
+async function rxWait(deadline) {
+  const remain = deadline - Date.now();
+  if (remain <= 0) throw new Error("timeout");
+  let timer;
+  await new Promise((res, rej) => {
+    rxNotify = res;
+    timer = setTimeout(() => rej(new Error("timeout")), remain);
+  }).finally(() => clearTimeout(timer));
+}
+
+async function readBytesExact(n, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (rxAvailable() < n) await rxWait(deadline);
+  const out = new Uint8Array(n);
+  let got = 0;
+  while (got < n) {
+    const c = rxChunks[0], take = Math.min(c.length, n - got);
+    out.set(c.subarray(0, take), got);
+    if (take === c.length) rxChunks.shift();
+    else rxChunks[0] = c.subarray(take);
+    got += take;
+  }
+  return out;
+}
+
+async function readLine(timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  const bytes = [];
+  for (;;) {
+    while (rxAvailable() === 0) await rxWait(deadline);
+    const c = rxChunks[0];
+    const i = c.indexOf(0x0a);
+    if (i >= 0) {
+      bytes.push(...c.subarray(0, i));
+      if (i + 1 === c.length) rxChunks.shift();
+      else rxChunks[0] = c.subarray(i + 1);
+      return new TextDecoder().decode(new Uint8Array(bytes)).replace(/\r$/, "");
+    }
+    if (bytes.length + c.length > 512) throw new Error("respuesta demasiado larga");
+    bytes.push(...c);
+    rxChunks.shift();
+  }
+}
+
+$("connectBtn").addEventListener("click", async () => {
+  if (port) { await disconnect(); return; }
+  connMode = "opening"; paintConn();
+  try {
+    // Solo el badge en la lista: en Linux salen también /dev/ttyS* y otros USB.
+    port = await navigator.serial.requestPort({ filters: [{ usbVendorId: BADGE_USB_VENDOR }] });
+    await port.open({ baudRate: 115200 });
+  } catch (err) {
+    port = null;
+    connMode = "off"; paintConn();
+    setStatus(connectError(err), "err");
+    return;
+  }
+  // Sin setSignals(): DTR bajo con RTS alto reinicia el ESP32-S3.
+  writer = port.writable.getWriter();
+  rxChunks = [];
+  reader = port.readable.getReader();
+  readerLoopDone = readerLoop(reader);
+  port.addEventListener("disconnect", disconnect);
+  $("connectBtn").textContent = "Desconectar";
+  connMode = "reading"; paintConn();
+  setStatus("Conectado.", "ok");
+  await sleep(OPEN_WAIT_MS);
+  if (!port) return;   // se perdió en la espera (readerLoop ya avisó)
+  deviceButtons(true);
+  if (await refreshInfo()) {
+    await syncClock();
+    await readCard(true);
+  }
+  await showSelectedSlot();
+  if (port) { connMode = "on"; paintConn(); }
+});
+
+$("lostClose").addEventListener("click", () => { connMode = "off"; paintConn(); });
+
+async function disconnect(ev) {
+  if (ev instanceof Event && ev.target !== port) return;   // un puerto que ya se cerró
+  const p = port;
+  port = null;
+  info = null;
+  updateHomeUi();
+  $("connectBtn").textContent = "Conectar";
+  connMode = ev ? "lost" : "off";   // ev = el cable se salió o falló la lectura
+  deviceButtons(false);
+  // ev = evento "disconnect" del puerto o error de lectura (readerLoop)
+  // En Linux el VMIN=0 sobrevive a desconectar el cable (cdc_acm guarda el
+  // termios de cada ttyACMn): solo stty lo regresa a 1.
+  if (ev) setStatus(lostMsg = "Se perdió la conexión con el badge: revisa el cable y pulsa Conectar." +
+                    (IS_LINUX ? " Si pasa en cuanto conectas, otro programa (esptool, pyserial) " +
+                    "dejó el puerto en un modo que el navegador no lee: ejecuta " +
+                    "stty -F /dev/ttyACM0 min 1 (con el ttyACM de tu badge) y vuelve a conectar." : ""), "err");
+  else setStatus("Desconectado.", "");
+  paintConn();
+  if (!p) return;
+  try { if (writer) { writer.releaseLock(); } } catch (e) {}
+  // readable.cancel() rechaza con el reader puesto: se cancela el reader
+  try { await reader.cancel(); } catch (e) {}
+  try { await readerLoopDone; } catch (e) {}
+  try { await p.close(); } catch (e) {}
+  writer = null;
+}
+
+const FRIENDLY = {
+  "ERR empty":     "ese slot está vacío: elige otro o envíale una imagen primero.",
+  "ERR badslot":   "ese slot no existe en el badge: elige uno de la lista.",
+  "ERR timeout":   "el badge no recibió todos los datos: revisa el cable y vuelve a intentar.",
+  "ERR flash":     "el badge no pudo escribir en su memoria: vuelve a intentar y, si sigue igual, reinícialo.",
+  "ERR badcmd":    "el badge no entiende esa orden, quizá por su firmware: actualízalo.",
+  "ERR badver":    "el badge no reconoce esta versión de estampa, quizá por su firmware: actualízalo.",
+  "ERR badnick":   "el badge rechazó el nickname (vacío o con caracteres no válidos): corrígelo y guarda otra vez.",
+  "ERR badteam":   "el badge no tiene esa villa: elige otra de la lista o actualiza su firmware.",
+  "ERR badpos":    "el badge no tiene esa posición: elige otra de la lista o actualiza su firmware.",
+  "ERR badstats":  "cada estadística va de 0 a " + STAT_MAX + " y entre todas suman a lo más " + STAT_BUDGET + ": baja alguna y guarda otra vez.",
+  "ERR badhandle": "el badge rechazó el handle (caracteres no válidos): corrígelo o desmarca «Compartir mi handle».",
+  "timeout":       "el badge no contestó: revisa que siga conectado y vuelve a intentar.",
+  "sin respuesta": "el badge no contestó: revisa que siga conectado y vuelve a intentar.",
+};
+// nombre legible de cada orden para el aviso de error (command() recibe la orden en crudo)
+const OP_NAMES = {
+  INFO: "Leer datos del badge", UPLD: "Enviar imagen", READ: "Leer slot", SHOW: "Mostrar slot",
+  DEL: "Vaciar slot", CLR: "Pantalla en blanco", AVTR: "Enviar avatar", AVRD: "Leer avatar",
+  ALBM: "Leer álbum", HOME: "Cambiar inicio",
+};
+
+let busy = false;
+async function command(line, payload, fn, label) {
+  if (!port) return null;
+  if (busy) {
+    setStatus("El badge está ocupado: espera a que termine la operación y vuelve a intentar.", "err");
+    return null;
+  }
+  busy = true;
+  deviceButtons(false);
+  try {
+    rxChunks = [];   // descarta bytes viejos
+    await writer.write(utf8.encode(line + "\n"));
+    if (payload) await sendPayload(payload);
+    return await fn();
+  } catch (err) {
+    setStatus((label || OP_NAMES[line.split(" ")[0]] || line.split(" ")[0]) + " falló: " + (FRIENDLY[err.message] || err.message), "err");
+    return null;
+  } finally {
+    busy = false;
+    deviceButtons(!!port);
+    $("prog").hidden = true;
+  }
+}
+
+async function sendPayload(payload) {
+  const prog = $("prog");
+  prog.max = payload.length;
+  prog.value = 0;
+  prog.hidden = false;
+  const CHUNK = 250;
+  for (let off = 0; off < payload.length; off += CHUNK) {
+    await writer.write(payload.subarray(off, Math.min(payload.length, off + CHUNK)));
+    prog.value = Math.min(payload.length, off + CHUNK);
+  }
+}
+
+// Las respuestas empiezan con OK o ERR; las demás líneas son logs del
+// firmware y se saltan.
+async function readReply(timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const line = await readLine(Math.max(1, deadline - Date.now()));
+    if (line.startsWith("OK") || line.startsWith("ERR")) return line;
+  }
+}
+
+// Un refresco completo de la e-paper tarda unos segundos: timeout holgado
+// para que un OK tardío nunca desincronice el siguiente comando.
+async function expectOk(action) {
+  const reply = await readReply(45000);
+  if (reply === "OK") {
+    setStatus(action + ": OK", "ok");
+    return true;
+  }
+  const slow = reply.match(/^OK slow=(\d+)/);
+  if (slow) {
+    setStatus(action + ": se mostró, pero el panel tardó " +
+      (slow[1] / 1000).toFixed(1) + " s en lugar de ~1.6 s; puede no haberse actualizado.", "err");
+    return true;
+  }
+  throw new Error(reply || "sin respuesta");
+}
+
+// "OK <n>" seguido de n bytes (READ, ALBM)
+async function readPayloadReply(expected) {
+  const reply = await readReply(15000);
+  const m = reply.match(/^OK (\d+)$/);
+  if (!m) throw new Error(reply || "sin respuesta");
+  if (expected !== undefined && +m[1] !== expected) {
+    throw new Error("el badge mandó " + m[1] + " B y se esperaban " + expected);
+  }
+  return readBytesExact(+m[1], 5000);
+}
+
+const INFO_RE = /^OK BB26 (\S+) no=(\d+) panel=(\d+)x(\d+) album=(\d+)\/(\d+) slots=(\d+) current=(-?\d+) used=([01]+)(?: home=(-?\d+))?(?: .*)?$/;   // campos nuevos al final de INFO no deben romper la conexión
+
+// Pone el reloj del badge con la hora local de la PC (igual que `badge_usb.py time`:
+// segundos desde 1970 en hora local). Si falla no estorba: el badge sigue "sin hora".
+async function syncClock() {
+  const epoch = Math.floor(Date.now() / 1000) - new Date().getTimezoneOffset() * 60;
+  await command("TIME " + epoch, null, () => readReply(5000), "Poner la hora");
+}
+
+async function refreshInfo(keepStatus) {
+  if (!port) return false;
+  // holgado: recién arrancado, el badge dibuja antes de contestar
+  const reply = await command("INFO", null, () => readReply(15000));
+  if (reply === null) return false;
+  const m = reply.match(INFO_RE);
+  if (!m) {
+    setStatus("Ese dispositivo no parece un badge BugCon 2026 (" + reply + "): elige el puerto del badge al conectar.", "err");
+    return false;
+  }
+  info = { fw: m[1], no: +m[2], w: +m[3], h: +m[4], album: +m[5], total: +m[6],
+           slots: +m[7], current: +m[8], used: m[9],
+           home: m[10] === undefined ? null : +m[10] };   // null = firmware sin imagen de inicio
+  paintConn();
+  if (info.w !== panel.w || info.h !== panel.h || info.slots !== numSlots) {
+    panel = { w: info.w, h: info.h };
+    numSlots = info.slots;
+    buildSlots();
+    if (target === "slot") setTarget("slot");
+  }
+  updateSlotUi(info.used, info.current);
+  updateHomeUi();
+  renderTemplate();
+  if (!keepStatus) setStatus("Badge #" + info.no + ", firmware " + info.fw + ".", "ok");
+  return true;
+}
+
+/* selector de slot: con el editor vacío o con otro slot leído, se lee al editor; con una
+   imagen de la persona no la pisa (para eso está «Editar la imagen del slot n») */
+let slotLabels = [];
+function buildSlots() {
+  $("slots").innerHTML = "";
+  slotLabels = [];
+  for (let i = 0; i < numSlots; i++) {
+    const label = document.createElement("label");
+    label.innerHTML = '<input type="radio" name="slot" value="' + i + '"' +
+      (i === 0 ? " checked" : "") + '><span>Slot ' + i + '</span><small></small>';
+    $("slots").appendChild(label);
+    label.querySelector("input").addEventListener("click", () => {
+      updateHomeUi();
+      if (!oriented || slotSource) readSlot(i);
+    });
+    slotLabels.push(label);
+  }
+  updateHomeUi();
+}
+buildSlots();
+
+function updateSlotUi(used, current) {
+  for (let i = 0; i < slotLabels.length; i++) {
+    const home = !!info && i === info.home;
+    slotLabels[i].classList.toggle("used", used[i] === "1");
+    slotLabels[i].classList.toggle("home", home);
+    const state = (used[i] === "1" ? "imagen" : "vacío") + (i === current ? " · en pantalla" : "") +
+                  (home ? " · inicio" : "");
+    slotLabels[i].querySelector("small").textContent = state;
+  }
+}
+
+/* al cambiar de slot o de INFO: «Usar como inicio» refleja si el slot elegido es el
+   inicio del badge, los botones nombran el slot y las dos pestañas dicen qué hay de inicio */
+function updateHomeUi() {
+  const supported = !!info && info.home !== null, n = selectedSlot();
+  const home = supported && info.home >= 0;
+  $("homeCtl").hidden = !supported;
+  $("homeUse").checked = supported && info.home === n;
+  $("homeState").textContent = home ? "Inicio actual: slot " + info.home : "Inicio actual: la plantilla";
+  for (const b of document.querySelectorAll(".homeOffBtn")) b.hidden = !home;
+  $("tplHomeNote").hidden = !home;
+  if (home) $("tplHomeText").textContent = "Ahora el inicio del badge muestra la imagen del slot " +
+    info.home + " en lugar de la plantilla.";
+  $("sendBtn").textContent = "Enviar al slot " + n;
+  $("loadSlotBtn").textContent = "Editar la imagen del slot " + n;
+  $("showBtn").textContent = "Mostrar slot " + n;
+  $("delBtn").textContent = "Vaciar slot " + n;
+  updateFullHint();
+  render();
+}
+
+for (const b of document.querySelectorAll(".homeOffBtn")) {
+  b.addEventListener("click", async () => {
+    if (await command("HOME OFF", null, () => expectOk("Inicio: la plantilla"))) await refreshInfo(true);
+  });
+}
+
+// Tras abrir un slot en el badge: cómo se sale de ahí
+function shownMsg(n) {
+  return "Se ve en la pantalla del badge. B cierra la imagen" +
+    (info && info.home === n ? " y queda como inicio." : "; sin tocar botones vuelve al inicio al minuto.");
+}
+
+/* marcar o desmarcar con el slot ya guardado cambia el inicio al momento; con el slot vacío
+   se aplica al enviar la imagen (sendBtn) */
+async function applyHome() {
+  if (!port || !info || info.home === null) return;
+  const n = selectedSlot(), on = $("homeUse").checked;
+  if (info.used[n] !== "1" || (on ? info.home === n : info.home !== n)) return;
+  const ok = await command(on ? "HOME " + n : "HOME OFF", null,
+    () => expectOk(on ? "Inicio: slot " + n : "Inicio: la plantilla"));
+  if (ok) await refreshInfo(true);
+  else updateHomeUi();
+}
+
+function selectedSlot() {
+  return +document.querySelector("#slots input:checked").value;
+}
+
+const panelBytes = () => ((panel.w + 7) >> 3) * panel.h;
+
+// asHome: con «Usar como inicio» marcada o desmarcada, deja el slot (o la plantilla) como inicio
+async function uploadSlot(n, bits, what, asHome) {
+  setStatus("Enviando " + what + " al slot " + n + "…", "");
+  const ok = await command("UPLD " + n, packBits(bits, panel.w, panel.h),
+    () => expectOk(what + " al slot " + n));
+  if (ok && asHome && info && info.home !== null) {
+    if ($("homeUse").checked) {
+      await command("HOME " + n, null, () => expectOk("Inicio: slot " + n));
+    } else if (info.home === n) {
+      await command("HOME OFF", null, () => expectOk("Inicio: la plantilla"));
+    }
+  }
+  if (!ok) return;
+  await refreshInfo(true);
+  if ($("status").className === "ok") setStatus(what + " en el slot " + n + ". " + shownMsg(n), "ok");   // no tapa un aviso de panel lento
+}
+
+// Reemplazar la imagen de un slot pide confirmar, salvo si el editor la leyó de ese mismo slot
+function okToOverwrite(n, fromThisSlot) {
+  return !(info && info.used[n] === "1") || fromThisSlot ||
+    confirm("El slot " + n + " ya tiene una imagen. ¿Reemplazarla? La que tiene se borra del badge.");
+}
+
+$("sendBtn").addEventListener("click", () => {
+  if (!lastBits) { setStatus("Carga una imagen primero: arrástrala o usa «Abrir archivo».", "err"); return; }
+  if (!okToOverwrite(selectedSlot(), slotSource)) return;   // slotSource: el editor tiene el slot elegido
+  uploadSlot(selectedSlot(), lastBits, "Imagen", true).then(() => flashResult("slotFlash"));
+});
+
+$("testBtn").addEventListener("click", () => {
+  if (!okToOverwrite(selectedSlot(), false)) return;
+  uploadSlot(selectedSlot(), testPatternBits(panel.w, panel.h), "Patrón de prueba")
+    .then(() => flashResult("slotFlash"));
+});
+
+$("showBtn").addEventListener("click", async () => {
+  const n = selectedSlot();
+  setStatus("Mostrando el slot " + n + "…", "");
+  const ok = await command("SHOW " + n, null, () => expectOk("Mostrar slot " + n));
+  if (!ok) return;
+  await refreshInfo(true);
+  if ($("status").className === "ok") setStatus("Slot " + n + ". " + shownMsg(n), "ok");
+});
+
+$("loadSlotBtn").addEventListener("click", () => readSlot(selectedSlot()));
+
+// Deja el slot sin imagen (DEL): no queda en blanco, queda vacío. Si era el inicio, el badge vuelve a la plantilla.
+$("delBtn").addEventListener("click", async () => {
+  const n = selectedSlot();
+  if (!confirm("¿Vaciar el slot " + n + "? Se borra su imagen del badge y no se puede deshacer.")) return;
+  setStatus("Vaciando el slot " + n + "…", "");
+  if (!await command("DEL " + n, null, () => expectOk("Slot " + n + " vacío"))) return;
+  if (slotSource) clearSource();   // el editor tenía la imagen de este slot (elegirlo la lee)
+  await refreshInfo(true);
+});
+
+async function readSlot(n) {
+  // un clic en otro slot mientras el badge termina algo (p. ej. refresca la pantalla tras
+  // enviar o vaciar un slot) espera su turno en vez de perderse
+  while (busy) await sleep(100);
+  if (!port || n !== selectedSlot()) return;   // desconectado, o ya eligieron otro slot
+  const bytes = await command("READ " + n, null, async () => {
+    try {
+      return await readPayloadReply(panelBytes());
+    } catch (e) {
+      if (e.message === "ERR empty") return "empty";
+      throw e;
+    }
+  });
+  if (!bytes) return;
+  if (bytes === "empty") {
+    if (slotSource) clearSource();   // no dejar en la vista previa la imagen de otro slot
+    setStatus("El slot " + n + " está vacío.", "");
+    return;
+  }
+  const cnv = document.createElement("canvas");
+  cnv.width = panel.w; cnv.height = panel.h;
+  drawBits(cnv.getContext("2d"), unpackBytes(bytes, panel.w, panel.h), panel.w, panel.h);
+  if (target !== "slot") setTarget("slot");
+  setSource(cnv);
+  slotSource = true;
+  setStatus("Slot " + n + " cargado en el editor.", "ok");
+}
+
+// vacía el editor (sin imagen fuente)
+function clearSource() {
+  baseImage = oriented = null;
+  slotSource = false;
+  lastBits = null;
+  drawSource();
+  pvCtx.fillStyle = "#fff";
+  pvCtx.fillRect(0, 0, W, H);
+}
+
+$("clrBtn").addEventListener("click", () => {
+  setStatus("Limpiando…", "");
+  command("CLR", null, () => expectOk("Pantalla del badge en blanco (B o un minuto sin botones la cierra)"));
+});
+
+$("avatarBtn").addEventListener("click", async () => {
+  if (!avatarBits) { setStatus("Carga una imagen para el avatar primero: arrástrala o usa «Abrir archivo».", "err"); return; }
+  setStatus("Enviando el avatar…", "");
+  if (await command("AVTR", packBits(avatarBits, AVATAR_W, AVATAR_H), () => expectOk("Avatar"))) {
+    badgeAvatar = avatarBits;
+  }
+  paintDirty();
+  flashResult("avatarFlash");
+});
+
+// Mi estampa firmada: bytes 16..80 de la cabecera de ALBM
+async function fetchAlbum() {
+  return command("ALBM", null, async () => {
+    const data = await readPayloadReply();
+    if (!validAlbm(data)) throw new Error("exportación de ALBM inválida");
+    return data;
+  }, "Leer el álbum");
+}
+
+// Cabecera de 80 B (services/usb_protocol.h): "ALBM", formato 1,
+// provisioned, MAC, count u16, reservado, mi estampa; luego count × 80 B.
+function validAlbm(data) {
+  return data.length >= ALBUM_HEADER_BYTES &&
+    String.fromCharCode(...data.subarray(0, 5)) === "ALBM\x01" &&
+    data.length === ALBUM_HEADER_BYTES + 80 * (data[12] | data[13] << 8);
+}
+
+async function readCard(quiet) {
+  const data = await fetchAlbum();
+  if (!data) return;
+  myCard = data.slice(16, 16 + CARD_BYTES);
+  const c = parseCard(myCard);
+  badgeAvatar = null;
+  if (c.flags & CARD_FLAG_AVATAR) {
+    // Firmware sin AVRD (badcmd) o avatar dañado: la plantilla sale sin avatar, como antes
+    const bytes = await command("AVRD", null, () => readPayloadReply(AVATAR_BYTES).catch(() => null));
+    if (bytes) badgeAvatar = unpackBytes(bytes, AVATAR_W, AVATAR_H);
+  }
+  showCard(c);
+  showBadgeAvatar();
+  if (!quiet) setStatus("Estampa leída del badge" + (badgeAvatar ? ", con su avatar." : "."), "ok");
+}
+
+// Sin imagen propia en la pestaña Plantilla, la plantilla y la vista previa muestran el avatar del badge;
+// con una imagen cargada manda el editor (es lo que enviaría «Enviar avatar»)
+function showBadgeAvatar() {
+  if (target === "avatar" ? oriented : tabImage.avatar && tabImage.avatar.oriented) return;
+  avatarBits = badgeAvatar;
+  if (target === "avatar" && avatarBits) drawBits(pvCtx, avatarBits, W, H);
+  renderTemplate();
+}
+$("readCardBtn").addEventListener("click", () => {
+  setStatus("Leyendo el álbum…", "");
+  readCard(false);
+});
+
+$("saveCardBtn").addEventListener("click", async () => {
+  const c = editedCard(), errs = cardErrors(c);
+  if (errs.length) { setStatus("Revisa la estampa: " + errs.join("; ") + ".", "err"); return; }
+  setStatus("Guardando la estampa…", "");
+  const ok = await command("CARD", packCardFields(c), () => expectOk("Estampa"), "Guardar la estampa");
+  if (!ok) { flashResult("cardFlash"); return; }
+  await readCard(true);   // lo que quedó en el badge (normalizado y firmado)
+  setStatus("Estampa guardada y firmada por el badge.", "ok");
+  flashResult("cardFlash");
+});
+
+/* ---------------- exportación local del álbum ----------------
+   El .json (formato bb26-album) lleva la exportación de ALBM completa
+   en base64 ("albm") y un resumen legible; quien lo lee solo confía en
+   "albm" y rechaza un resumen que no coincida. Referencia: to_json()/
+   load_export() de tools/verify_album.py; lo abren web/album y
+   verify_album.py. Se guarda en la computadora, no se envía a ningún lado. */
+const EXPORT_FORMAT = "bb26-album", EXPORT_VERSION = 1;
+
+function albumSummary(data) {
+  return {
+    badge_no: data[18] | data[19] << 8,
+    mac: Array.from(data.subarray(6, 12), b => b.toString(16).padStart(2, "0").toUpperCase()).join(":"),
+    provisioned: data[5] !== 0,
+    count: data[12] | data[13] << 8,
+  };
+}
+
+const base64 = bytes => btoa(Array.from(bytes, b => String.fromCharCode(b)).join(""));
+
+function albumJson(data) {
+  return JSON.stringify({
+    format: EXPORT_FORMAT, version: EXPORT_VERSION, ...albumSummary(data),
+    fw: info ? info.fw : null,
+    exported_at: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
+    albm: base64(data),
+  }, null, 1);
+}
+
+function download(text, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+$("jsonBtn").addEventListener("click", async () => {
+  setStatus("Leyendo el álbum…", "");
+  const data = await fetchAlbum();
+  if (data) {
+    const s = albumSummary(data), name = "album_" + s.badge_no + ".json";
+    download(albumJson(data), name);
+    setStatus("Se guardó " + name + " (" + s.count + " estampas).", "ok");
+  }
+  flashResult("jsonFlash");
+});
+
+drawSource();
+setTarget("avatar");
+onCardEdit();
+</script>
+</body>
+</html>

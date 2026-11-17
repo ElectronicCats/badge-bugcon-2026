@@ -31,3 +31,24 @@ hardware/**/*.csv
 
 # KiCAD backup directories (any project name)
 **/*-backups/
+
+# KiCAD local history
+hardware/.history/
+
+# KiCAD per-user project settings (layers, view state)
+*.kicad_prl
+
+# Binarios del firmware (scripts/compile.sh, arduino-cli)
+build/
+
+# Configurador empaquetado (tools/package_web.py)
+dist/
+
+# Reto N3 (generador, textos y soluciones): privado hasta el evento
+tools/challenges/
+
+# Herramientas locales
+.archify/
+.claude/
+.vscode/
+__pycache__/

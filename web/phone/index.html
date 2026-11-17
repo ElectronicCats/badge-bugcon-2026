@@ -1,0 +1,281 @@
+<!doctype html>
+<!-- Página del teléfono. La sirve el badge desde su propio
+     Wi-Fi (services/wifi_config), comprimida y embebida con
+     tools/embed_page.py. Un solo HTML sin recursos externos: en el AP del
+     badge el teléfono no tiene Internet. Edita los campos de la estampa con
+     los límites del firmware; el avatar y el gafete quedan en el configurador
+     USB. Rutas: GET /card (64 B firmados) y POST /card (bytes 0..47)
+     -> "OK" o "ERR <motivo>" (los de CARD). -->
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mi estampa · BugCon 2026</title>
+<style>
+:root { color-scheme: light dark; --bg: #fff; --fg: #15171c; --muted: #5d6470;
+  --accent: #0a62c2; --ok: #1d7a3e; --err: #c0262d; --line: #c9ced8; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14161a; --fg: #e8eaf0; --muted: #9aa1ae; --accent: #4da3ff;
+    --ok: #4ec97a; --err: #ff6b6b; --line: #3a4050; }
+}
+* { box-sizing: border-box; }
+body { margin: 0 auto; max-width: 480px; padding: 16px; background: var(--bg);
+  color: var(--fg); font: 16px/1.4 system-ui, sans-serif; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 15px; margin: 22px 0 8px; }
+label { display: block; margin-top: 14px; font-weight: 600; }
+input, select, button { font: inherit; color: inherit; }
+input[type=text], select { width: 100%; min-height: 44px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+input[type=range] { width: 100%; height: 32px; margin: 0; }
+input[type=checkbox] { width: 22px; height: 22px; vertical-align: middle; }
+.row { display: flex; justify-content: space-between; color: var(--muted); }
+.stat { display: grid; grid-template-columns: 3em 1fr 2.5em; gap: 8px;
+  align-items: center; margin-top: 6px; }
+.stat output { text-align: right; }
+.hint, small { color: var(--muted); font-size: 14px; }
+.bad { color: var(--err); }
+summary { min-height: 44px; padding-top: 12px; color: var(--accent); }
+dt { font-weight: 600; color: var(--fg); }
+dd { margin: 0 0 6px; }
+button { width: 100%; min-height: 48px; margin-top: 20px; border: 0;
+  border-radius: 8px; background: var(--accent); color: #fff; font-weight: 600; }
+button:disabled { opacity: .45; }
+#status { min-height: 1.4em; margin-top: 12px; }
+#status.ok { color: var(--ok); }
+#status.err { color: var(--err); }
+</style>
+<h1>Mi estampa</h1>
+<div class="row"><span>Badge BugCon 2026</span><span id="no"></span></div>
+
+<form id="form">
+<label for="nick">Nickname</label>
+<input type="text" id="nick" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+<div class="row"><small id="nickE"></small><small id="nickV"></small></div>
+
+<label for="team">Villa</label>
+<select id="team"></select>
+<label for="pos">Posición</label>
+<select id="pos"></select>
+
+<h2>Estadísticas <small id="free"></small></h2>
+<div id="stats"></div>
+<details id="glossary" class="hint">
+<summary>¿Qué hace cada estadística en la Copa?</summary>
+<p>Cada punto se suma al jugador (0 juega como 50, 99 como 149) y cuenta más o menos
+según su posición.</p>
+<dl>
+<dt>Ataque</dt><dd>Pasar la defensa del rival y la fuerza del tiro; el de más ataque
+tira más seguido. Al Portero no le sirve.</dd>
+<dt>Defensa</dt><dd>Cortar los ataques del rival. El Portero ataja con su defensa; sin
+Portero, ataja el de más defensa a la mitad.</dd>
+<dt>Hack · control</dt><dd>Define quién se queda con el balón en cada jugada. Con la táctica
+Parche también ayuda a defender.</dd>
+<dt>Suerte</dt><dd>Solo en el tiro contra el portero: se promedia entre los 5 y
+ayuda a tirar y a atajar.</dd>
+</dl>
+<p>Cuenta más: Portero y Defensa → defensa; Medio y Pentester → hack; Delantero → ataque.</p>
+</details>
+
+<h2>Contacto (opcional)</h2>
+<label style="font-weight:400"><input type="checkbox" id="handleOn"> Compartir mi handle en la estampa</label>
+<label for="handle">Handle</label>
+<input type="text" id="handle" placeholder="@usuario" autocomplete="off" autocapitalize="off" spellcheck="false" disabled>
+<div class="row"><small id="handleE"></small><small id="handleV"></small></div>
+<p class="hint">El handle viaja por infrarrojo dentro de tu estampa a cada badge con el que
+intercambies y aparece en su álbum. Solo se envía si marcas la casilla.</p>
+
+<button id="save" disabled>Guardar en el badge</button>
+<p id="status" role="status" aria-live="polite">Leyendo tu estampa…</p>
+</form>
+<section id="privacy">
+<h2>Privacidad</h2>
+<ul class="hint">
+<li>Esta página la sirve tu badge por su propio Wi-Fi: no usa Internet, no hay servidor
+ni almacenamiento central y no guarda nada en tu teléfono. Tu estampa y tu álbum viven
+solo en tu badge.</li>
+<li>Al intercambiar, tu estampa (nickname, villa, posición, estadísticas y dorsal) viaja por
+infrarrojo al otro badge y se queda en su álbum; no se puede retirar de un badge ajeno.
+Tu handle solo va si marcas la casilla.</li>
+<li>El .json que guarda el configurador USB incluye el nickname y el handle de quienes
+los compartieron contigo: no lo publiques.</li>
+<li>Para borrar tu estampa, tu avatar y tu álbum: en el badge, Ajustes &gt; "Borrar
+datos". El avatar y la imagen del badge se cambian con el configurador USB.</li>
+</ul>
+</section>
+
+<script>
+// Igual que el firmware: services/card.cpp (TEAMS, POSITIONS, STATS) y
+// cfg::card de badge_config.h. El índice viaja en la estampa: no reordenar.
+// tools/test_configurator.py revisa que coincidan.
+const TEAMS = ["La villa del Hardware", "RF Village MX", "Rookie Village", "OT Village CDMX",
+               "PaySec LATAM", "BugBounty", "WoSEC México", "APT",
+               "Nación Hacker", "Live Hacking Villa"];
+const POSITIONS = ["Portero", "Defensa", "Medio", "Delantero", "Pentester"];
+const STATS = ["ATK", "DEF", "HAX", "SUE"];
+// Lo que lee la persona en el formulario; STATS (siglas) es el catálogo del firmware.
+const STAT_LABELS = ["Ataque", "Defensa", "Hack", "Suerte"];
+const STAT_MAX = 99, STAT_BUDGET = 200;
+const NICK_BYTES = 16, HANDLE_BYTES = 20, NONE = 0xFF;
+const CARD_VERSION = 1, CARD_FIELDS_BYTES = 48, CARD_BYTES = 64;
+
+// Motivos de POST /card: card::editReason() + los del servidor. Cada uno
+// dice qué hacer; "Guardar" es el botón de abajo.
+const AGAIN = " Toca «Guardar en el badge» otra vez.";
+const REASONS = {
+  badver: "esta página no corresponde a tu badge. Vuelve a escanear su QR.",
+  badnick: "el nickname no puede ir vacío ni llevar emojis. Corrígelo.",
+  badteam: "elige otra vez la villa.",
+  badpos: "elige otra vez la posición.",
+  badstats: `cada estadística va de 0 a ${STAT_MAX} y entre todas suman ${STAT_BUDGET} o menos. Ajústalas.`,
+  badhandle: "el handle no puede llevar emojis. Corrígelo.",
+  flash: "tu badge no pudo guardarla." + AGAIN,
+  badsize: "la estampa no llegó completa." + AGAIN,
+  busy: "tu badge está ocupado. Espera unos segundos." + AGAIN,
+};
+const OFFLINE = "Se perdió la conexión con tu badge. Revisa que el teléfono siga en la red " +
+                "Wi-Fi BUGCON26-…; si el badge ya no muestra el QR, ábrelo otra vez en " +
+                "Mi Estampa › Editar › Desde el teléfono.";
+
+const $ = id => document.getElementById(id), utf8 = new TextEncoder();
+let card = null;  // 64 B leídos del badge; null = todavía no (no se guarda)
+
+// Igual que cleanText() del firmware: sin espacios en los extremos.
+const cleanText = s => s.replace(/^ +| +$/g, "");
+
+// Error con qué hacer, o "". La fuente del badge es Latin-1 (gfx/font); el
+// límite es de bytes de UTF-8: á, ñ, ü y compañía ocupan 2.
+function textError(s, maxBytes) {
+  const n = utf8.encode(s).length;
+  if (n > maxBytes) return `Muy largo: borra ${n - maxBytes} (á, ñ… cuentan 2)`;
+  if (/[\x00-\x1f\x7f-\x9f]/.test(s)) return "Tiene un carácter invisible: bórralo";
+  const bad = s.match(/[^\x20-\x7e\xa0-\xff]/u);
+  return bad ? `Tu badge no puede mostrar «${bad[0]}»: usa letras, números o signos` : "";
+}
+
+function status(text, cls) {
+  $("status").textContent = text;
+  $("status").className = cls || "";
+}
+
+for (const [id, names] of [["team", TEAMS], ["pos", POSITIONS]]) {
+  $(id).add(new Option("Ninguna", NONE));
+  names.forEach((n, i) => $(id).add(new Option(n, i)));
+}
+
+const statInputs = STATS.map((name, i) => {
+  const row = document.createElement("div");
+  row.className = "stat";
+  row.innerHTML = `<label for="st${i}" style="margin:0">${STAT_LABELS[i]}</label>` +
+    `<input type="range" id="st${i}" min="0" max="${STAT_MAX}" value="0"><output></output>`;
+  $("stats").appendChild(row);
+  const input = row.querySelector("input");
+  // El presupuesto se respeta al mover: no deja pasar de STAT_BUDGET.
+  input.addEventListener("input", () => {
+    const others = statValues().reduce((a, v) => a + v, 0) - +input.value;
+    if (+input.value + others > STAT_BUDGET) input.value = STAT_BUDGET - others;
+  });
+  return input;
+});
+const statValues = () => statInputs.map(s => +s.value);
+
+const nick = () => cleanText($("nick").value);
+const handle = () => $("handleOn").checked ? cleanText($("handle").value) : "";
+
+function onEdit() {
+  statInputs.forEach(s => { s.nextElementSibling.textContent = s.value; });
+  $("free").textContent = "· puntos libres: " + (STAT_BUDGET - statValues().reduce((a, v) => a + v, 0));
+  $("handle").disabled = !$("handleOn").checked;
+  const nickErr = nick() ? textError(nick(), NICK_BYTES) : "Escribe tu nickname";
+  const handleErr = textError(handle(), HANDLE_BYTES);
+  $("nickE").textContent = nickErr;
+  $("handleE").textContent = handleErr;
+  $("nickV").textContent = utf8.encode(nick()).length + "/" + NICK_BYTES;
+  $("handleV").textContent = utf8.encode(handle()).length + "/" + HANDLE_BYTES;
+  $("nickE").className = $("nickV").className = nickErr ? "bad" : "";
+  $("handleE").className = $("handleV").className = handleErr ? "bad" : "";
+  $("save").disabled = !card || !!nickErr || !!handleErr;
+}
+$("form").addEventListener("input", onEdit);
+
+const text = (b, off, len) => {
+  const s = b.subarray(off, off + len), end = s.indexOf(0);
+  return new TextDecoder().decode(end < 0 ? s : s.subarray(0, end));
+};
+
+function show(b) {
+  card = b;
+  const no = b[2] | b[3] << 8;
+  $("no").textContent = no ? "Dorsal " + String(no).padStart(4, "0") : "Sin dorsal";
+  $("nick").value = text(b, 4, NICK_BYTES);
+  $("team").value = b[20] < TEAMS.length ? b[20] : NONE;
+  $("pos").value = b[21] < POSITIONS.length ? b[21] : NONE;
+  statInputs.forEach((s, i) => { s.value = b[22 + i]; });
+  $("handle").value = text(b, 28, HANDLE_BYTES);
+  $("handleOn").checked = $("handle").value !== "";
+  onEdit();
+}
+
+// La estampa del badge; null y el motivo en el estado si no se pudo.
+async function readCard() {
+  try {
+    const r = await fetch("/card", { cache: "no-store" });
+    const b = new Uint8Array(await r.arrayBuffer());
+    if (r.ok && b.length === CARD_BYTES && b[0] === CARD_VERSION) return b;
+    // Al leer, el único motivo real es ERR busy; el código HTTP queda entre
+    // paréntesis para quien ayude.
+    status(`No se pudo leer tu estampa (${r.status}). Espera unos segundos y ` +
+           "recarga la página.", "err");
+  } catch (e) {
+    status(OFFLINE, "err");
+  }
+  return null;
+}
+
+// Payload de POST /card: bytes 0..47 de la estampa leída (version, type,
+// badge_no, rarity y flags los pone el badge) con los campos editados.
+function packFields() {
+  const out = card.slice(0, CARD_FIELDS_BYTES);
+  out.fill(0, 4, 20).set(utf8.encode(nick()), 4);
+  out[20] = +$("team").value;
+  out[21] = +$("pos").value;
+  out.set(statValues(), 22);
+  out.fill(0, 28).set(utf8.encode(handle()), 28);
+  return out;
+}
+
+$("form").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  $("save").disabled = true;
+  status("Guardando…");
+  let reply;
+  try {
+    const r = await fetch("/card", { method: "POST", body: packFields() });
+    reply = await r.text();
+  } catch (e) {
+    status(OFFLINE + " Si el badge ya muestra tu estampa nueva, sí se guardó.", "err");
+    onEdit();
+    return;
+  }
+  if (reply !== "OK") {
+    status("No se guardó: " + (REASONS[reply.replace(/^ERR /, "")] ||
+           "respuesta inesperada." + AGAIN), "err");
+    onEdit();
+    return;
+  }
+  // Lo que quedó (normalizado y firmado). El badge apaga su Wi-Fi a los
+  // pocos segundos de guardar: después ya no se puede editar desde aquí.
+  const b = await readCard();
+  if (b) show(b);
+  for (const el of $("form").elements) el.disabled = true;
+  status("Guardada y firmada por tu badge. Su Wi-Fi se apaga en unos segundos: " +
+         "ya puedes volver a tu red.", "ok");
+});
+
+readCard().then(b => {
+  if (b) {
+    show(b);
+    status("");
+  }
+});
+onEdit();
+</script>

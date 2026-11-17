@@ -1,0 +1,21 @@
+# Exclude the hardware directory (KiCad files) from all hooks
+exclude: ^hardware/
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+    -   id: check-yaml
+    -   id: end-of-file-fixer
+    -   id: trailing-whitespace
+-   repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v21.1.8
+    hooks:
+    -   id: clang-format
+        types_or: [c++, c]
+        args: ['--style=file']
+-   repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.3.0
+    hooks:
+    -   id: conventional-pre-commit
+        stages: [commit-msg]
+        args: []
