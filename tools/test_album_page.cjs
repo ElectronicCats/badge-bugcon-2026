@@ -435,8 +435,8 @@ async function checkA1(browser, check, refOut) {
   check("A3.6 la inicial no se lee y todas las estampas tienen nombre accesible",
     sts.every(s => s.hidden === "true" && /^(Mi estampa, )?#\d{3}, /.test(s.label)));
   const mineLab = await lab("#mineSt button");
-  check("A3.6 mi estampa: «Mi estampa, #034, Yo Mismo, Hardware, Oro»",
-    mineLab === "Mi estampa, #034, Yo Mismo, Hardware, Oro", mineLab);
+  check("A3.6 mi estampa: «Mi estampa, #034, Yo Mismo, La villa del Hardware, Oro»",
+    mineLab === "Mi estampa, #034, Yo Mismo, La villa del Hardware, Oro", mineLab);
   const l13 = await lab('#grid [data-no="13"]');
   check("A3.6 el nick va como texto, con comas y barras tal cual", l13.startsWith("#013, a,b;c\\d, PaySec LATAM"), l13);
   check("A3.6 el nick completo en el title de los que se cortan",
