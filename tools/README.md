@@ -577,8 +577,11 @@ en `firmware/`, que vive en el repositorio del firmware y no en este)
   envía y recibe en los modos host y captura de ráfaga del SDR, para revisar el formato de cada paquete.
 
 **Pruebas de la PC** (sin Badge): los `test_*.py` de esta carpeta y los
-`sdr/test_*.c` (con su `Makefile`). Se corren con
-`for t in tools/test_*.py; do python3 "$t" || break; done`.
+`sdr/test_*.c` (con su `Makefile`). Los `test_*_badge.py` necesitan un Badge
+conectado. Con el repositorio del firmware se corren con
+`for t in tools/test_*.py; do case $t in *_badge.py) continue;; esac; python3 "$t" || break; done`;
+solo con este repositorio, con
+`python3 -m unittest tools/test_verify_album.py tools/test_configurator.py`.
 
 **Qué necesita el repositorio del firmware:** los generadores de arriba, el
 `Makefile` de `sdr/` y las pruebas que compilan el código del firmware con
