@@ -29,9 +29,18 @@ from embed_page import from_header  # noqa: E402
 SRC = ROOT / "firmware/badge_bugcon_2026/src"
 PAGES = {name: (ROOT / f"web/{name}/index.html").read_text(encoding="utf-8")
          for name in ("configurator", "album", "phone")}
-CARD_CPP = (SRC / "services/card.cpp").read_text(encoding="utf-8")
-CARD_H = (SRC / "services/card.h").read_text(encoding="utf-8")
-CONFIG = (SRC / "config/badge_config.h").read_text(encoding="utf-8")
+# El firmware vive en otro repositorio: sin él se omiten las comparaciones.
+HAS_FW = SRC.is_dir()
+needs_fw = unittest.skipUnless(HAS_FW, "requiere firmware/ (repo del firmware)")
+
+
+def fw(path):
+    return (SRC / path).read_text(encoding="utf-8") if HAS_FW else ""
+
+
+CARD_CPP = fw("services/card.cpp")
+CARD_H = fw("services/card.h")
+CONFIG = fw("config/badge_config.h")
 
 
 def strings(source, name):
@@ -50,6 +59,7 @@ def number(source, name):
 
 
 class CatalogTest(unittest.TestCase):
+    @needs_fw
     def test_catalogs(self):
         for page, html in PAGES.items():
             for name in ("TEAMS", "POSITIONS", "RARITIES", "STATS"):
@@ -58,6 +68,7 @@ class CatalogTest(unittest.TestCase):
                 with self.subTest(page=page, name=name):
                     self.assertEqual(strings(html, name), strings(CARD_CPP, name))
 
+    @needs_fw
     def test_limits(self):
         pairs = [("STAT_MAX", CONFIG, "STAT_MAX"),
                  ("STAT_BUDGET", CONFIG, "STAT_BUDGET"),
@@ -114,11 +125,13 @@ class TabsTest(unittest.TestCase):
 
 
 class PhonePageTest(unittest.TestCase):
+    @needs_fw
     def test_embedded_page_is_current(self):
-        header = (SRC / "services/wifi_page.h").read_text(encoding="utf-8")
+        header = fw("services/wifi_page.h")
         self.assertEqual(gzip.decompress(from_header(header)).decode("utf-8"),
                          PAGES["phone"], "corre tools/embed_page.py")
 
+    @needs_fw
     def test_badge_gfx_is_current(self):
         # Fuentes, escudos y textos del gafete iguales a los del firmware
         self.assertEqual(embed_gfx.current(PAGES["configurator"]),
