@@ -8,8 +8,7 @@ Pasos, con un badge conectado por USB:
   1. Lee la MAC con esptool.
   2. Dorsal: el que ya tenga esa MAC en el CSV o el menor libre de 1..400
      (--no lo fija; --villa V da MASTER_FIRST + V). Se reserva en el CSV
-     antes de seguir. El dorsal de un maestro lo comparte su repuesto (otra
-     MAC); verify_album.py prueba todas.
+     antes de seguir.
   3. Graba el merged.bin hasta el final de la app (sin el relleno 0xFF: los
      8 MB completos tardan ~90 s) y borra la partición littlefs, así que el
      badge arranca en blanco: sin identidad (NVS), álbum, estampa ni récords.
