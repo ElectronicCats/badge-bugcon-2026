@@ -254,7 +254,7 @@ dialog::backdrop { background: var(--scrim); }
 // Igual que el firmware: services/card.cpp (TEAMS, POSITIONS, RARITIES) y
 // cfg::card de badge_config.h. tools/test_configurator.py revisa que
 // coincidan (también los del configurador).
-const TEAMS = ["Villa del Hardware",    "RF Village MX",    "Rookie Village", "OT Village CDMX",      "PaySec LATAM",
+const TEAMS = ["Hardware",    "RF Village MX",    "Rookie Village", "OT Village CDMX",      "PaySec LATAM",
     "BugBounty",   "WoSEC México", "APT", "Nación Hacker", "Live Hacking Villa"];
 const POSITIONS = ["Portero", "Defensa", "Medio", "Delantero", "Pentester"];
 const RARITIES = ["Común", "Plata", "Oro"];
@@ -484,7 +484,7 @@ function sticker(it) {
     m.title = RARITIES[r];
     face.append(m);
   }
-  // Nombre accesible armado como texto (nunca innerHTML): «#012, Ana, Villa del Hardware, Oro».
+  // Nombre accesible armado como texto (nunca innerHTML): «#012, Ana, Hardware, Oro».
   e.setAttribute("aria-label", [it.mine && "Mi estampa", kindName(c), c.nickname,
     TEAMS[c.team] || (c.type === ATTENDEE && "Sin villa"), r && RARITIES[r]].filter(Boolean).join(", "));
   e.addEventListener("click", () => showDetail(c, it.order));
