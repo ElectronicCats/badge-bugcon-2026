@@ -11,6 +11,7 @@ on:
 
 jobs:
   package:
+    if: github.repository == 'ElectronicCats/badge-bugcon-2026'
     runs-on: ubuntu-latest
     permissions:
       contents: write

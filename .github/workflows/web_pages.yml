@@ -25,6 +25,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.repository == 'ElectronicCats/badge-bugcon-2026'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
