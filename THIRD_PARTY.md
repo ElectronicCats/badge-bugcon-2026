@@ -1,8 +1,7 @@
 # Componentes de terceros
 
-El firmware, las páginas web y las herramientas de este repositorio se
-distribuyen bajo la GPL-3.0 (`LICENSE`). Código fuente:
-<https://github.com/ElectronicCats/badge-bugcon-2026>.
+Las páginas web y las herramientas de este repositorio se distribuyen bajo la
+GPL-3.0 (`LICENSE`).
 
 El firmware que se graba en el badge incluye además el código de terceros de
 esta lista. Todas sus licencias son compatibles con la GPL-3.0. Antes de
@@ -36,8 +35,7 @@ completos de LGPL-2.1, Apache-2.0 y BSD-3-Clause están en
 <https://spdx.org/licenses/>.
 
 **Sobre LGPL-2.1 del core:** el código fuente del core corresponde a la
-etiqueta `3.3.12` de arduino-esp32, y este repositorio basta para recompilar y
-volver a enlazar el firmware completo (`firmware/README.md`).
+etiqueta `3.3.12` de arduino-esp32.
 
 ## Logos de las villas (marcas de terceros)
 

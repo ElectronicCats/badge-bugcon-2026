@@ -61,5 +61,5 @@ tu álbum y las imágenes de los slots: en el badge, Ajustes > "Borrar datos".
 
 Licencia
 --------
-Las páginas y el firmware del badge son software libre bajo la GPL-3.0
+Las páginas del configurador son software libre bajo la GPL-3.0
 (LICENSE.txt). Código fuente: https://github.com/ElectronicCats/badge-bugcon-2026

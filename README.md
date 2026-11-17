@@ -556,9 +556,6 @@ repetirlos.
 computadora: consulta
 [Control remoto: archivos de Flipper Zero](tools/README.md#control-remoto-archivos-de-flipper-zero).
 
-La guía completa está en
-[firmware/docs/CONTROL_REMOTO_Y_TV_GONE.md](firmware/docs/CONTROL_REMOTO_Y_TV_GONE.md).
-
 ## Agenda
 
 **Menú › Agenda** muestra el programa de charlas de BugCON 2026.
@@ -882,12 +879,9 @@ paso, cómo prepararla y usar cada función.
 ## Créditos y licencia
 
 Badge diseñado por [Electronic Cats](https://electroniccats.com) para BugCON
-2026. Su diseño y su programa son abiertos, bajo la licencia GPL-3.0
-([LICENSE](LICENSE)). Los componentes de terceros están en
-[THIRD_PARTY.md](THIRD_PARTY.md).
-
-¿Te interesa cómo funciona por dentro? La documentación técnica está en
-[firmware/README.md](firmware/README.md).
+2026. El hardware, las páginas web y las herramientas de este repositorio son
+abiertos, bajo la licencia GPL-3.0 ([LICENSE](LICENSE)). Los componentes de
+terceros están en [THIRD_PARTY.md](THIRD_PARTY.md).
 
 <a href="https://github.com/sponsors/ElectronicCats">
 <img src="https://electroniccats.com/wp-content/uploads/2020/07/Badge_GHS.png" height="104" />
