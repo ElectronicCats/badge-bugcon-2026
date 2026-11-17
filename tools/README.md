@@ -554,7 +554,8 @@ necesitas para usar tu Badge.
 - `verify_album.py`: verifica sin conexión un álbum exportado, con la llave maestra. La línea `villas: n/10 verificadas` dice cuántos maestros de villa tienen firma y token válidos; la especial "Gira de villas" solo es válida con 10/10.
 - `challenges/generate.py`: genera la cadena de retos (privada hasta el evento).
 
-**Generadores del firmware** (convierten arte y datos en código)
+**Generadores del firmware** (convierten arte y datos en código; leen y escriben
+en `firmware/`, que vive en el repositorio del firmware y no en este)
 
 - `img2bitmap.py`: arte de `firmware/art` a `icons.cpp`.
 - `villa_logos.py`: logos de las villas a arte de 1 bit.
@@ -578,6 +579,15 @@ necesitas para usar tu Badge.
 **Pruebas de la PC** (sin Badge): los `test_*.py` de esta carpeta y los
 `sdr/test_*.c` (con su `Makefile`). Se corren con
 `for t in tools/test_*.py; do python3 "$t" || break; done`.
+
+**Qué necesita el repositorio del firmware:** los generadores de arriba, el
+`Makefile` de `sdr/` y las pruebas que compilan el código del firmware con
+`pc_stubs/` (`test_agenda`, `test_battery`, `test_captive_dns`, `test_cup_link`,
+`test_game_engine`, `test_home_slots`, `test_img2bitmap`, `test_ir_codes`,
+`test_ir_import`, `test_ir_remote`, `test_theme_list`, `test_token_store`,
+`test_villa_logos`, `test_villa_tour`) no corren sin la carpeta `firmware/`.
+`test_configurator.py` omite sus comparaciones con el firmware cuando no
+la encuentra. Todo lo demás funciona con solo este repositorio.
 
 ---
 
