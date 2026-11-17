@@ -261,9 +261,9 @@ async function runCase(browser, file, c) {
 // Motivo del error en la página de referencia: «<archivo> no se puede abrir: <motivo>.»
 const reason = s => (s.match(/ no se puede abrir: (.*)\.$/) || [])[1];
 
-// Apertura y errores (A1): lo que la página nueva añade y la referencia no tiene.
+// Apertura y errores: lo que la página nueva añade y la referencia no tiene.
 const NEXT_STEPS = ["Guardar álbum (.json)", "Vuelve a guardarlo", "se editó a mano", "unos 52 KB"];
-async function checkA1(browser, check, refOut) {
+async function checkNewPage(browser, check, refOut) {
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", e => errors.push(e.message));
@@ -272,10 +272,10 @@ async function checkA1(browser, check, refOut) {
   const st = await page.evaluate(() => ({
     drop: !document.getElementById("drop").hidden, head: !document.getElementById("openBtn").hidden,
     btn: document.getElementById("openBtn2").textContent, status: document.getElementById("status").textContent }));
-  check("A1 inicio: zona de apertura visible, botón del encabezado oculto",
+  check("inicio: zona de apertura visible, botón del encabezado oculto",
     st.drop && !st.head && st.btn === "Abrir álbum…" && st.status === "", JSON.stringify(st));
-  check("A1 inicio: enlace al configurador en el encabezado y en la zona", await links() === 2, await links());
-  check("A1 inicio: la zona dice «Guardar álbum (.json)»",
+  check("inicio: enlace al configurador en el encabezado y en la zona", await links() === 2, await links());
+  check("inicio: la zona dice «Guardar álbum (.json)»",
     await page.$eval("#drop", e => e.textContent.includes("Guardar álbum (.json)")));
   // arrastre: entrar, pasar a un hijo (dragenter + dragleave del padre) y salir
   const over = await page.evaluate(() => {
@@ -291,26 +291,26 @@ async function checkA1(browser, check, refOut) {
     document.dispatchEvent(ev("dragleave", true)); r.push(on());
     return r;
   });
-  check("A1 arrastre: sin parpadeo y sin archivos no resalta", over.join() === "false,true,true,false", over);
+  check("arrastre: sin parpadeo y sin archivos no resalta", over.join() === "false,true,true,false", over);
   for (const [n, c] of Object.entries(CASES)) {
     if (!Array.isArray(c) || c.length !== 1) continue;
     const r = refOut[n];
     if (r.snap.album) continue;   // solo los inválidos
     const s = await page.evaluate(openAll, [[c[0][0], c[0][1].toString("base64")]]);
-    check(`A1 error «${n}»: ⚠, motivo y siguiente paso`,
+    check(`error «${n}»: ⚠, motivo y siguiente paso`,
       s[0].startsWith("⚠ ") && NEXT_STEPS.some(t => s[0].includes(t)), s[0]);
   }
   const ok = await page.evaluate(openAll, CASES["típico .json"].map(([n, b]) => [n, b.toString("base64")]));
-  check("A1 éxito: ✓", ok[0].startsWith("✓ "), ok[0]);
+  check("éxito: ✓", ok[0].startsWith("✓ "), ok[0]);
   const cnt = await page.evaluate(() => {
     const $ = id => document.getElementById(id), b = $("countBar");
     return { v: $("countV").textContent, n: $("countN").textContent, val: b.value,
              lab: b.getAttribute("aria-labelledby"), vt: b.getAttribute("aria-valuetext"), size: album.numbers.size, rec: album.entries.length };
   });
-  check("A2 conteos: «N de 400 dorsales», recibidas aparte y barra con nombre y valor",
+  check("conteos: «N de 400 dorsales», recibidas aparte y barra con nombre y valor",
     cnt.v === `${cnt.size} de 400 dorsales` && cnt.n.startsWith(cnt.rec + " estampas recibidas") &&
     cnt.val === cnt.size && cnt.lab === "countV" && cnt.vt === `${cnt.size} de 400`, cnt);
-  // A2.3: el botón de contactos y su aviso viven en el resumen y se ven sin desplazar con «Todas»
+  // El botón de contactos y su aviso viven en el resumen y se ven sin desplazar con «Todas»
   for (const [w, h] of [[1280, 800], [360, 740]]) {
     await page.setViewport({ width: w, height: h });
     const r = await page.evaluate(() => {
@@ -319,16 +319,16 @@ async function checkA1(browser, check, refOut) {
                tab: document.querySelector("#tabs [aria-selected=true]").textContent, top: b.top, bottom: b.bottom,
                h: innerHeight, over: document.documentElement.scrollWidth > innerWidth };
     });
-    check(`A2.3 ${w}×${h}: «Descargar contactos» y aviso en el resumen, visibles con «Todas», sin desborde`,
+    check(`${w}×${h}: «Descargar contactos» y aviso en el resumen, visibles con «Todas», sin desborde`,
       r.inSummary && r.hint && r.tab.startsWith("Todas") && r.top >= 0 && r.bottom <= r.h && !r.over, r);
   }
-  check("A1 con álbum: zona oculta, botón del encabezado y enlace visibles",
+  check("con álbum: zona oculta, botón del encabezado y enlace visibles",
     await page.evaluate(() => document.getElementById("drop").hidden && !document.getElementById("openBtn").hidden) &&
     await links() >= 1);
   const bad = await page.evaluate(openAll, [["x.json", Buffer.from("{").toString("base64")]]);
-  check("A1 error con álbum abierto: dice qué álbum se sigue viendo",
+  check("error con álbum abierto: dice qué álbum se sigue viendo",
     /Sigues viendo el álbum de .+\.$/.test(bad[0]), bad[0]);
-  // A2.4–A2.6: vista rápida del QR, origen y privacidad plegable
+  // Vista rápida del QR, origen y privacidad plegable
   const probe = pg => (pg || page).evaluate(() => {
     const $ = id => document.getElementById(id);
     return { tabs: [...document.querySelectorAll("#tabs [role=tab]")].map(t => t.textContent),
@@ -341,33 +341,33 @@ async function checkA1(browser, check, refOut) {
   const qp = await browser.newPage();   // el fragmento del QR se lee al cargar: página nueva
   await qp.goto("file://" + html + CASES["QR (mi dorsal no viene en el bitmap)"]);
   const q = await probe.call(null, qp);
-  check("A2.4 vista QR: aviso, solo «Todas», botón deshabilitado con motivo",
+  check("vista QR: aviso, solo «Todas», botón deshabilitado con motivo",
     q.note && q.tabs.length === 1 && q.tabs[0].startsWith("Todas") && q.why && q.dis, JSON.stringify(q));
   await page.goto("file://" + html);
   await page.evaluate(openAll, CASES["típico .json"].map(([n, b]) => [n, b.toString("base64")]));
   await qp.close();
   const t = await probe();
-  check("A2.4 álbum del .json: sin aviso, con todas las pestañas, sin motivo de deshabilitado",
+  check("álbum del .json: sin aviso, con todas las pestañas, sin motivo de deshabilitado",
     !t.note && t.tabs.length > 2 && !t.why, t);
-  check("A2.5 origen: nombre y fecha de exportación en una línea, con título completo",
+  check("origen: nombre y fecha de exportación en una línea, con título completo",
     /^Archivo .+, exportado .+\.$/.test(t.source) && t.title === t.source, t);
-  check("A2.6 privacidad: <details> abierto y con las frases que vigila test_configurator",
+  check("privacidad: <details> abierto y con las frases que vigila test_configurator",
     t.priv === "DETAILStrue" && t.frases, JSON.stringify(t));
-  // A3.1–A3.3: foco estable, patrón de pestañas completo y etiquetas
+  // Foco estable, patrón de pestañas completo y etiquetas
   const ae = () => page.evaluate(() => document.activeElement.id);
   const sel = () => page.evaluate(() => [...document.querySelectorAll("#tabs [role=tab]")]
     .map(t => (t.getAttribute("aria-selected") === "true" ? "S" : "-") + t.tabIndex).join(" "));
   await page.focus("#tab2");
   await page.keyboard.press("Enter");
-  check("A3.1 clic/Enter en una pestaña: el foco sigue en esa pestaña", await ae() === "tab2", await ae());
+  check("clic/Enter en una pestaña: el foco sigue en esa pestaña", await ae() === "tab2", await ae());
   await page.keyboard.press("ArrowRight");
-  check("A3.2 → activa y enfoca la siguiente", await ae() === "tab3" && /^(-[-0-9]+ ){3}S0/.test(await sel()), await sel());
+  check("→ activa y enfoca la siguiente", await ae() === "tab3" && /^(-[-0-9]+ ){3}S0/.test(await sel()), await sel());
   await page.keyboard.press("End");
   const nTabs = await page.$$eval("#tabs [role=tab]", l => l.length);
-  check("A3.2 Fin va a la última y → da la vuelta a la primera",
+  check("Fin va a la última y → da la vuelta a la primera",
     await ae() === "tab" + (nTabs - 1) && (await page.keyboard.press("ArrowRight"), await ae()) === "tab0");
   await page.keyboard.press("ArrowLeft");
-  check("A3.2 ← desde la primera da la vuelta; Inicio vuelve a la primera",
+  check("← desde la primera da la vuelta; Inicio vuelve a la primera",
     await ae() === "tab" + (nTabs - 1) && (await page.keyboard.press("Home"), await ae()) === "tab0");
   const pn = await page.evaluate(() => {
     const g = document.getElementById("grid"), t = [...document.querySelectorAll("#tabs [role=tab]")];
@@ -377,17 +377,17 @@ async function checkA1(browser, check, refOut) {
              lab1: t[1].textContent, al1: t[1].getAttribute("aria-label"),
              esp: t.map(b => b.textContent).filter(x => x.startsWith("Especiales")) };
   });
-  check("A3.2 #grid es tabpanel enlazado a la pestaña activa, con aria-controls",
+  check("#grid es tabpanel enlazado a la pestaña activa, con aria-controls",
     pn.role === "tabpanel" && pn.lb === "tab0" && pn.ctl, JSON.stringify(pn));
-  check("A3.3 etiquetas «Todas · n/400» y «Villa · n» con aria-label",
+  check("etiquetas «Todas · n/400» y «Villa · n» con aria-label",
     /^Todas · \d+\/400$/.test(pn.lab0) && pn.tab0 === pn.lab0.replace(/ · (\d+)\/400/, ", $1 de 400") &&
     /^.+ · \d+$/.test(pn.lab1) && /^.+, \d+ estampas?$/.test(pn.al1), JSON.stringify(pn));
-  await page.click("#tab1");   // en «Todas» el filtro va antes del panel (A3.4)
+  await page.click("#tab1");   // en «Todas» el filtro va antes del panel
   await page.keyboard.press("Tab");
-  check("A3.2 Tab desde una pestaña de villa entra a la primera estampa del panel",
+  check("Tab desde una pestaña de villa entra a la primera estampa del panel",
     await page.evaluate(() => document.getElementById("grid").contains(document.activeElement) &&
                               document.activeElement.tagName === "BUTTON"));
-  // A3.4: filtro de vista «Todas / Tengo / Me faltan» e «Ir al dorsal»
+  // Filtro de vista «Todas / Tengo / Me faltan» e «Ir al dorsal»
   const fv = () => page.evaluate(() => {
     const g = document.getElementById("grid");
     return { shown: !document.getElementById("filter").hidden, n: g.querySelectorAll("[data-no]").length,
@@ -396,17 +396,17 @@ async function checkA1(browser, check, refOut) {
              ae: document.activeElement.dataset.f || document.activeElement.dataset.no || document.activeElement.id,
              data: JSON.stringify(sections()) + vcard(contacts()) };
   });
-  check("A3.4 el filtro solo está en «Todas»", !(await fv()).shown && (await page.click("#tab0"), (await fv()).shown));
+  check("el filtro solo está en «Todas»", !(await fv()).shown && (await page.click("#tab0"), (await fv()).shown));
   const f0 = await fv();
   await page.click("#filter [data-f=got]");
   const fg = await fv();
-  check("A3.4 «Tengo»: solo los dorsales que tengo, botón pulsado y con el foco",
+  check("«Tengo»: solo los dorsales que tengo, botón pulsado y con el foco",
     fg.n === fg.size && !fg.empty && fg.pressed === "got" && fg.ae === "got", JSON.stringify({ ...fg, data: 0 }));
   await page.click("#filter [data-f=missing]");
   const fm = await fv();
-  check("A3.4 «Me faltan»: solo los huecos vacíos",
+  check("«Me faltan»: solo los huecos vacíos",
     fm.n === 400 - fm.size && fm.empty === fm.n && fm.pressed === "missing", JSON.stringify({ ...fm, data: 0 }));
-  check("A3.4 el filtro no cambia sections() ni los contactos", f0.data === fg.data && fg.data === fm.data);
+  check("el filtro no cambia sections() ni los contactos", f0.data === fg.data && fg.data === fm.data);
   const go = async n => {
     await page.click("#goNo", { clickCount: 3 });
     await page.type("#goNo", String(n));
@@ -418,35 +418,35 @@ async function checkA1(browser, check, refOut) {
     });
   };
   const g250 = await go(250);
-  check("A3.4 «Ir al dorsal 250» con «Me faltan»: vuelve a «Todas», enfoca y muestra el 250",
+  check("«Ir al dorsal 250» con «Me faltan»: vuelve a «Todas», enfoca y muestra el 250",
     g250.no === "250" && g250.visible && g250.pressed === "all", JSON.stringify(g250));
   const g2 = await go(2);
-  check("A3.4 «Ir al dorsal» enfoca también un hueco vacío", g2.no === "2" && g2.tag === "DIV" && g2.visible, JSON.stringify(g2));
+  check("«Ir al dorsal» enfoca también un hueco vacío", g2.no === "2" && g2.tag === "DIV" && g2.visible, JSON.stringify(g2));
   const g0 = await go(401);
-  check("A3.4 «Ir al dorsal 401» no se acepta", g0.no === undefined, JSON.stringify(g0));
-  // A3.5–A3.6: rareza con símbolo y nombre accesible de cada estampa
+  check("«Ir al dorsal 401» no se acepta", g0.no === undefined, JSON.stringify(g0));
+  // Rareza con símbolo y nombre accesible de cada estampa
   const lab = sel => page.$eval(sel, e => e.getAttribute("aria-label"));
   const sts = await page.evaluate(() => [...document.querySelectorAll("#grid button.st, #mineSt button.st")].map(b => ({
     r: b.className.match(/r(\d)/)[1], rar: (b.querySelector(".rar") || {}).textContent || "",
     hidden: b.querySelector(".face").getAttribute("aria-hidden"), label: b.getAttribute("aria-label") })));
-  check("A3.5 Plata ◆, Oro ★ y nada en las comunes, además del borde",
+  check("Plata ◆, Oro ★ y nada en las comunes, además del borde",
     sts.length > 40 && sts.every(s => s.rar === ["", "◆", "★"][s.r]) && sts.some(s => s.r === "1") && sts.some(s => s.r === "2"),
     JSON.stringify(sts.filter(s => s.rar !== ["", "◆", "★"][s.r])));
-  check("A3.6 la inicial no se lee y todas las estampas tienen nombre accesible",
+  check("la inicial no se lee y todas las estampas tienen nombre accesible",
     sts.every(s => s.hidden === "true" && /^(Mi estampa, )?#\d{3}, /.test(s.label)));
   const mineLab = await lab("#mineSt button");
-  check("A3.6 mi estampa: «Mi estampa, #034, Yo Mismo, La villa del Hardware, Oro»",
+  check("mi estampa: «Mi estampa, #034, Yo Mismo, La villa del Hardware, Oro»",
     mineLab === "Mi estampa, #034, Yo Mismo, La villa del Hardware, Oro", mineLab);
   const l13 = await lab('#grid [data-no="13"]');
-  check("A3.6 el nick va como texto, con comas y barras tal cual", l13.startsWith("#013, a,b;c\\d, PaySec LATAM"), l13);
-  check("A3.6 el nick completo en el title de los que se cortan",
+  check("el nick va como texto, con comas y barras tal cual", l13.startsWith("#013, a,b;c\\d, PaySec LATAM"), l13);
+  check("el nick completo en el title de los que se cortan",
     await page.$eval('#grid [data-no="399"] .nick', e =>
       e.title === album.entries.find(x => x.card.badgeNo === 399).card.nickname && e.title.startsWith("ÑandúÑandú")));
   await page.evaluate(() => [...document.querySelectorAll("#tabs [role=tab]")].find(t => t.textContent.startsWith("Especiales")).click());
   const esp = await page.$$eval("#grid button.st", l => l.map(b => b.getAttribute("aria-label")));
-  check("A3.6 especiales y retos sin «Sin villa»: «Especial 2, Mascota, Oro»",
+  check("especiales y retos sin «Sin villa»: «Especial 2, Mascota, Oro»",
     esp.includes("Especial 2, Mascota, Oro") && esp.every(s => !s.includes("Sin villa")), JSON.stringify(esp));
-  // A3.7–A3.9: huecos legibles, foco visible y vacío por pestaña
+  // Huecos legibles, foco visible y vacío por pestaña
   await page.click("#tab0");
   const holes = await page.evaluate(() => {   // el típico no trae dorsales sin datos: uno armado con sticker()
     $("grid").append(sticker({ no: 401, got: true }));
@@ -455,7 +455,7 @@ async function checkA1(browser, check, refOut) {
     $("grid").lastChild.remove();
     return r;
   });
-  check("A3.7 cada hueco dice su estado en texto oculto y no es parada de Tab",
+  check("cada hueco dice su estado en texto oculto y no es parada de Tab",
     holes.some(h => h.got) && holes.some(h => !h.got) && holes.every(h => h.tab < 0 && h.sr === "inset(50%)" &&
       h.t === h.t.slice(0, 4) + (h.got ? ", la tienes,sin datos" : ", vacío")),
     JSON.stringify({ got: holes.filter(h => h.got).length, n: holes.length, bad: holes.find(h => !(h.tab < 0 && h.sr === "inset(50%)" && h.t === h.t.slice(0, 4) + (h.got ? ", la tienes,sin datos" : ", vacío"))) }));
@@ -468,25 +468,25 @@ async function checkA1(browser, check, refOut) {
              inside: r.top - 4 >= t.top && r.left - 4 >= t.left };
   }, sel);
   const rt = await ring();
-  check("A3.8 pestaña con teclado: contorno de 2px separado 2px, sin recortarse en #tabs",
+  check("pestaña con teclado: contorno de 2px separado 2px, sin recortarse en #tabs",
     rt.o === "solid 2px 2px" && rt.color === "rgb(232, 234, 240)" && rt.inside, JSON.stringify(rt));
   await page.keyboard.press("Tab");
   const rs = await ring();
-  check("A3.8 estampa con teclado: el mismo contorno", rs.o === "solid 2px 2px", JSON.stringify(rs));
+  check("estampa con teclado: el mismo contorno", rs.o === "solid 2px 2px", JSON.stringify(rs));
   await page.evaluate(() => document.querySelector("#mineSt button").focus());
   const rm = await ring();
-  check("A3.8 mi estampa: el contorno se aleja del anillo azul", rm.o === "solid 2px 4px", JSON.stringify(rm));
+  check("mi estampa: el contorno se aleja del anillo azul", rm.o === "solid 2px 4px", JSON.stringify(rm));
   await page.goto("file://" + html);
   await page.evaluate(openAll, CASES["solo mi estampa .json"].map(([n, b]) => [n, b.toString("base64")]));
   const empties = await page.evaluate(() => [...document.querySelectorAll("#tabs [role=tab]")].slice(1).map(t => {
     t.click();
     return [t.textContent, document.querySelector("#grid > p").textContent];
   }));
-  check("A3.9 vacío por pestaña: la villa por su nombre y «Sin especiales todavía.»",
+  check("vacío por pestaña: la villa por su nombre y «Sin especiales todavía.»",
     empties.length === 11 && empties.at(-1)[1] === "Sin especiales todavía." && empties.slice(0, -1).every(([t, p]) =>
       p === "Todavía no tienes estampas de " + t.replace(/ · 0$/, "") + ". Intercambia por infrarrojo con alguien de esa villa."),
     JSON.stringify(empties));
-  // A4: detalle de la estampa
+  // Detalle de la estampa
   await page.setViewport({ width: 1280, height: 800 });
   await page.goto("file://" + html);
   await page.evaluate(hookDownloads);
@@ -504,35 +504,35 @@ async function checkA1(browser, check, refOut) {
   await page.focus('#grid [data-no="13"]');
   await page.keyboard.press("Enter");
   const d13 = await dlg(), c13 = await page.evaluate(() => album.entries.find(x => x.card.badgeNo === 13).card.stats);
-  check("A4.1 el diálogo se nombra con el nick y se describe con los metadatos",
+  check("el diálogo se nombra con el nick y se describe con los metadatos",
     d13.open && d13.name === "a,b;c\\d" && d13.desc.includes("PaySec LATAM"), JSON.stringify(d13));
-  check("A4.2 la inicial no se lee", d13.face === "true");
-  check("A4.3 cada estadística se lee «ATK n de 99», con la barra oculta y el mismo ancho",
+  check("la inicial no se lee", d13.face === "true");
+  check("cada estadística se lee «ATK n de 99», con la barra oculta y el mismo ancho",
     d13.stats.length === 4 && d13.stats.every((s, i) => s.hid && s.sr === ["ATK", "DEF", "HAX", "SUE"][i] + " " + c13[i] + " de 99" &&
       Math.abs(parseFloat(s.w) - Math.min(100, c13[i] * 100 / 99)) < 0.01), JSON.stringify(d13.stats));
-  check("A4.6 orden de lectura: nick, metadatos, estadísticas, handle, acciones",
+  check("orden de lectura: nick, metadatos, estadísticas, handle, acciones",
     d13.order === "dNick,dMeta,dStats,dHandle,dVcf", d13.order);
   await page.click("#dVcf");
   const m13 = await page.evaluate(() => ({ msg: $("dMsg").textContent, live: $("dMsg").getAttribute("role"),
     inDlg: $("detail").contains($("dMsg")), dl: window.__dl.map(d => d.name) }));
-  check("A4.4 «Guardar contacto» confirma en el diálogo, en una región que se anuncia",
+  check("«Guardar contacto» confirma en el diálogo, en una región que se anuncia",
     m13.msg === "✓ Descargado bugcon_13.vcf." && m13.live === "status" && m13.inDlg && m13.dl.join() === "bugcon_13.vcf",
     JSON.stringify(m13));
   await page.keyboard.press("Escape");
   const e13 = await dlg();
-  check("A4.5 Esc cierra y el foco vuelve a la estampa", !e13.open && e13.ae === "13", JSON.stringify(e13));
+  check("Esc cierra y el foco vuelve a la estampa", !e13.open && e13.ae === "13", JSON.stringify(e13));
   await page.click('#grid [data-no="13"]');
-  check("A4.4 al abrir otra vez el mensaje anterior ya no está", (await dlg()).msg === "");
+  check("al abrir otra vez el mensaje anterior ya no está", (await dlg()).msg === "");
   await page.click("#detail", { offset: { x: 5, y: 5 } });   // padding del diálogo: no cierra
   const inPad = (await dlg()).open;
   await page.mouse.click(5, 5);                                // fondo: cierra
   const f13 = await dlg();
-  check("A4.5 clic en el fondo cierra, clic en el padding no; el foco vuelve a la estampa",
+  check("clic en el fondo cierra, clic en el padding no; el foco vuelve a la estampa",
     inPad && !f13.open && f13.ae === "13", JSON.stringify({ inPad, f13 }));
   await page.evaluate(() => [...document.querySelectorAll("#tabs [role=tab]")].find(t => t.textContent.startsWith(TEAMS[3])).click());
   await page.click(`#grid [data-no="${MASTER_FIRST + 3}"]`);
   const dm = await dlg();
-  check("A4.6 el maestro rotula su pedazo «Pedazo de la gira de villas»",
+  check("el maestro rotula su pedazo «Pedazo de la gira de villas»",
     dm.handle === "Pedazo de la gira de villas: A1B2 C3D4 E5F6 0718", dm.handle);
   await page.keyboard.press("Escape");
   await page.setViewport({ width: 360, height: 420 });
@@ -543,11 +543,11 @@ async function checkA1(browser, check, refOut) {
     const b = d.querySelector("form button").getBoundingClientRect();
     return { top: r.top, bottom: r.bottom, h: innerHeight, scrolls: d.scrollHeight > d.clientHeight, btn: b.bottom <= r.bottom };
   });
-  check("A4.5 ventana baja: el diálogo cabe y se desplaza hasta «Cerrar»",
+  check("ventana baja: el diálogo cabe y se desplaza hasta «Cerrar»",
     low.top >= 0 && low.bottom <= low.h && low.scrolls && low.btn, JSON.stringify(low));
   await page.keyboard.press("Escape");
   await page.setViewport({ width: 1280, height: 800 });
-  // A5: retroalimentación de «Descargar contactos»
+  // Retroalimentación de «Descargar contactos»
   const vcf = () => page.evaluate(() => {
     const b = $("vcfBtn").getBoundingClientRect(), m = $("vcfMsg").getBoundingClientRect();
     return { msg: $("vcfMsg").textContent, live: $("vcfMsg").getAttribute("role"), gap: m.top - b.bottom,
@@ -558,30 +558,30 @@ async function checkA1(browser, check, refOut) {
   });
   await page.evaluate(() => { window.__dl = []; });
   const v0 = await vcf();
-  check("A5.3–A5.4 con contactos: sin motivo y «Ver quiénes» con número, nick y handle como texto",
+  check("con contactos: sin motivo y «Ver quiénes» con número, nick y handle como texto",
     !v0.dis && v0.why === null && v0.who && v0.who.length === v0.n && v0.n === 4 &&
     v0.who.includes("#013 a,b;c\\d · @abc") && v0.who.includes("#007 Zoë 🐛 Bug · @zoe,bug;mx\\"),
     JSON.stringify(v0));
   await page.click("#vcfBtn");
   const v1 = await vcf();
-  check("A5.1–A5.2 «Descargado … con 4 contactos» junto al botón, en una sola región que se anuncia",
+  check("«Descargado … con 4 contactos» junto al botón, en una sola región que se anuncia",
     v1.msg === "✓ Descargado contactos_bugcon_34.vcf con 4 contactos. Revisa cada handle antes de confiar en él." &&
     v1.live === "status" && v1.gap >= 0 && v1.gap < 100 && v1.status === "" && v1.lives === 1 &&
     v1.dl.join() === "contactos_bugcon_34.vcf", JSON.stringify(v1));
   await page.evaluate(openAll, CASES["solo mi estampa .json"].map(([n, b]) => [n, b.toString("base64")]));
   const v2 = await vcf();
-  check("A5.3 sin contactos: deshabilitado con «Nadie de tu álbum compartió su handle.», sin lista ni mensaje viejo",
+  check("sin contactos: deshabilitado con «Nadie de tu álbum compartió su handle.», sin lista ni mensaje viejo",
     v2.dis && v2.why === "Nadie de tu álbum compartió su handle." && v2.who === null && v2.msg === "", JSON.stringify(v2));
   const qv = await browser.newPage();
   await qv.goto("file://" + html + CASES["QR (mi dorsal no viene en el bitmap)"]);
   const why = await qv.$eval("#vcfWhy", e => e.hidden ? null : e.textContent);
   await qv.close();
-  check("A5.3 vista QR: «Abre el .json para ver los contactos.»", why === "Abre el .json para ver los contactos.", why);
-  // A6.1: los colores viven en :root; fuera solo var(--…)
+  check("vista QR: «Abre el .json para ver los contactos.»", why === "Abre el .json para ver los contactos.", why);
+  // Los colores viven en :root; fuera solo var(--…)
   const css = fs.readFileSync(html, "utf8").match(/<style>([\s\S]*?)<\/style>/)[1].replace(/:root\s*\{[^}]*\}/, "");
   const loose = css.match(/#[0-9a-f]{3,8}\b|rgba?\(/gi);
-  check("A6.1 sin colores sueltos fuera de :root", !loose, loose && loose.join(" "));
-  // A6.2: contraste de los pares que usa la página (WCAG 2.x), leído de los tokens reales
+  check("sin colores sueltos fuera de :root", !loose, loose && loose.join(" "));
+  // Contraste de los pares que usa la página (WCAG 2.x), leído de los tokens reales
   const ratios = await page.evaluate(() => {
     const v = n => getComputedStyle(document.documentElement).getPropertyValue("--" + n).trim();
     const rgba = h => { h = h.slice(1); if (h.length <= 4) h = [...h].map(c => c + c).join("");
@@ -602,33 +602,33 @@ async function checkA1(browser, check, refOut) {
     return out;
   });
   const weak = Object.entries(ratios).filter(([, [r, min]]) => r < min);
-  check("A6.2 contraste ≥ 4.5:1 en texto y ≥ 3:1 en bordes de estado y foco", !weak.length, JSON.stringify(weak));
+  check("contraste ≥ 4.5:1 en texto y ≥ 3:1 en bordes de estado y foco", !weak.length, JSON.stringify(weak));
   // con el típico abierto (hay .sub de villa y etiquetas de dorsal) y un detalle
   await page.evaluate(openAll, CASES["típico .json"].map(([n, b]) => [n, b.toString("base64")]));
   const tiny = await page.evaluate(() => [...document.querySelectorAll("body *")]
     .filter(e => e.offsetParent && [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()) &&
                  parseFloat(getComputedStyle(e).fontSize) < 12)
     .map(e => e.className || e.tagName));
-  check("A6.2 ningún texto visible de menos de 12 px", !tiny.length, tiny.join(" "));
-  // A6.3: regiones
+  check("ningún texto visible de menos de 12 px", !tiny.length, tiny.join(" "));
+  // Regiones
   const land = await page.evaluate(() => {
     const m = document.querySelectorAll("main");
     return { n: m.length, has: ["drop", "summary", "tabs", "grid"].every(id => m[0]?.contains($(id))),
              out: ["header", "footer", "#privacy", "#detail"].every(q => !m[0]?.contains(document.querySelector(q))),
              top: ["header", "footer"].every(q => document.querySelector(q).parentElement === document.body) };
   });
-  check("A6.3 un <main> con zona, resumen, pestañas y cuadrícula; encabezado y pie fuera",
+  check("un <main> con zona, resumen, pestañas y cuadrícula; encabezado y pie fuera",
     land.n === 1 && land.has && land.out && land.top, JSON.stringify(land));
-  // A6.5: sin movimiento. Si algún día se añade una transición o un desplazamiento suave, debe vivir
+  // Sin movimiento. Si algún día se añade una transición o un desplazamiento suave, debe vivir
   // dentro de @media (prefers-reduced-motion: no-preference).
   const src = fs.readFileSync(html, "utf8");
   const moving = (src.match(/<style>([\s\S]*?)<\/style>/)[1]
     .replace(/@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{(?:[^{}]|\{[^{}]*\})*\}/g, "")
     .match(/\b(transition|animation|scroll-behavior)\b[^;}]*/g) || [])
     .concat(src.match(/behavior:\s*["']smooth["']/g) || []);
-  check("A6.5 sin transiciones, animaciones ni desplazamiento suave fuera de prefers-reduced-motion: no-preference",
+  check("sin transiciones, animaciones ni desplazamiento suave fuera de prefers-reduced-motion: no-preference",
     !moving.length, moving.join(" | "));
-  // A6.6: impresión. Sin controles, tinta oscura sobre blanco, solo la pestaña activa y la cuadrícula.
+  // Impresión. Sin controles, tinta oscura sobre blanco, solo la pestaña activa y la cuadrícula.
   await page.setViewport({ width: 1280, height: 800 });
   await page.evaluate(openAll, CASES["lleno .json"].map(([n, b]) => [n, b.toString("base64")]));
   await page.evaluate(() => { document.querySelectorAll("#tabs [role=tab]")[1].click(); });
@@ -645,12 +645,12 @@ async function checkA1(browser, check, refOut) {
   });
   const pdf = await page.pdf({ format: "A4" });
   await page.emulateMediaType("screen");
-  check("A6.6 impresión: sin botones, campos ni enlaces; una pestaña (la activa), resumen y cuadrícula visibles",
+  check("impresión: sin botones, campos ni enlaces; una pestaña (la activa), resumen y cuadrícula visibles",
     pr.buttons === 0 && pr.inputs === 0 && pr.links === 0 && pr.tabs === 1 && pr.summary === 1 && pr.owner === 1 && pr.grid > 0,
     JSON.stringify(pr));
-  check("A6.6 impresión: texto oscuro (también el atenuado) sobre fondo blanco y sin desbordar la hoja",
+  check("impresión: texto oscuro (también el atenuado) sobre fondo blanco y sin desbordar la hoja",
     pr.bgL > 250 && pr.text < 60 && pr.muted < 130 && pr.width <= pr.iw && pdf.length > 1000, JSON.stringify(pr));
-  // A6.4: sin desplazamiento horizontal en las tres medidas, ≥ 3 columnas a 360 px, pestañas con indicio
+  // Sin desplazamiento horizontal en las tres medidas, ≥ 3 columnas a 360 px, pestañas con indicio
   const adapt = [];
   for (const [w, h, f] of [[1280, 800, 1], [512, 384, 2], [360, 740, 1]]) {
     await page.setViewport({ width: w, height: h, deviceScaleFactor: f });
@@ -668,7 +668,7 @@ async function checkA1(browser, check, refOut) {
     }
   }
   const badA = adapt.filter(a => a.sw > a.iw || a.cols < 3 || !a.mask || (a.more && a.fr !== "24px") || (!a.more && a.fr === "24px"));
-  check("A6.4 sin desplazamiento horizontal a 1280, 1024 al 200 % y 360; ≥ 3 columnas; pestañas con borde desvanecido",
+  check("sin desplazamiento horizontal a 1280, 1024 al 200 % y 360; ≥ 3 columnas; pestañas con borde desvanecido",
     !badA.length && adapt.some(a => a.more), JSON.stringify(badA));
   await page.setViewport({ width: 360, height: 740 });
   await page.evaluate(openAll, CASES["típico .json"].map(([n, b]) => [n, b.toString("base64")]));
@@ -677,7 +677,7 @@ async function checkA1(browser, check, refOut) {
     return { fl: t.style.getPropertyValue("--fl"), fr: t.style.getPropertyValue("--fr"),
              sub: [...document.querySelectorAll(".st .sub")].filter(e => e.title !== e.textContent) .length };
   });
-  check("A6.4 al llegar al final de las pestañas se desvanece solo el borde izquierdo; la villa de cada estampa lleva title",
+  check("al llegar al final de las pestañas se desvanece solo el borde izquierdo; la villa de cada estampa lleva title",
     sc.fl === "24px" && sc.fr === "0px" && sc.sub === 0, JSON.stringify(sc));
   await page.setViewport({ width: 1280, height: 800 });
   // los enlaces resuelven por file:// (relativos) y vuelven
@@ -685,11 +685,11 @@ async function checkA1(browser, check, refOut) {
   await page.click("a[href='../configurator/index.html']");
   await page.waitForFunction(() => document.title.includes("Configurador"));
   const back = await page.$$eval("a[href='../album/index.html']", l => l.length);
-  check("A1 enlaces: álbum → configurador carga y el configurador enlaza al álbum", back >= 1, back);
+  check("enlaces: álbum → configurador carga y el configurador enlaza al álbum", back >= 1, back);
   await page.click("header a[href='../album/index.html']");
   await page.waitForFunction(() => document.title.includes("Álbum"));
-  check("A1 enlaces: configurador → álbum carga", true);
-  check("A1 sin errores de página", !errors.length, errors.join("; "));
+  check("enlaces: configurador → álbum carga", true);
+  check("sin errores de página", !errors.length, errors.join("; "));
   await page.close();
 }
 
@@ -729,7 +729,7 @@ if (require.main === module) (async () => {
         check(`referencia: «${n}» se rechaza`, !r.snap.album && reason(r.status[0]), r.status[0]);
       }
     }
-    await checkA1(browser, check, refOut);
+    await checkNewPage(browser, check, refOut);
   } finally {
     await browser.close();
     fs.rmSync(path.dirname(ref), { recursive: true, force: true });
