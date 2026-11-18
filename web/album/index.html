@@ -13,9 +13,9 @@
   - El .json que guarda el configurador ("bb26-album" v1 o v2) o el .bin de ALBM.
     La v2 trae los avatares que el badge recibió por IR ("avatars": dorsal ->
     base64 de 512 B, 64x64 a 1 bpp, 1 = blanco): el detalle los dibuja en un
-    <canvas> y descarta el que no cuadre (largo, base64, dorsal sin estampa).
-    Sin avatar (v1, el .bin de ALBM o el avatar de ese dorsal) el detalle
-    muestra la inicial.
+    <canvas> (cuadrícula y detalle) y descarta el que no cuadre (largo, base64,
+    dorsal sin estampa). Sin avatar (v1, el .bin de ALBM o el avatar de ese
+    dorsal) se muestra la inicial.
   - Ruta del QR del badge en el fragmento: index.html#/A/<dorsal>/
     <bitmap>/<tag>. Solo dice qué dorsales tiene (vista rápida); el destino
     del QR está pendiente.
@@ -129,6 +129,7 @@ button.st:hover { border-color: var(--accent); }
 .st .no { font-variant-numeric: tabular-nums; font-weight: 600; }
 .st .face { width: 100%; aspect-ratio: 1; border-radius: 4px; margin-bottom: 3px; }
 .st div.face { position: relative; display: flex; align-items: center; justify-content: center; background: var(--card2); font-size: 28px; font-weight: 700; color: var(--muted); }
+.st div.face canvas { width: 100%; height: 100%; border-radius: 4px; image-rendering: pixelated; }
 .st .nick { width: 100%; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st .sub { width: 100%; color: var(--muted); font-size: var(--fs-s); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st .no.tag { position: absolute; top: 6px; left: 6px; background: var(--tag-bg); color: var(--tag-text); border-radius: 4px; padding: 0 4px; font-size: var(--fs-s); }
@@ -493,8 +494,10 @@ function sticker(it) {
   const r = c.rarity < RARITIES.length ? c.rarity : 0;
   const e = el("button", "st r" + r + (it.mine ? " mine" : ""));
   e.dataset.no = it.no;
-  const face = el("div", "face", initial(c)), nick = el("span", "nick", c.nickname || "—");
-  face.setAttribute("aria-hidden", "true");
+  const img = c.type === ATTENDEE && album.avatars.get(c.badgeNo);
+  const face = el("div", "face", img ? undefined : initial(c)), nick = el("span", "nick", c.nickname || "—");
+  if (img) face.append(avatarCanvas(img, c.nickname));
+  face.setAttribute("aria-hidden", "true");   // el nombre accesible del botón ya dice quién es
   nick.title = c.nickname;   // los largos se cortan con «…»
   const sub = el("span", "sub", it.mine ? "Mi estampa" : TEAMS[c.team] || "Sin villa");
   sub.title = sub.textContent;
@@ -622,7 +625,7 @@ function show(a) {
 }
 
 // Avatar de 64x64 (1 bpp, filas completas, MSB primero, 1 = blanco) en un <canvas>; se dibuja
-// al abrir el detalle, no al cargar el archivo.
+// al pintar la cuadrícula y al abrir el detalle, no al cargar el archivo.
 function avatarCanvas(img, nick) {
   const cv = el("canvas"), ctx = cv.getContext("2d");
   cv.width = cv.height = AVATAR_SIDE;

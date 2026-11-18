@@ -747,6 +747,12 @@ async function checkAvatars(browser, check) {
     none.px === null && none.hidden === "true" && none.text.length > 0, JSON.stringify(none));
   const back = await detail(7);
   check("v2: abrir otro detalle y volver no deja restos", JSON.stringify(back.px) === JSON.stringify(a7.px));
+  const cell = await page.evaluate(() => [7, 16].map(n => {
+    const f = document.querySelector(`#grid [data-no="${n}"] .face`);
+    return { cv: !!f.querySelector("canvas"), text: f.firstChild.nodeType === 3 };
+  }));
+  check("v2: la cuadrícula también muestra el avatar; sin avatar, la inicial",
+    cell[0].cv && !cell[0].text && !cell[1].cv && cell[1].text, JSON.stringify(cell));
 
   const [bad] = await open(V2_CASES["v2 con avatares dañados"]);
   check("v2 dañado: abre, conserva los buenos y avisa de los descartados",
