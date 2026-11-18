@@ -10,6 +10,7 @@ Uso (requiere pyserial y rich):
 import argparse
 import io
 import os
+import struct
 import sys
 import tempfile
 import unittest
@@ -37,6 +38,8 @@ def reply(line):
         return (INFO_REPLY + "\n").encode()
     if line == "ALBM":
         return b"OK %d\n" % len(ALBUM) + ALBUM
+    if line == "ALAV":
+        return b"ERR badcmd\n"
     if line == "PWR":
         return (REPLY + "\n").encode()
     if line.startswith("READ"):
@@ -249,6 +252,41 @@ class AlbumAndRest(unittest.TestCase):
             self.assertEqual(open(out, "rb").read(), ALBUM)
         self.assertIn("apodos y handles", text)
         self.assertIn("1 estampas", text)
+
+    def test_json_saves_v2_with_avatars_and_v1_without_alav(self):
+        import json
+
+        import verify_album
+
+        header = struct.pack("<4sBB6sH2s", b"ALBM", 1, 0, bytes(6), 1, bytes(2))
+        other = badge_usb.CARD_FIELDS.pack(
+            1, 0, 7, b"Otro", 3, 2, bytes(4), 1, 0, b"") + bytes(16)
+        album = header + CARD64 + other + bytes(16)  # tarjeta + token, orden, nonce
+        alav = b"ALAV\x01\x01\x00" + struct.pack("<HH", 7, 1) + bytes(512)
+
+        def serve(line):
+            if line == "ALBM":
+                return b"OK %d\n" % len(album) + album
+            if line == "ALAV":
+                return b"OK %d\n" % len(alav) + alav
+            return reply(line)
+
+        badge, _ = make_badge(serve)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "a.json")
+            code, text = run(badge, cmd="album", output=out)
+            doc = json.load(open(out))
+        self.assertEqual((code, doc["version"]), (0, 2))
+        self.assertIn("1 avatares", text)
+        self.assertEqual(verify_album.load_export(json.dumps(doc).encode()),
+                         album)
+        # firmware sin ALAV: la v1 de siempre
+        badge, _ = make_badge(lambda line: serve(line) if line != "ALAV"
+                              else b"ERR badcmd\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "a.json")
+            run(badge, cmd="album", output=out)
+            self.assertEqual(json.load(open(out))["version"], 1)
 
     def test_pwr_prints_key_value(self):
         badge, _ = make_badge(reply)

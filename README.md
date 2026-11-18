@@ -309,7 +309,9 @@ deben estar muy cerca.
 4. La pantalla dice **"Buscando..."** y las luces hacen un punto que va y
    viene.
 5. Cuando se encuentran, dice **"Intercambiando..."**. **No muevan los
-   Badges.** Tarda un par de segundos.
+   Badges.** Tarda un par de segundos; si los dos tienen avatar, la pantalla
+   dice **"Pasando avatares..."** y tarda unos 12 segundos más: sigan sin
+   separarlos.
 6. Las luces festejan y aparece la estampa que recibiste, con el apodo de la
    otra persona.
 
@@ -341,8 +343,10 @@ barra de arriba muestra **"IR"** mientras está activa. La opción cambia a
 ### Tu privacidad
 
 Al intercambiar, la otra persona recibe tu apodo, villa, posición,
-estadísticas y dorsal. Tu handle solo va si lo autorizaste. Una vez que la
-estampa está en otro Badge, no se puede retirar.
+estadísticas y dorsal. Tu handle solo va si lo autorizaste. Tu **avatar**
+también va (reducido a 64 × 64), salvo que lo apagues en **Menú › Mi Estampa ›
+Editar › Compartir avatar**; en ese caso tú sí recibes el de la otra persona.
+Una vez que la estampa o el avatar están en otro Badge, no se pueden retirar.
 
 ## El Álbum
 
@@ -749,14 +753,18 @@ Badge.
 4. **Vista previa.** Lo que ves ahí es exactamente lo que recibe el Badge.
 5. **Plantilla.** Muestra tu gafete completo, tal como lo verás en el Badge.
    Se actualiza al guardar la estampa y al enviar el avatar. Presiona
-   **Enviar avatar**: la imagen se queda en tu Badge y aparece en tu
-   plantilla. No viaja a otros Badges al intercambiar.
+   **Enviar avatar**: la imagen aparece en tu plantilla. Al intercambiar
+   estampas, tu avatar también viaja a los otros Badges (reducido a 64 × 64)
+   y se guarda en su álbum, salvo que desmarques **Compartir mi avatar por
+   infrarrojo** en esta pestaña y guardes la estampa (también puedes hacerlo en
+   el Badge: **Mi Estampa › Editar › Compartir avatar**). La plantilla no sale
+   de tu Badge.
 
 Más cosas en esta pestaña:
 
 - **Álbum › Guardar álbum (.json)** guarda en tu computadora tu estampa y las de tu
-  álbum. El archivo incluye el nickname y el handle que cada quien compartió
-  contigo: **no lo publiques**. Para verlo, usa **Ver el álbum**, presiona
+  álbum, con los avatares que recibiste. El archivo incluye el nickname, el
+  handle y el avatar que cada quien compartió contigo: **no lo publiques**. Para verlo, usa **Ver el álbum**, presiona
   **Abrir álbum…** y elige el `.json` (o arrástralo a la página). Ahí puedes
   filtrar las que **Tengo** o **Me faltan**, ir directo a un dorsal,
   imprimirlo desde el navegador y descargar los contactos
@@ -821,8 +829,11 @@ tiene un programa más viejo que no la incluye.
 
 La página no tiene servidor ni almacenamiento central: tu estampa, tu avatar
 y tu álbum se guardan solo en tu Badge, y nadie recibe una copia. Tu handle
-solo se comparte si marcas la casilla. Para borrar tu estampa, tu avatar, tu
-álbum y las imágenes de los slots, usa **Ajustes › Borrar datos** en el Badge.
+solo se comparte si marcas la casilla. Tu avatar sale por infrarrojo a quien
+intercambie contigo, salvo que desmarques **Compartir mi avatar por
+infrarrojo**; una vez en otro Badge no se puede retirar. Para borrar tu estampa,
+tu avatar, tu álbum y las imágenes de los slots, usa **Ajustes › Borrar datos**
+en el Badge.
 
 ### Si algo no funciona en el configurador
 
@@ -862,7 +873,7 @@ paso, cómo prepararla y usar cada función.
 |---|---|
 | **Estampa** | Tu tarjeta de jugador: apodo, villa, posición y estadísticas. |
 | **Álbum** | La colección de estampas que recibes de otros asistentes. |
-| **Avatar** | La imagen de 96 × 96 puntos de tu estampa. Solo se ve en tu Badge. |
+| **Avatar** | La imagen de 96 × 96 puntos de tu estampa. Al intercambiar, los otros Badges reciben una copia de 64 × 64. |
 | **Slot** | Cada uno de los 4 espacios del Badge para imágenes a pantalla completa (0 a 3). |
 | **Web Serial** | Función de Chrome, Edge y Brave que deja a una página hablar con tu Badge por USB. |
 | **Dorsal** | El número único de tu Badge, como el de una playera. |

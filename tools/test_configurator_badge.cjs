@@ -84,6 +84,61 @@ async function until(page, expr, what, ms = 15000) {
     const same = sent.some(v => v !== 255) && sent.length === 5000 && back.length === 5000 && sent.every((v, i) => v === back[i]);
     console.log(same ? "ok   " : "FALLA", `UPLD ${SLOT} → READ ${SLOT}: ${back.length} B idénticos`);
     if (!same) failed++;
+    // «Compartir mi avatar por infrarrojo»: la casilla viaja en flags (0x04) dentro de CARD, el badge la
+    // firma y guarda, y «Leer mi estampa» la devuelve; al terminar queda como estaba.
+    const share = async on => {
+      await page.evaluate(async on => {
+        $("readCardBtn").click();
+        for (let i = 0; i < 100 && busy; i++) await new Promise(r => setTimeout(r, 100));
+        $("avatarShare").checked = on; $("avatarShare").dispatchEvent(new Event("input"));
+        $("saveCardBtn").click();
+        for (let i = 0; i < 100 && !/Estampa guardada/.test($("status").textContent); i++) await new Promise(r => setTimeout(r, 100));
+      }, on);
+      await until(page, "!busy", "guardar la estampa");
+      return page.evaluate(() => ({ flags: myCard[27], box: $("avatarShare").checked, dirty: $("cardState").dataset.state }));
+    };
+    await page.evaluate(() => $("readCardBtn").click());
+    await until(page, "!busy && !!myCard", "leer la estampa");
+    const was = await page.evaluate(() => !($("avatarShare").checked === false));
+    const off = await share(false), on = await share(true);
+    const okShare = (off.flags & 4) === 4 && !off.box && on.flags === (off.flags & ~4) && on.box && on.dirty === "saved";
+    console.log(okShare ? "ok   " : "FALLA", `casilla «Compartir mi avatar»: apagada flags=0x${off.flags.toString(16)}, encendida flags=0x${on.flags.toString(16)}`);
+    if (!okShare) failed++;
+    if (!was) await share(false);
+    // "Guardar álbum (.json)": ALBM + ALAV reales -> .json v2. Cada avatar sale igual que en ALAV
+    // (CRC-16 de ir_frame::crc16 y bytes) y el archivo tarda ≤ 5 s con el álbum que tenga el badge.
+    // Con un badge sin avatares recibidos solo se comprueba que sale la v2 con 0.
+    const json = await page.evaluate(async () => {
+      let saved = null;
+      HTMLAnchorElement.prototype.click = function () { saved = this.href; };
+      const blobs = new Map(), create = URL.createObjectURL;
+      URL.createObjectURL = b => { const u = create(b); blobs.set(u, b); return u; };
+      const t0 = performance.now();
+      $("jsonBtn").click();
+      for (let i = 0; i < 200 && !saved; i++) await new Promise(r => setTimeout(r, 100));
+      const ms = performance.now() - t0;
+      const raw = await command("ALAV", null, () => readPayloadReply());
+      return { ms, status: $("status").textContent, text: saved ? await blobs.get(saved).text() : null, raw: Array.from(raw) };
+    });
+    const crc16 = bytes => {
+      let c = 0xffff;
+      for (const b of bytes) { c ^= b << 8; for (let i = 0; i < 8; i++) c = c & 0x8000 ? ((c << 1) ^ 0x1021) & 0xffff : (c << 1) & 0xffff; }
+      return c;
+    };
+    const doc = json.text && JSON.parse(json.text), raw = Buffer.from(json.raw);
+    const records = Array.from({ length: raw.readUInt16LE(5) }, (_, i) => raw.subarray(7 + i * 516, 7 + (i + 1) * 516));
+    const good = records.filter(r => r.readUInt16LE(2) !== 0);
+    // los avatares de la prueba son los de asistentes del álbum (los de ALAV sin estampa no salen)
+    const exported = doc ? Object.keys(doc.avatars || {}).length : -1;
+    const sameBytes = doc && doc.version === 2 && good.every(r => {
+      const no = r.readUInt16LE(0), img = r.subarray(4);
+      return !(no in doc.avatars) || (Buffer.from(doc.avatars[no], "base64").equals(img) && crc16(img) === r.readUInt16LE(2));
+    });
+    const ok = doc && doc.version === 2 && doc.avatar_count === exported && exported <= good.length && sameBytes &&
+      new RegExp(`\\(${doc.count} estampas, ${exported} avatares\\)`).test(json.status) && json.ms <= 5000;
+    console.log(ok ? "ok   " : "FALLA", `Guardar álbum (.json): v2, ${exported} de ${good.length} avatares recibidos, ` +
+      `${Math.round(json.ms)} ms, ${json.text ? Math.round(json.text.length / 1024) : 0} KB — ${json.status}`);
+    if (!ok) failed++;
     if (errors.length) { failed++; console.log("FALLA errores de página:", errors.join("; ")); }
   } finally {
     await browser.close();

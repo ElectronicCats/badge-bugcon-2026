@@ -275,7 +275,11 @@ solo. Mira cómo se verá en [Convertir tus imágenes](#convertir-tus-imágenes)
 python3 tools/badge_usb.py avatar cara.png
 ```
 
-Tu imagen solo se ve en tu Badge. No viaja a otros Badges al intercambiar.
+Tu imagen se ve en tu Badge y, al intercambiar estampas, viaja por infrarrojo a
+los otros Badges (reducida a 64 × 64) y se guarda en su álbum. Para que no
+salga, apágalo en el Badge (**Mi Estampa › Editar › Compartir avatar**) o con
+la casilla del configurador web. `album -o x.json` guarda también los avatares
+que recibiste.
 
 ## Imágenes para el Marco
 
