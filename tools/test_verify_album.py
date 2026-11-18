@@ -349,7 +349,7 @@ class ExportJson(unittest.TestCase):
     def test_malformed(self):
         doc = json.loads(va.to_json(export([entry(7, 1)])))
         raw = base64.b64decode(doc["albm"])
-        for bad in (dict(doc, format="otro"), dict(doc, version=2),
+        for bad in (dict(doc, format="otro"), dict(doc, version=3),
                     dict(doc, albm=doc["albm"] + "!"),
                     dict(doc, albm=base64.b64encode(raw[:-1]).decode()),
                     {k: v for k, v in doc.items() if k != "albm"}, [], "x"):
@@ -357,6 +357,63 @@ class ExportJson(unittest.TestCase):
                 va.parse_album(va.load_export(json.dumps(bad).encode()))
         with self.assertRaises(ValueError):
             va.load_export(b"{no es json")
+
+    @staticmethod
+    def alav(records):
+        """ALAV crudo: records = [(dorsal, crc, imagen)]."""
+        out = b"ALAV\x01" + struct.pack("<H", len(records))
+        for no, crc, img in records:
+            out += struct.pack("<HH", no, crc) + img
+        return out
+
+    def test_avatars_v2(self):
+        data = export([entry(7, 1), entry(8, 2)])
+        a7, a8 = bytes([7]) * 512, bytes([8]) * 512
+        # 9 no está en el álbum y 8 salió dañado (crc 0): no entran
+        alav = self.alav([(7, 1, a7), (8, 0, a8), (9, 1, a8)])
+        doc = va.to_json(data, "0.1.0", "x", avatars=alav)
+        d = json.loads(doc)
+        self.assertEqual((d["version"], d["avatar_count"]), (2, 1))
+        self.assertEqual(list(d["avatars"]), ["7"])
+        self.assertEqual(va.load_avatars(doc.encode()), {7: a7})
+        self.assertEqual(va.load_export(doc.encode()), data)
+        # sin ALAV (firmware viejo) sale la v1 de siempre, sin avatares
+        v1 = json.loads(va.to_json(data))
+        self.assertEqual((v1["version"], "avatars" in v1), (1, False))
+        self.assertEqual(va.load_avatars(json.dumps(v1).encode()), {})
+
+    def test_bad_avatars_rejected(self):
+        data = export([entry(7, 1)])
+        good = json.loads(va.to_json(
+            data, avatars=self.alav([(7, 1, bytes(512))])))
+        img = good["avatars"]["7"]
+        for bad in (dict(good, avatars={"7": img[:-4]}),
+                    dict(good, avatars={"7": "!" + img}),
+                    dict(good, avatars={"8": img}),
+                    dict(good, avatars={"x": img}),
+                    dict(good, avatar_count=2)):
+            with self.assertRaises(ValueError, msg=repr(bad)[:60]):
+                va.load_export(json.dumps(bad).encode())
+        with self.assertRaises(ValueError):
+            va.parse_avatars(b"ALAV\x01\x01\x00")  # le falta el registro
+
+    def test_cli_same_output_v1_v2(self):
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "verify_album.py")
+        data = export([entry(7, 1)])
+        alav = self.alav([(7, 1, bytes(512))])
+        outs = []
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, avatars in (("v1", None), ("v2", alav)):
+                path = os.path.join(tmp, name + ".json")
+                with open(path, "w") as f:
+                    f.write(va.to_json(data, avatars=avatars))
+                r = subprocess.run([sys.executable, script, path, "--master",
+                                    MASTER.hex(), f"--mac=7={mac_of(7).hex()}",
+                                    "-v"], capture_output=True, text=True)
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                outs.append(r.stdout)
+        self.assertEqual(outs[0], outs[1])
 
     def test_cli_accepts_json(self):
         script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
