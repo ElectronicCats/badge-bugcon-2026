@@ -22,6 +22,14 @@ sin repetidas) y el álbum debe tener al menos las n estampas del último
 "saved=" que llegó: un alta confirmada no se pierde. Al acercarse a la
 capacidad vuelve a empezar desde <base>.
 
+Con --avatars prueba el guardado de avatares recibidos: `album clear` +
+`album fill 400` y en cada ciclo `album avstress`, que guarda un avatar de
+prueba por asistente e imprime "saved=<n>" tras cada guardado completo (tras
+un corte sigue donde iba). Tras el corte, `album check` debe pasar (album.bin
+intacto, con las 400 estampas) y `album avcheck` también: cada avatar que el
+índice dice que hay se lee con su CRC y es el de su dorsal (sin cubetas
+mezcladas ni imágenes dañadas), con al menos los n del último "saved=".
+
 Si el host deshabilita el puerto USB por tantos reinicios ("disabled by hub
 (EMI?)" en dmesg), reconectar el badge y seguir con --resume: el primer ciclo
 verifica el registro que dejó el último corte en lugar de borrarlo.
@@ -31,6 +39,7 @@ Requiere pyserial. Uso:
   ./tools/fs_powercut.py -n 20 -p /dev/ttyACM1
   ./tools/fs_powercut.py -n 176 --resume  # tras reconectar
   ./tools/fs_powercut.py --album -n 200   # cortes durante el alta
+  ./tools/fs_powercut.py --avatars -n 200 # cortes durante el guardado de avatares
 """
 import argparse
 import random
@@ -153,6 +162,73 @@ def run_album(args):
     return 0 if ok else 1
 
 
+def avatar_check(port):
+    """-> (avatares, salida) de `album avcheck`, o None si falló."""
+    out = command(port, "album avcheck", "RESULT album", timeout=30)
+    match = re.search(r"RESULT album PASS avatares=(\d+) verificados=\1", out)
+    if not match:
+        print(out.strip())
+        return None
+    return int(match.group(1)), out
+
+
+def run_avatars(args):
+    """Cortes durante el guardado de avatares; devuelve el código de salida."""
+    port = open_port(args.port)
+    confirmed = 0  # Avatares que el badge dijo haber guardado
+    stamps = 0  # Estampas de album.bin tras llenarlo: no deben cambiar
+    if not args.resume:
+        album_refill(port, 400)
+    saves = 0
+    max_save_ms = 0
+    for cycle in range(1, args.cycles + 1):
+        album = album_check(port)
+        checked = avatar_check(port)
+        # Las 400 de fill y las especiales de hito que el badge se da solo.
+        stamps = stamps or (album and album[0])
+        if album is None or checked is None or album[0] != stamps:
+            print(f"ciclo {cycle}: FALLO (album.bin: {album and album[0]} "
+                  f"estampas, esperadas {stamps})")
+            return 1
+        count, out = checked
+        if count < confirmed:
+            print(f"ciclo {cycle}: se perdió un avatar confirmado "
+                  f"({count} < {confirmed})\n{out.strip()}")
+            return 1
+        print(f"ciclo {cycle:3d}: avatares={count} (confirmados {confirmed}) "
+              f"{'tmp' if 'tmp=1' in out else ''}", flush=True)
+        confirmed = count
+        if count >= 400:
+            album_refill(port, 400)
+            confirmed = stamps = 0
+        command(port, "album avstress", "OK guardando")
+        deadline = time.time() + random.uniform(args.min_ms, args.max_ms) / 1000
+        out = b""
+        while time.time() < deadline:
+            out += port.read(256)
+        out += port.read(256)
+        lines = re.findall(rb"saved=(\d+) #\d+ (\d+)ms", out)
+        if lines:
+            confirmed = max(confirmed, int(lines[-1][0]))
+            saves += len(lines)
+            max_save_ms = max(max_save_ms, *(int(ms) for _, ms in lines))
+        if b"RESULT album FAIL" in out:
+            print(f"ciclo {cycle}: avstress falló\n{out.decode(errors='replace')}")
+            return 1
+        reset(port)
+        port = open_port(args.port)
+
+    album = album_check(port)
+    checked = avatar_check(port)
+    ok = album is not None and checked is not None and checked[0] >= confirmed
+    if checked is not None:
+        print(checked[1].strip())
+    print(f"{args.cycles} reinicios durante el guardado ({saves} avatares "
+          f"confirmados, peor guardado {max_save_ms} ms): "
+          f"{'PASS' if ok else 'FAIL'}")
+    return 0 if ok else 1
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     parser.add_argument("-p", "--port", default="/dev/ttyACM0")
@@ -163,11 +239,15 @@ def main():
                         help="no borra el registro: el ciclo 1 lo verifica")
     parser.add_argument("--album", action="store_true",
                         help="cortes durante el alta del álbum")
+    parser.add_argument("--avatars", action="store_true",
+                        help="cortes durante el guardado de avatares")
     parser.add_argument("--base", type=int, default=300,
                         help="--album: dorsales 1..base al empezar (300)")
     args = parser.parse_args()
     if args.album:
         return run_album(args)
+    if args.avatars:
+        return run_avatars(args)
 
     port = open_port(args.port)
     if not args.resume:
