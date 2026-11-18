@@ -12,7 +12,7 @@
 const fs = require("fs");
 const path = require("path");
 const puppeteer = require("puppeteer-core");
-const { CASES } = require("./test_album_page.cjs");
+const { CASES, V2_CASES } = require("./test_album_page.cjs");
 
 const html = path.resolve(process.argv[2] || path.join(__dirname, "../web/album/index.html"));
 const BROWSER = process.env.BROWSER || "/usr/bin/brave-browser";
@@ -30,6 +30,10 @@ const STATES = {
   "típico, filtro Tengo": async p => { await open(p, CASES["típico .json"]); await p.evaluate(() => document.querySelector("[data-f=got]").click()); },
   "típico, detalle con handle": async p => {
     await open(p, CASES["típico .json"]);
+    await p.evaluate(() => document.querySelector('#grid button[aria-label^="#013"]').click());
+  },
+  "v2, detalle con avatar": async p => {
+    await open(p, V2_CASES["v2 con avatares"]);
     await p.evaluate(() => document.querySelector('#grid button[aria-label^="#013"]').click());
   },
   "típico, tras descargar contactos": async p => {

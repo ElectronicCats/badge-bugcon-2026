@@ -165,14 +165,14 @@ const CASES = {
   "lleno .json": [["lleno.json", albumJson(F)]],
   "JSON roto": [["roto.json", Buffer.from('{"format": "bb26-album", ')]],
   "format equivocado": [["otro.json", albumJson(T, { format: "bb26-card" })]],
-  "version equivocada": [["v2.json", albumJson(T, { version: 2 })]],
+  "version equivocada": [["v3.json", albumJson(T, { version: 3 })]],
   "albm con base64 inválido": [["b64.json", Buffer.from(JSON.stringify({ ...tj, albm: "@@no base64@@" }))]],
   "albm no es texto": [["num.json", Buffer.from(JSON.stringify({ ...tj, albm: 5 }))]],
   "count no cuadra (.json)": [["count.json", albumJson(badCount)]],
   "count no cuadra (.bin)": [["count.bin", badCount]],
   "resumen editado (badge_no)": [["editado.json", albumJson(T, { badge_no: 35 })]],
   "resumen editado (mac en minúsculas)": [["mac.json", albumJson(T, { mac: "f4:12:fa:52:03:f8" })]],
-  "300 KB": [["grande.json", Buffer.alloc(300 * 1024, 0x20)]],
+  "1.2 MB": [["grande.json", Buffer.alloc(1200 * 1024, 0x20)]],
   "archivo vacío": [["nada.json", Buffer.alloc(0)]],
   "JSON nulo": [["null.json", Buffer.from("null")]],
   "error con álbum abierto": [["tipico.json", albumJson(T)], ["roto.json", Buffer.from("{")]],
@@ -182,7 +182,28 @@ const CASES = {
   "QR mal formado": "#/A/12/ABC/DEF",
 };
 
-module.exports = { CASES };
+/* ---------------- .json v2 con avatares (la referencia no los conoce: no se compara) ---------------- */
+
+// Avatar de 64×64 sintético y distinto por dorsal (512 B, 1 = blanco).
+const avatarOf = no => Buffer.from(Array.from({ length: 512 }, (_, i) => (no * 31 + i * 7 + (i >> 3)) & 0xff));
+const avatarsJson = (data, avatars, extra = {}) => albumJson(data, {
+  version: 2, avatar_count: Object.keys(avatars).length,
+  avatars: Object.fromEntries(Object.entries(avatars).map(([no, img]) => [no, Buffer.from(img).toString("base64")])), ...extra });
+
+const GOOD = [3, 7, 13, 399];   // asistentes de «típico»
+const V2_CASES = {
+  "v2 con avatares": [["tipico_v2.json", avatarsJson(T, Object.fromEntries(GOOD.map(n => [n, avatarOf(n)])))]],
+  // 12 corto, 250 base64 inválido, 34 es el mío, 999 no está, x no es un dorsal, 5 es un reto, 15 no es texto → 7 descartados
+  "v2 con avatares dañados": [["dañado_v2.json", albumJson(T, { version: 2, avatar_count: 9, avatars: {
+    7: avatarOf(7).toString("base64"), 12: avatarOf(12).subarray(0, 500).toString("base64"), 250: "@@@",
+    34: avatarOf(34).toString("base64"), 999: avatarOf(999).toString("base64"), x: avatarOf(1).toString("base64"),
+    5: avatarOf(5).toString("base64"), 13: avatarOf(13).toString("base64"), 15: 5 } })]],
+  "v2 sin avatares": [["vacio_v2.json", avatarsJson(T, {})]],
+  "v2 lleno (400 avatares)": [["lleno_v2.json", avatarsJson(F, Object.fromEntries(
+    Array.from({ length: 400 }, (_, i) => i + 1).filter(n => n !== MY_NO).map(n => [n, avatarOf(n)])))]],
+};
+
+module.exports = { CASES, V2_CASES };
 
 /* ---------------- dentro de la página ---------------- */
 
@@ -262,7 +283,7 @@ async function runCase(browser, file, c) {
 const reason = s => (s.match(/ no se puede abrir: (.*)\.$/) || [])[1];
 
 // Apertura y errores: lo que la página nueva añade y la referencia no tiene.
-const NEXT_STEPS = ["Guardar álbum (.json)", "Vuelve a guardarlo", "se editó a mano", "unos 52 KB"];
+const NEXT_STEPS = ["Guardar álbum (.json)", "Vuelve a guardarlo", "se editó a mano", "menos de 1 MB"];
 async function checkNewPage(browser, check, refOut) {
   const page = await browser.newPage();
   const errors = [];
@@ -693,6 +714,67 @@ async function checkNewPage(browser, check, refOut) {
   await page.close();
 }
 
+// El .json v2: el avatar se dibuja en el detalle, el dañado se descarta y el resto sigue igual.
+async function checkAvatars(browser, check) {
+  const page = await browser.newPage();
+  const errors = [];
+  page.on("pageerror", e => errors.push(e.message));
+  await page.goto("file://" + html);
+  const open = async ([[n, b]]) => page.evaluate(openAll, [[n, b.toString("base64")]]);
+  // detalle de un dorsal: aria, canvas y píxeles leídos del canvas
+  const detail = no => page.evaluate(n => {
+    showDetail(album.entries.find(e => e.card.badgeNo === n).card, 0);
+    const f = $("dNoFace"), cv = f.querySelector("canvas");
+    const px = cv && Array.from(cv.getContext("2d").getImageData(0, 0, cv.width, cv.height).data).filter((_, i) => i % 4 === 0);
+    const r = { hidden: f.getAttribute("aria-hidden"), text: f.textContent, label: cv && cv.getAttribute("aria-label"),
+      role: cv && cv.getAttribute("role"), w: cv && cv.width, h: cv && cv.height, px };
+    $("detail").close();
+    return r;
+  }, no);
+  const bits = img => Array.from({ length: 4096 }, (_, i) => img[i >> 3] & (0x80 >> (i & 7)) ? 255 : 0);
+
+  const [st] = await open(V2_CASES["v2 con avatares"]);
+  check("v2: abre y dice cuántos avatares trae", /^✓ Álbum abierto, con 4 avatares\.$/.test(st), st);
+  const a7 = await detail(7);
+  check("v2: el detalle dibuja el avatar 64×64 igual, bit a bit, al del badge (1 = blanco)",
+    a7.w === 64 && a7.h === 64 && JSON.stringify(a7.px) === JSON.stringify(bits(avatarOf(7))), `${a7.w}×${a7.h}`);
+  check("v2: el avatar es una imagen con nombre «Avatar de <nickname>» y la inicial no sobra",
+    a7.role === "img" && a7.label === "Avatar de Zoë 🐛 Bug" && a7.hidden === null && a7.text === "", JSON.stringify(a7).slice(0, 200));
+  const a399 = await detail(399);
+  check("v2: otro dorsal con su propio avatar", JSON.stringify(a399.px) === JSON.stringify(bits(avatarOf(399))));
+  const none = await detail(16);
+  check("v2: quien no trae avatar sigue con la inicial, oculta al lector",
+    none.px === null && none.hidden === "true" && none.text.length > 0, JSON.stringify(none));
+  const back = await detail(7);
+  check("v2: abrir otro detalle y volver no deja restos", JSON.stringify(back.px) === JSON.stringify(a7.px));
+
+  const [bad] = await open(V2_CASES["v2 con avatares dañados"]);
+  check("v2 dañado: abre, conserva los buenos y avisa de los descartados",
+    /^✓ Álbum abierto, con 2 avatares\. 7 avatares dañados se descartaron\.$/.test(bad), bad);
+  const d12 = await detail(12), d7 = await detail(7), d250 = await detail(250);
+  check("v2 dañado: el avatar corto o con base64 inválido se descarta; el bueno se conserva",
+    d12.px === null && d250.px === null && JSON.stringify(d7.px) === JSON.stringify(bits(avatarOf(7))));
+  const sections = await page.evaluate(() => JSON.stringify(sections()));
+  const [plain] = await open(CASES["típico .json"]);
+  check("el mismo álbum en v1: mismas secciones y sin avatares",
+    plain === "✓ Álbum abierto." && sections === await page.evaluate(() => JSON.stringify(sections())) &&
+    (await detail(7)).px === null);
+  const [empty] = await open(V2_CASES["v2 sin avatares"]);
+  check("v2 sin avatares: abre como la v1", empty === "✓ Álbum abierto.", empty);
+
+  const [big] = [V2_CASES["v2 lleno (400 avatares)"]];
+  const size = big[0][1].length;
+  const t0 = Date.now();
+  const [full] = await open(big);
+  const ms = Date.now() - t0;
+  const ids = await page.evaluate(() => [album.avatars.size, Math.min(...album.avatars.keys())]);
+  check(`v2 lleno: ${Math.round(size / 1024)} KB, 399 avatares en ${ms} ms (≤ 3 s)`,
+    size < 1024 * 1024 && ms <= 3000 && ids[0] === 399 && /con 399 avatares\./.test(full), `${size} B ${ms} ms ${full}`);
+  check("v2 lleno: el último avatar sale igual", JSON.stringify((await detail(400)).px) === JSON.stringify(bits(avatarOf(400))));
+  check("sin errores de página (avatares)", !errors.length, errors.join("; "));
+  await page.close();
+}
+
 if (require.main === module) (async () => {
   const ref = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "album-ref-")), "index.html");
   fs.writeFileSync(ref, execFileSync("git", ["show", REF_COMMIT + ":web/album/index.html"],
@@ -730,6 +812,7 @@ if (require.main === module) (async () => {
       }
     }
     await checkNewPage(browser, check, refOut);
+    await checkAvatars(browser, check);
   } finally {
     await browser.close();
     fs.rmSync(path.dirname(ref), { recursive: true, force: true });

@@ -10,8 +10,12 @@
   no hace peticiones de red).
 
   Fuentes:
-  - El .json que guarda el configurador ("bb26-album" v1) o el .bin de ALBM.
-    ALBM no trae avatares: el detalle muestra la inicial.
+  - El .json que guarda el configurador ("bb26-album" v1 o v2) o el .bin de ALBM.
+    La v2 trae los avatares que el badge recibió por IR ("avatars": dorsal ->
+    base64 de 512 B, 64x64 a 1 bpp, 1 = blanco): el detalle los dibuja en un
+    <canvas> y descarta el que no cuadre (largo, base64, dorsal sin estampa).
+    Sin avatar (v1, el .bin de ALBM o el avatar de ese dorsal) el detalle
+    muestra la inicial.
   - Ruta del QR del badge en el fragmento: index.html#/A/<dorsal>/
     <bitmap>/<tag>. Solo dice qué dorsales tiene (vista rápida); el destino
     del QR está pendiente.
@@ -138,6 +142,7 @@ dialog {
 }
 dialog::backdrop { background: var(--scrim); }
 #dNoFace { width: 192px; height: 192px; margin: 0 auto var(--sp-3); display: flex; align-items: center; justify-content: center; background: var(--card2); border-radius: 6px; font-size: 72px; font-weight: 700; color: var(--muted); }
+#dNoFace canvas { width: 192px; height: 192px; border-radius: 6px; image-rendering: pixelated; }
 #dMeta { color: var(--muted); margin: 2px 0 var(--sp-3); }
 .stat { display: grid; grid-template-columns: 36px 26px 1fr; gap: 6px; align-items: center; font-size: var(--fs-s); margin-bottom: var(--sp-1); }
 .stat i { display: block; height: 8px; background: var(--accent); border-radius: 4px; }
@@ -239,7 +244,7 @@ dialog::backdrop { background: var(--scrim); }
     <li>El archivo se abre solo en este navegador: la página no lo envía a ningún lado y
     no hay servidor ni almacenamiento central.</li>
     <li>El .json y los .vcf incluyen el nickname y el handle de quienes los compartieron
-    contigo por infrarrojo: guárdalos para ti y no los publiques.</li>
+    contigo por infrarrojo, y el .json también su avatar: guárdalos para ti y no los publiques.</li>
     <li>Para borrar tu estampa y tu álbum del badge: Ajustes &gt; "Borrar datos". Lo que ya
     pasó a otros badges se queda en sus álbumes.</li>
   </ul>
@@ -265,8 +270,9 @@ const CARD_BYTES = 64, ALBUM_HEADER_BYTES = 80, ENTRY_BYTES = 80;
 const ATTENDEE = 0, CHALLENGE = 1, FLAG_HANDLE = 0x02;
 const ATTENDEES = 400;   // cfg::album::ATTENDEES
 const MASTER_FIRST = 901; // cfg::villa::MASTER_FIRST: maestros de villa, uno por TEAMS
-const EXPORT_FORMAT = "bb26-album", EXPORT_VERSION = 1;
-const MAX_FILE_BYTES = 256 * 1024;   // el álbum lleno mide ≈ 52 KB en .json
+const EXPORT_FORMAT = "bb26-album", EXPORT_VERSIONS = [1, 2];
+const AVATAR_SIDE = 64, AVATAR_BYTES = 512;   // cfg::ir::AVATAR_SIDE/AVATAR_BYTES
+const MAX_FILE_BYTES = 1024 * 1024;   // el álbum lleno mide ≈ 52 KB en .json y ≈ 0.4 MB con 400 avatares
 // Ruta del QR (album::qrText): bitmap de 50 B y tag de 8 B en base32.
 const QR_RE = /\/A\/(\d{1,5})\/([A-Z2-7]{80})\/([A-Z2-7]{13})\/?$/i;
 
@@ -328,7 +334,7 @@ const fromB64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 function exportFromJson(doc) {
   let data;
   try { data = fromB64(doc.albm); } catch (e) { /* base64 inválido */ }
-  if (!doc || doc.format !== EXPORT_FORMAT || doc.version !== EXPORT_VERSION ||
+  if (!doc || doc.format !== EXPORT_FORMAT || !EXPORT_VERSIONS.includes(doc.version) ||
       typeof doc.albm !== "string" || !data) {
     throw new Error("no es un álbum de la Copa BugCon 2026");
   }
@@ -338,6 +344,22 @@ function exportFromJson(doc) {
     if (doc[k] !== s[k]) throw new Error("el resumen no coincide con la exportación (¿se editó?)");
   }
   return data;
+}
+
+// "avatars" de un .json v2 -> { dorsal: 512 B }. El que no cuadre (dorsal que no es de un
+// asistente del álbum, base64 inválido, largo distinto) se descarta sin tocar el resto.
+function avatarsFromJson(doc, entries) {
+  const out = new Map();
+  let dropped = 0;
+  const raw = doc && doc.version === 2 && doc.avatars && typeof doc.avatars === "object" ? doc.avatars : {};
+  const mine = new Set(entries.filter(e => e.card.type === ATTENDEE).map(e => e.card.badgeNo));
+  for (const [key, text] of Object.entries(raw)) {
+    let img = null;
+    try { img = fromB64(text); } catch (e) { /* base64 inválido */ }
+    if (/^\d+$/.test(key) && mine.has(+key) && img && img.length === AVATAR_BYTES) out.set(+key, img);
+    else dropped++;
+  }
+  return { avatars: out, dropped };
 }
 
 function albumFromExport(data, source) {
@@ -356,7 +378,7 @@ function albumFromExport(data, source) {
   // Dorsales 1..400 que tengo, con el mío (album::collected)
   const numbers = new Set([mine.badgeNo, ...entries.filter(e => e.card.type === ATTENDEE)
     .map(e => e.card.badgeNo)].filter(inRange));
-  return { no: mine.badgeNo, mine, entries, numbers, source };
+  return { no: mine.badgeNo, mine, entries, numbers, source, avatars: new Map(), dropped: 0 };
 }
 
 // Base32 de RFC 4648 sin relleno -> bytes
@@ -599,8 +621,33 @@ function show(a) {
   render();
 }
 
+// Avatar de 64x64 (1 bpp, filas completas, MSB primero, 1 = blanco) en un <canvas>; se dibuja
+// al abrir el detalle, no al cargar el archivo.
+function avatarCanvas(img, nick) {
+  const cv = el("canvas"), ctx = cv.getContext("2d");
+  cv.width = cv.height = AVATAR_SIDE;
+  const px = ctx.createImageData(AVATAR_SIDE, AVATAR_SIDE), row = AVATAR_SIDE >> 3;
+  for (let y = 0; y < AVATAR_SIDE; y++) {
+    for (let x = 0; x < AVATAR_SIDE; x++) {
+      const v = img[y * row + (x >> 3)] & (0x80 >> (x & 7)) ? 255 : 0, o = (y * AVATAR_SIDE + x) * 4;
+      px.data.set([v, v, v, 255], o);
+    }
+  }
+  ctx.putImageData(px, 0, 0);
+  cv.setAttribute("role", "img");
+  cv.setAttribute("aria-label", "Avatar de " + (nick || "esta persona"));
+  return cv;
+}
+
 function showDetail(c, order) {
-  $("dNoFace").textContent = initial(c);
+  const img = c.type === ATTENDEE && album.avatars.get(c.badgeNo);
+  if (img) {
+    $("dNoFace").replaceChildren(avatarCanvas(img, c.nickname));
+    $("dNoFace").removeAttribute("aria-hidden");
+  } else {
+    $("dNoFace").textContent = initial(c);
+    $("dNoFace").setAttribute("aria-hidden", "true");
+  }
   $("dNick").textContent = c.nickname || "—";
   $("dMeta").textContent = [kindName(c),
     TEAMS[c.team] || (c.type === ATTENDEE ? "Sin villa" : ""), POSITIONS[c.position],
@@ -653,15 +700,18 @@ async function openFile(f) {
   try {
     if (f.size > MAX_FILE_BYTES) throw new Error("es demasiado grande");
     const bytes = new Uint8Array(await f.arrayBuffer());
-    let data = bytes, when = "";
+    let data = bytes, when = "", doc = null;
     if (!validAlbm(bytes)) {   // no es un .bin de ALBM: el .json
-      let doc;
       try { doc = JSON.parse(new TextDecoder().decode(bytes)); } catch (e) { /* abajo */ }
       data = exportFromJson(doc);
       if (typeof doc.exported_at === "string") when = ", exportado " + doc.exported_at;
     }
-    show(albumFromExport(data, "Archivo " + f.name + when + "."));
-    setStatus("Álbum abierto.", "ok");
+    const a = albumFromExport(data, "Archivo " + f.name + when + ".");
+    if (doc) Object.assign(a, avatarsFromJson(doc, a.entries));
+    show(a);
+    setStatus("Álbum abierto" + (a.avatars.size ? ", con " + a.avatars.size +
+      (a.avatars.size === 1 ? " avatar" : " avatares") : "") + "." +
+      (a.dropped ? " " + a.dropped + (a.dropped === 1 ? " avatar dañado se descartó." : " avatares dañados se descartaron.") : ""), "ok");
   } catch (err) {
     const next = NEXT_STEP.find(([k]) => err.message.includes(k));
     setStatus(f.name + " no se puede abrir: " + err.message + "." + (next ? " " + next[1] : "") +
@@ -674,7 +724,7 @@ const NEXT_STEP = [
   ["no es un álbum", "Elige el .json que guardó el configurador con «Guardar álbum (.json)»."],
   ["incompleta o dañada", "Vuelve a guardarlo desde el configurador con el badge conectado."],
   ["resumen no coincide", "El archivo se editó a mano; usa el original."],
-  ["demasiado grande", "El álbum lleno mide unos 52 KB; ¿es el archivo correcto?"],
+  ["demasiado grande", "El álbum lleno mide menos de 1 MB; ¿es el archivo correcto?"],
 ];
 
 for (const id of ["openBtn", "openBtn2"]) $(id).addEventListener("click", () => $("file").click());
@@ -706,7 +756,7 @@ document.addEventListener("drop", e => {
 function openQr(m) {
   const no = +m[1], numbers = bitmapNumbers(base32(m[2]));
   if (inRange(no)) numbers.add(no);
-  show({ no, mine: null, entries: [], numbers, source: "Vista rápida del código QR: solo los dorsales." });
+  show({ no, mine: null, entries: [], numbers, avatars: new Map(), dropped: 0, source: "Vista rápida del código QR: solo los dorsales." });
   setStatus("Vista rápida del código QR.", "ok");
 }
 
