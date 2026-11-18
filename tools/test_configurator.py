@@ -98,7 +98,8 @@ class CatalogTest(unittest.TestCase):
             text = " ".join(text.split()).lower()  # sin saltos de línea
             for phrase in ["privacidad",
                            "no hay servidor ni almacenamiento central",
-                           "infrarrojo", "handle", "publiques", "borrar datos"]:
+                           "infrarrojo", "handle", "avatar", "publiques",
+                           "borrar datos"]:
                 with self.subTest(page=page, phrase=phrase):
                     self.assertIn(phrase, text)
 

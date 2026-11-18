@@ -353,9 +353,17 @@ header .hint { margin-top: 0; }
     </div>
     <p class="fielderr" id="handleErr" aria-live="polite"></p>
     <p class="hint">El handle solo se envía a otros badges si marcas la casilla.</p>
-    <details class="more"><summary aria-label="Más información: handle">Más información</summary>
+    <div class="row">
+      <label><input type="checkbox" id="avatarShare" checked> Compartir mi avatar por infrarrojo</label>
+    </div>
+    <p class="hint">Con la casilla marcada, tu avatar sale por infrarrojo (reducido a 64×64) a
+    cada badge con el que intercambies y se guarda en su álbum. Desmárcala y guarda la estampa
+    para que no salga; tú sigues recibiendo el de la otra persona.</p>
+    <details class="more"><summary aria-label="Más información: handle y avatar">Más información</summary>
       <p class="hint">El handle viaja por infrarrojo dentro de tu estampa a cada badge con el
-      que intercambies, y aparece en su álbum. El avatar se queda en tu badge (no viaja por IR).</p>
+      que intercambies, y aparece en su álbum. El avatar va aparte, después de la estampa, y
+      el intercambio tarda unos 12 s más; la plantilla (el gafete) no sale de tu badge. En el
+      badge también lo cambias en Mi Estampa &gt; Editar &gt; Compartir avatar.</p>
     </details>
     <div class="row">
       <button id="readCardBtn" disabled>Leer mi estampa del badge</button>
@@ -546,10 +554,12 @@ header .hint { margin-top: 0; }
     se guardan solo en tu badge. Nadie, ni la organización, recibe una copia.</li>
     <li>Al intercambiar, tu estampa (nickname, villa, posición, estadísticas y dorsal) viaja
     por infrarrojo al otro badge y se queda en su álbum; no se puede retirar de un badge
-    ajeno. Tu handle solo va si marcas "Compartir mi handle". El avatar y la plantilla no
-    salen de tu badge.</li>
-    <li>El .json de "Guardar álbum (.json)" incluye el nickname y el handle de quienes los
-    compartieron contigo: guárdalo para ti y no lo publiques.</li>
+    ajeno. Tu handle solo va si marcas "Compartir mi handle".</li>
+    <li>Tu avatar también sale por infrarrojo (reducido a 64×64, en blanco y negro) y se guarda
+    en el álbum del otro badge, salvo que desmarques "Compartir mi avatar por infrarrojo" y
+    guardes la estampa. No se puede retirar de un badge ajeno. La plantilla no sale de tu badge.</li>
+    <li>El .json de "Guardar álbum (.json)" incluye el nickname, el handle y el avatar de
+    quienes los compartieron contigo: guárdalo para ti y no lo publiques.</li>
     <li>Para borrar tu estampa, tu avatar, tu álbum y las imágenes que enviaste a los slots:
     en el badge, Ajustes &gt; "Borrar datos".</li>
   </ul>
@@ -581,6 +591,7 @@ const STAT_MAX = 99, STAT_BUDGET = 200;
 const AVATAR_W = 96, AVATAR_H = 96;
 const AVATAR_BYTES = ((AVATAR_W + 7) >> 3) * AVATAR_H;
 const CARD_FLAG_AVATAR = 0x01;   // card::FLAG_AVATAR: el badge tiene avatar (AVRD lo devuelve)
+const CARD_FLAG_AVATAR_PRIVATE = 0x04;   // card::FLAG_AVATAR_PRIVATE: mi avatar no sale por IR
 const NICK_BYTES = 16, HANDLE_BYTES = 20, NONE = 0xFF;
 const CARD_VERSION = 1, CARD_FIELDS_BYTES = 48, CARD_BYTES = 64;
 const ALBUM_HEADER_BYTES = 80;
@@ -811,8 +822,9 @@ function parseCard(b) {
   };
 }
 
-// Payload de CARD: bytes 0..47 de la estampa. type, badge_no, rarity y flags
-// los pone el badge; se copian de la actual para no mandar basura.
+// Payload de CARD: bytes 0..47 de la estampa. type, badge_no y rarity los pone el
+// badge y de flags solo cuenta FLAG_AVATAR_PRIVATE; se copian de la actual para no
+// mandar basura.
 function packCardFields(c) {
   const out = new Uint8Array(CARD_FIELDS_BYTES);
   const dv = new DataView(out.buffer);
@@ -1640,6 +1652,7 @@ function editedCard() {
     position: +$("pos").value,
     stats: statValues(),
     handle: $("handleOn").checked ? cleanText($("handle").value) : "",
+    flags: ($("avatarShare").checked ? base.flags & ~CARD_FLAG_AVATAR_PRIVATE : base.flags | CARD_FLAG_AVATAR_PRIVATE),
   });
 }
 
@@ -1685,7 +1698,7 @@ function paintFieldErrors(c, nb) {
 for (const [id, ev] of [["nick", "blur"], ["saveCardBtn", "click"]]) {
   $(id).addEventListener(ev, () => { touchedNick.v = true; onCardEdit(); });
 }
-for (const id of ["nick", "team", "pos", "handle", "handleOn"]) {
+for (const id of ["nick", "team", "pos", "handle", "handleOn", "avatarShare"]) {
   $(id).addEventListener("input", onCardEdit);
 }
 
@@ -1696,6 +1709,7 @@ function showCard(c) {
   statInputs.forEach((s, i) => { s.value = c.stats[i]; });
   $("handleOn").checked = c.handle !== "";
   $("handle").value = c.handle;
+  $("avatarShare").checked = !(c.flags & CARD_FLAG_AVATAR_PRIVATE);
   onCardEdit();
 }
 
@@ -2045,7 +2059,7 @@ const FRIENDLY = {
 const OP_NAMES = {
   INFO: "Leer datos del badge", UPLD: "Enviar imagen", READ: "Leer slot", SHOW: "Mostrar slot",
   DEL: "Vaciar slot", CLR: "Pantalla en blanco", AVTR: "Enviar avatar", AVRD: "Leer avatar",
-  ALBM: "Leer álbum", HOME: "Cambiar inicio",
+  ALBM: "Leer álbum", ALAV: "Leer avatares", HOME: "Cambiar inicio",
 };
 
 let busy = false;
@@ -2409,10 +2423,14 @@ $("saveCardBtn").addEventListener("click", async () => {
 /* ---------------- exportación local del álbum ----------------
    El .json (formato bb26-album) lleva la exportación de ALBM completa
    en base64 ("albm") y un resumen legible; quien lo lee solo confía en
-   "albm" y rechaza un resumen que no coincida. Referencia: to_json()/
-   load_export() de tools/verify_album.py; lo abren web/album y
-   verify_album.py. Se guarda en la computadora, no se envía a ningún lado. */
-const EXPORT_FORMAT = "bb26-album", EXPORT_VERSION = 1;
+   "albm" y rechaza un resumen que no coincida. La versión 2 (firmware con
+   ALAV) agrega los avatares recibidos por IR: "avatar_count" y "avatars"
+   {dorsal: base64 de 512 B}; con firmware sin ALAV sale la versión 1.
+   Referencia: to_json()/load_export() de tools/verify_album.py; lo abren
+   web/album y verify_album.py. Se guarda en la computadora, no se envía a
+   ningún lado. */
+const EXPORT_FORMAT = "bb26-album";
+const IR_AVATAR_BYTES = 512;   // cfg::ir::AVATAR_BYTES (64x64); el AVATAR_BYTES de arriba es el propio de 96x96
 
 function albumSummary(data) {
   return {
@@ -2425,13 +2443,50 @@ function albumSummary(data) {
 
 const base64 = bytes => btoa(Array.from(bytes, b => String.fromCharCode(b)).join(""));
 
-function albumJson(data) {
-  return JSON.stringify({
-    format: EXPORT_FORMAT, version: EXPORT_VERSION, ...albumSummary(data),
+// Avatares recibidos por IR (ALAV, services/usb_protocol.h): "ALAV", formato 1,
+// count u16 y count × (dorsal u16, crc u16, imagen). Con crc 0 no es avatar.
+// Solo los de asistentes que están en el álbum, como verify_album.py.
+// -> { dorsal: base64 }
+function albumAvatars(alav, albm) {
+  const rec = 4 + IR_AVATAR_BYTES, count = alav[5] | alav[6] << 8;
+  if (String.fromCharCode(...alav.subarray(0, 5)) !== "ALAV\x01" || alav.length !== 7 + count * rec) {
+    throw new Error("exportación de ALAV inválida");
+  }
+  const mine = new Set();
+  for (let i = 0; i < (albm[12] | albm[13] << 8); i++) {
+    const c = ALBUM_HEADER_BYTES + i * 80;
+    if (albm[c + 1] === 0) mine.add(albm[c + 2] | albm[c + 3] << 8);
+  }
+  const out = {};
+  for (let i = 0; i < count; i++) {
+    const o = 7 + i * rec, no = alav[o] | alav[o + 1] << 8;
+    if ((alav[o + 2] | alav[o + 3] << 8) && mine.has(no)) out[no] = base64(alav.subarray(o + 4, o + rec));
+  }
+  return out;
+}
+
+function albumJson(data, avatars) {
+  const doc = {
+    format: EXPORT_FORMAT, version: avatars ? 2 : 1, ...albumSummary(data),
     fw: info ? info.fw : null,
     exported_at: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
     albm: base64(data),
-  }, null, 1);
+  };
+  if (avatars) { doc.avatar_count = Object.keys(avatars).length; doc.avatars = avatars; }
+  return JSON.stringify(doc, null, 1);
+}
+
+// ALAV tras ALBM: { dorsal: base64 }; false si el firmware no lo tiene (badcmd: se guarda la v1);
+// null si falló (command() ya avisó)
+async function fetchAvatars(albm) {
+  return command("ALAV", null, async () => {
+    try {
+      return albumAvatars(await readPayloadReply(), albm);
+    } catch (e) {
+      if (e.message.startsWith("ERR badcmd")) return false;
+      throw e;
+    }
+  }, "Leer los avatares");
 }
 
 function download(text, name) {
@@ -2445,10 +2500,12 @@ function download(text, name) {
 $("jsonBtn").addEventListener("click", async () => {
   setStatus("Leyendo el álbum…", "");
   const data = await fetchAlbum();
-  if (data) {
+  const avatars = data && await fetchAvatars(data);
+  if (data && avatars !== null) {
     const s = albumSummary(data), name = "album_" + s.badge_no + ".json";
-    download(albumJson(data), name);
-    setStatus("Se guardó " + name + " (" + s.count + " estampas).", "ok");
+    download(albumJson(data, avatars || null), name);
+    setStatus("Se guardó " + name + " (" + s.count + " estampas" +
+      (avatars ? ", " + Object.keys(avatars).length + " avatares" : "") + ").", "ok");
   }
   flashResult("jsonFlash");
 });

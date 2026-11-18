@@ -55,8 +55,13 @@ se guardan solo en tu badge, y nadie (ni la organización) recibe una copia.
 Al intercambiar, tu estampa (nickname, villa, posición, estadísticas y dorsal)
 viaja por infrarrojo al otro badge y se queda en su álbum; no se puede
 retirar de un badge ajeno. Tu handle solo va si marcas "Compartir mi handle".
-El avatar y el gafete no salen de tu badge. Para borrar tu estampa, tu avatar,
-tu álbum y las imágenes de los slots: en el badge, Ajustes > "Borrar datos".
+Tu avatar también sale por infrarrojo (reducido a 64x64, en blanco y negro) y
+se guarda en el álbum del otro badge, salvo que desmarques "Compartir mi
+avatar por infrarrojo" en el configurador (o en el badge: Mi Estampa > Editar >
+Compartir avatar). El gafete no sale de tu badge. El .json del álbum incluye el
+nickname, el handle y el avatar de quienes los compartieron contigo: no lo
+publiques. Para borrar tu estampa, tu avatar, tu álbum y las imágenes de los
+slots: en el badge, Ajustes > "Borrar datos".
 
 
 Licencia

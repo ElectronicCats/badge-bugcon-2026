@@ -3,8 +3,8 @@
      Wi-Fi (services/wifi_config), comprimida y embebida con
      tools/embed_page.py. Un solo HTML sin recursos externos: en el AP del
      badge el teléfono no tiene Internet. Edita los campos de la estampa con
-     los límites del firmware; el avatar y el gafete quedan en el configurador
-     USB. Rutas: GET /card (64 B firmados) y POST /card (bytes 0..47)
+     los límites del firmware; la imagen del avatar y el gafete quedan en el
+     configurador USB. Rutas: GET /card (64 B firmados) y POST /card (bytes 0..47)
      -> "OK" o "ERR <motivo>" (los de CARD). -->
 <html lang="es">
 <meta charset="utf-8">
@@ -96,10 +96,13 @@ solo en tu badge.</li>
 <li>Al intercambiar, tu estampa (nickname, villa, posición, estadísticas y dorsal) viaja por
 infrarrojo al otro badge y se queda en su álbum; no se puede retirar de un badge ajeno.
 Tu handle solo va si marcas la casilla.</li>
-<li>El .json que guarda el configurador USB incluye el nickname y el handle de quienes
-los compartieron contigo: no lo publiques.</li>
+<li>Tu avatar también sale por infrarrojo (reducido a 64×64, en blanco y negro) y se guarda
+en el álbum del otro badge, salvo que lo apagues en el badge: Mi Estampa &gt; Editar &gt;
+Compartir avatar, o en el configurador USB. No se puede retirar de un badge ajeno.</li>
+<li>El .json que guarda el configurador USB incluye el nickname, el handle y el avatar de
+quienes los compartieron contigo: no lo publiques.</li>
 <li>Para borrar tu estampa, tu avatar y tu álbum: en el badge, Ajustes &gt; "Borrar
-datos". El avatar y la imagen del badge se cambian con el configurador USB.</li>
+datos". La imagen del avatar se cambia con el configurador USB.</li>
 </ul>
 </section>
 

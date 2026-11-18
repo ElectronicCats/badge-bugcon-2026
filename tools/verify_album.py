@@ -46,6 +46,11 @@ cuenta es "albm" y un resumen que no coincide con ella se rechaza:
   {"format": "bb26-album", "version": 1, "badge_no": 42,
    "mac": "F4:12:FA:52:03:F8", "provisioned": false, "count": 1,
    "fw": "0.1.0", "exported_at": "2026-10-08T19:00:00Z", "albm": "<base64>"}
+La versión 2 (firmware con ALAV) agrega los avatares que el badge recibió por IR:
+"avatar_count": n y "avatars": {"<dorsal>": "<base64 de 512 B>"} (64x64, 1 bpp,
+filas completas, MSB primero, 1 = blanco), un dorsal de asistente que está en
+"albm". Los avatares no entran en la verificación (sin firma: solo CRC al leerlos
+del badge) y la salida de este programa es la misma con la v1 y la v2.
 
 QR del álbum (vista rápida web): con --qr verifica el texto que
 codifica la pantalla QR del badge (lo que leerá web/album):
@@ -80,6 +85,9 @@ HEADER = struct.Struct("<4sBB6sH2s64s")
 ENTRY = struct.Struct("<64s8sHI2s")
 FORMAT = 1
 JSON_FORMAT = "bb26-album"  # .json de la exportación local
+JSON_VERSIONS = (1, 2)  # la 2 trae "avatars"
+AVATARS_MAGIC = b"ALAV"  # exportación ALAV, formato 1 (services/usb_protocol.h)
+AVATAR_BYTES = 512  # cfg::ir::AVATAR_BYTES: 64x64, 1 bpp
 ATTENDEE = 0  # card::ATTENDEE
 ATTENDEES = 400  # cfg::album::ATTENDEES
 SPECIAL = 2  # card::SPECIAL
@@ -143,15 +151,68 @@ def parse_album(data):
     return header, entries
 
 
-def to_json(data, fw=None, exported_at=None):
-    """Exportación ALBM -> .json de la exportación local (bb26-album)."""
-    header, _ = parse_album(data)
-    return json.dumps({
-        "format": JSON_FORMAT, "version": FORMAT, "badge_no": header["no"],
+def parse_avatars(data):
+    """Exportación ALAV -> {dorsal: imagen de 512 B}. Un registro con crc 0 no
+    es un avatar (el badge lo dio por dañado) y se omite."""
+    if len(data) < 7 or data[:5] != AVATARS_MAGIC + b"\x01":
+        raise ValueError("no es una exportación ALAV de formato 1")
+    count = int.from_bytes(data[5:7], "little")
+    record = 4 + AVATAR_BYTES
+    if len(data) != 7 + count * record:
+        raise ValueError(f"ALAV mide {len(data)} B; con {count} avatares "
+                         f"serían {7 + count * record}")
+    out = {}
+    for i in range(count):
+        no, crc = struct.unpack_from("<HH", data, 7 + i * record)
+        if crc:
+            out[no] = data[11 + i * record:7 + (i + 1) * record]
+    return out
+
+
+def to_json(data, fw=None, exported_at=None, avatars=None):
+    """Exportación ALBM -> .json de la exportación local (bb26-album). Con
+    `avatars` (ALAV, crudo) es la versión 2; sin él, la 1 de siempre."""
+    header, entries = parse_album(data)
+    doc = {
+        "format": JSON_FORMAT, "version": 1, "badge_no": header["no"],
         "mac": header["mac"].hex(":").upper(),
         "provisioned": header["provisioned"], "count": header["count"],
         "fw": fw, "exported_at": exported_at,
-        "albm": base64.b64encode(data).decode()}, indent=1)
+        "albm": base64.b64encode(data).decode()}
+    if avatars is not None:
+        # Solo los de asistentes del álbum, como el configurador y la página
+        mine = {e["no"] for e in entries if e["type"] == ATTENDEE}
+        found = {no: img for no, img in parse_avatars(avatars).items()
+                 if no in mine}
+        doc["version"] = 2
+        doc["avatar_count"] = len(found)
+        doc["avatars"] = {str(no): base64.b64encode(img).decode()
+                          for no, img in sorted(found.items())}
+    return json.dumps(doc, indent=1)
+
+
+def load_avatars(doc):
+    """.json (bytes o dict ya leído) -> {dorsal: imagen}; vacío en la v1. Lanza
+    ValueError si algún avatar no cuadra (largo, base64 o dorsal sin estampa)."""
+    if isinstance(doc, (bytes, bytearray)):
+        doc = json.loads(doc)
+    raw = doc.get("avatars")
+    if doc.get("version") == 1 or raw is None:
+        return {}
+    header, entries = parse_album(base64.b64decode(doc["albm"], validate=True))
+    mine = {e["no"] for e in entries if e["type"] == ATTENDEE}
+    out = {}
+    for key, text in raw.items():
+        try:
+            no, img = int(key), base64.b64decode(text, validate=True)
+        except (ValueError, binascii.Error):
+            raise ValueError(f"avatar {key!r} inválido") from None
+        if len(img) != AVATAR_BYTES or no not in mine:
+            raise ValueError(f"avatar {key!r}: largo o dorsal que no cuadra")
+        out[no] = img
+    if doc.get("avatar_count") != len(out):
+        raise ValueError("avatar_count no coincide con avatars")
+    return out
 
 
 def load_export(data):
@@ -160,12 +221,15 @@ def load_export(data):
         return data
     try:
         doc = json.loads(data)
-        if doc.get("format") != JSON_FORMAT or doc.get("version") != FORMAT:
-            raise ValueError(f"no es un .json {JSON_FORMAT} versión {FORMAT}")
+        if doc.get("format") != JSON_FORMAT or \
+                doc.get("version") not in JSON_VERSIONS:
+            raise ValueError(f"no es un .json {JSON_FORMAT} versión "
+                             f"{' o '.join(map(str, JSON_VERSIONS))}")
         raw = base64.b64decode(doc["albm"], validate=True)
         header, _ = parse_album(raw)
         summary = (doc["badge_no"], doc["mac"].upper(), doc["provisioned"],
                    doc["count"])
+        load_avatars(doc)  # un avatar mal formado invalida el archivo
     except (KeyError, TypeError, AttributeError, binascii.Error) as e:
         raise ValueError(f".json de álbum inválido: {e!r}") from None
     if summary != (header["no"], header["mac"].hex(":").upper(),

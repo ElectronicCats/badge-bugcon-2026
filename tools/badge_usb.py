@@ -188,17 +188,29 @@ class Badge:
             raise ProtocolError(f"READ: llegaron {len(data)} de {size} B")
         return data
 
-    def album(self):
-        """Exportación de ALBM: cabecera + entradas (tools/verify_album.py)."""
-        reply = self.expect_ok("ALBM")
+    def _payload(self, name, reply):
         size = int(reply.split()[1])
         data = b""
         deadline = time.time() + 5
         while len(data) < size and time.time() < deadline:
             data += self.port.read(size - len(data))
         if len(data) != size:
-            raise ProtocolError(f"ALBM: llegaron {len(data)} de {size} B")
+            raise ProtocolError(f"{name}: llegaron {len(data)} de {size} B")
         return data
+
+    def album(self):
+        """Exportación de ALBM: cabecera + entradas (tools/verify_album.py)."""
+        return self._payload("ALBM", self.expect_ok("ALBM"))
+
+    def avatars(self):
+        """Exportación ALAV (los avatares recibidos por IR) o None si el
+        firmware no la tiene (ERR badcmd): el álbum se guarda sin avatares."""
+        reply = self.command("ALAV")
+        if reply.startswith("ERR badcmd"):
+            return None
+        if not reply.startswith("OK"):
+            raise ProtocolError(reply)
+        return self._payload("ALAV", reply)
 
     def power(self):
         return parse_power(self.expect_ok("PWR"))
@@ -491,6 +503,7 @@ def _run_command(badge, args, console):
         say("Aviso: este archivo tiene apodos y handles de otras personas. "
             "Guárdalo con cuidado y no lo publiques.")
         data = badge.album()
+        avatars = badge.avatars() if args.output.endswith(".json") else None
         if args.output.endswith(".json"):  # el de "Guardar álbum (.json)" (bb26-album)
             import datetime
 
@@ -500,12 +513,15 @@ def _run_command(badge, args, console):
             with open(args.output, "w") as f:
                 f.write(verify_album.to_json(
                     data, badge.info()["fw"],
-                    now.isoformat(timespec="seconds").replace("+00:00", "Z")))
+                    now.isoformat(timespec="seconds").replace("+00:00", "Z"),
+                    avatars))
         else:
             with open(args.output, "wb") as f:
                 f.write(data)
         count = (len(data) - ALBUM_HEADER_BYTES) // 80
-        say(f"OK {len(data)} B, {count} estampas -> {args.output}")
+        extra = "" if avatars is None else \
+            f", {int.from_bytes(avatars[5:7], 'little')} avatares"
+        say(f"OK {len(data)} B, {count} estampas{extra} -> {args.output}")
         return badge_link.EXIT_OK
     raise ValueError(f"comando desconocido: {args.cmd}")
 
