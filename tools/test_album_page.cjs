@@ -467,6 +467,23 @@ async function checkNewPage(browser, check, refOut) {
   const esp = await page.$$eval("#grid button.st", l => l.map(b => b.getAttribute("aria-label")));
   check("especiales y retos sin «Sin villa»: «Especial 2, Mascota, Oro»",
     esp.includes("Especial 2, Mascota, Oro") && esp.every(s => !s.includes("Sin villa")), JSON.stringify(esp));
+  // Maestros de villa: fuera de su villa, en «Villas · n/10» con un hueco por villa
+  const vil = await page.evaluate(() => {
+    const tabs = [...document.querySelectorAll("#tabs [role=tab]")], v = tabs.find(t => t.textContent.startsWith("Villas"));
+    tabs.find(t => t.textContent.startsWith("OT Village")).click();
+    const inOt = !!$("grid").querySelector('[data-no="904"]');
+    v.click();
+    const g = $("grid");
+    return { tab: v.textContent, al: v.getAttribute("aria-label"), last: v === tabs.at(-1), inOt,
+             nos: [...g.querySelectorAll("[data-no]")].map(e => e.dataset.no).join(),
+             got: g.querySelector('button[data-no="904"]')?.getAttribute("aria-label"),
+             hole: g.querySelector('[data-no="901"]').textContent };
+  });
+  check("maestros: «Villas · 1/10» al final, un hueco por villa (901..910), el 904 pegado y fuera de su villa",
+    vil.tab === "Villas · 1/10" && vil.al === "Villas, 1 de 10" && vil.last && !vil.inOt &&
+    vil.nos === Array.from({ length: VILLAS }, (_, i) => MASTER_FIRST + i).join() &&
+    vil.got === "#904, Maestra OT, OT Village CDMX, Oro" && vil.hole === "#901, vacíoLa villa del Hardware",
+    JSON.stringify(vil));
   // Huecos legibles, foco visible y vacío por pestaña
   await page.click("#tab0");
   const holes = await page.evaluate(() => {   // el típico no trae dorsales sin datos: uno armado con sticker()
@@ -499,7 +516,9 @@ async function checkNewPage(browser, check, refOut) {
   check("mi estampa: el contorno se aleja del anillo azul", rm.o === "solid 2px 4px", JSON.stringify(rm));
   await page.goto("file://" + html);
   await page.evaluate(openAll, CASES["solo mi estampa .json"].map(([n, b]) => [n, b.toString("base64")]));
-  const empties = await page.evaluate(() => [...document.querySelectorAll("#tabs [role=tab]")].slice(1).map(t => {
+  // «Villas» no tiene aviso: siempre pinta sus 10 huecos.
+  const empties = await page.evaluate(() => [...document.querySelectorAll("#tabs [role=tab]")].slice(1)
+    .filter(t => !t.textContent.startsWith("Villas")).map(t => {
     t.click();
     return [t.textContent, document.querySelector("#grid > p").textContent];
   }));
@@ -550,7 +569,7 @@ async function checkNewPage(browser, check, refOut) {
   const f13 = await dlg();
   check("clic en el fondo cierra, clic en el padding no; el foco vuelve a la estampa",
     inPad && !f13.open && f13.ae === "13", JSON.stringify({ inPad, f13 }));
-  await page.evaluate(() => [...document.querySelectorAll("#tabs [role=tab]")].find(t => t.textContent.startsWith(TEAMS[3])).click());
+  await page.evaluate(() => [...document.querySelectorAll("#tabs [role=tab]")].find(t => t.textContent.startsWith("Villas")).click());
   await page.click(`#grid [data-no="${MASTER_FIRST + 3}"]`);
   const dm = await dlg();
   check("el maestro rotula su pedazo «Pedazo de la gira de villas»",

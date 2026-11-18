@@ -446,11 +446,14 @@ function download(text, name) {
 /* ---------------- vista ---------------- */
 
 // Secciones como la app del badge (apps/album): Todas (un hueco por
-// dorsal), cada villa, "Sin villa" (solo si hay) y Especiales.
+// dorsal), cada villa, "Sin villa" (solo si hay), Especiales y Villas (un hueco por
+// maestro, por dorsal como villa_tour::villaOf). Los maestros no van en su villa.
+// `total`: la pestaña dice cuántas tengo de cuántas.
 function sections() {
-  const att = album.entries.filter(e => e.card.type === ATTENDEE)
+  const att = album.entries.filter(e => e.card.type === ATTENDEE && !isMaster(e.card))
     .sort((a, b) => a.card.badgeNo - b.card.badgeNo);
   const byNo = new Map(att.map(e => [e.card.badgeNo, e]));
+  const masters = new Map(album.entries.filter(e => isMaster(e.card)).map(e => [e.card.badgeNo, e]));
   const all = [];
   for (let n = 1; n <= ATTENDEES; n++) {
     const mine = n === album.no, e = byNo.get(n);
@@ -458,12 +461,16 @@ function sections() {
                got: album.numbers.has(n), mine });
   }
   const item = e => ({ no: e.card.badgeNo, card: e.card, got: true, order: e.order });
-  const list = [{ name: "Todas", items: all }];
+  const list = [{ name: "Todas", items: all, total: ATTENDEES }];
   TEAMS.forEach((name, i) => list.push({ name, items: att.filter(e => e.card.team === i).map(item) }));
   const none = att.filter(e => !(e.card.team < TEAMS.length));
   if (none.length) list.push({ name: "Sin villa", items: none.map(item) });
   list.push({ name: "Especiales", items: album.entries.filter(e => e.card.type !== ATTENDEE)
     .sort((a, b) => a.card.type - b.card.type || a.card.badgeNo - b.card.badgeNo).map(item) });
+  list.push({ name: "Villas", total: TEAMS.length, items: TEAMS.map((villa, i) => {
+    const no = MASTER_FIRST + i, e = masters.get(no);
+    return e ? item(e) : { no, villa, got: false };
+  }) });
   return list;
 }
 
@@ -487,7 +494,9 @@ function sticker(it) {
     // El estado en texto (no solo en title) para el lector; siguen sin ser paradas de Tab.
     e.append(el("span", "no", pad(it.no)), el("span", "sr", it.got ? ", la tienes," : ", vacío"));
     if (it.got) e.append(el("span", "sub", "sin datos"));
-    e.title = it.got ? "La tienes; abre el .json del configurador para ver sus datos." : "Hueco vacío";
+    if (it.villa) e.append(el("span", "sub", it.villa));   // hueco de un maestro: su villa
+    e.title = it.got ? "La tienes; abre el .json del configurador para ver sus datos." :
+      it.villa ? "Aún no visitas " + it.villa : "Hueco vacío";
     e.dataset.no = it.no;
     return e;
   }
@@ -535,10 +544,10 @@ function render() {
     }));
   }
   secs.forEach((s, i) => {
-    const b = tabs.children[i], n = i ? s.items.length : album.numbers.size;
-    b.textContent = s.name + " · " + (i ? n : n + "/" + ATTENDEES);
-    b.setAttribute("aria-label", i ? s.name + ", " + n + (n === 1 ? " estampa" : " estampas")
-                                   : s.name + ", " + n + " de " + ATTENDEES);
+    const b = tabs.children[i], n = i ? s.items.filter(it => it.got).length : album.numbers.size;
+    b.textContent = s.name + " · " + (s.total ? n + "/" + s.total : n);
+    b.setAttribute("aria-label", s.total ? s.name + ", " + n + " de " + s.total
+                                         : s.name + ", " + n + (n === 1 ? " estampa" : " estampas"));
     b.setAttribute("aria-selected", i === tab);
     b.tabIndex = i === tab ? 0 : -1;
   });
