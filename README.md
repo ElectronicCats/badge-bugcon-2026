@@ -44,6 +44,7 @@ puedes:
     - [Paso a paso](#paso-a-paso)
     - [Qué significa cada resultado](#qué-significa-cada-resultado)
     - [Recibir sin presionar nada](#recibir-sin-presionar-nada)
+    - [Visitar las villas](#visitar-las-villas)
     - [Tu privacidad](#tu-privacidad)
   - [El Álbum](#el-álbum)
     - [La portada](#la-portada)
@@ -110,7 +111,7 @@ puedes:
 
 1. Revisa que tenga 3 pilas AAA.
 2. Mueve el interruptor **SW1** a la posición de encendido.
-3. Verás la copa y el texto "Copa BugCon 2026 · CDMX · 20-21 nov". Las luces
+3. Verás la copa y el texto "Copa BugCon 2026 · CDMX · 24-27 nov". Las luces
    hacen una ola verde, blanca y roja.
 4. Después de unos segundos aparece tu gafete.
 
@@ -143,7 +144,8 @@ solo:
    - **B (Después):** lo haces más tarde desde el menú.
 
 > Mientras no cambies tu apodo, tu estampa dice "Jugador" y cuatro caracteres,
-> por ejemplo "Jugador 3F2A".
+> por ejemplo "Jugador 3F2A", y **no puedes intercambiar estampas**: ponle tu
+> nombre primero.
 
 ## Cómo moverte por el Badge
 
@@ -175,17 +177,22 @@ apagarlo. Funciona como tu gafete del evento:
 - **Al centro:** tu estampa, con tu apodo en letras grandes, tu imagen (si
   subiste una), tu posición y tus estadísticas.
 - **Abajo:** "A: menú" y tu número de jugador (por ejemplo, #127). Este
-  número se llama **dorsal**: es único para tu Badge.
+  número se llama **dorsal**: es único para tu Badge. Si tienes imágenes en
+  los slots, a la izquierda dice qué se ve: `<Plantilla>` o `<Slot 2>`.
 
 Si cargaste una imagen como pantalla de inicio con el
 [configurador web](#configurador-web), ésta ocupa todo el panel, con la franja
-de arriba y el pie encima. Vuelves al gafete en **Ajustes › Pantalla de
-inicio › Gafete**. Al cierre del evento, la estampa de campeón la reemplaza.
+de arriba y el pie encima. Vuelves al gafete con **izquierda / derecha** o en
+**Ajustes › Pantalla de inicio › Plantilla**. Al cierre del evento, la estampa
+de campeón la reemplaza.
 
 Desde el gafete:
 
 - **A** abre el menú.
-- **Una flecha** abre las [Luces](#luces).
+- **Arriba o abajo** abre las [Luces](#luces).
+- **Izquierda o derecha** pasan entre tu gafete y las imágenes de tus slots;
+  la que dejes queda como pantalla de inicio. Si no tienes imágenes, el Badge
+  te explica cómo subirlas.
 - **A + B** inicia un intercambio de estampas.
 
 ### La barra de arriba
@@ -212,11 +219,11 @@ Presiona **A** para abrirla.
 | **Álbum** | Ver las estampas que juntaste. |
 | **Infrarrojo** | Intercambiar estampas, TV-Gone y control remoto. |
 | **Juegos** | Penales, Copa BugCon y Futbolito. |
-| **Herramientas** | Reloj, marco de imágenes, temporizador y luz. |
+| **Herramientas** | Reloj, marco de imágenes, temporizador, luz, tokens de IA y SDR. |
 | **Retos** | Desafíos para personas con experiencia en seguridad. |
 | **Ajustes** | Pilas, brillo de luces, ayuda y borrado de datos. |
 | **Agenda** | El programa de charlas de BugCON 2026. |
-| **Acerca de** | Datos del Badge y su versión. |
+| **Acerca de** | Datos del Badge, su versión y la dirección del [configurador web](#configurador-web). |
 
 El menú recuerda la última sección que abriste.
 
@@ -225,7 +232,9 @@ El menú recuerda la última sección que abriste.
 Tu estampa es lo que ven los demás cuando intercambian contigo.
 
 **Menú › Mi Estampa** muestra tu tarjeta. Presiona **A (Editar)** para
-cambiarla. Verás estas opciones:
+cambiarla. Verás estas opciones y, al pie, la dirección del
+[configurador web](#configurador-web), por si prefieres editarla desde una
+computadora:
 
 ### Nickname (tu apodo)
 
@@ -244,8 +253,9 @@ Si te pasas, el Badge dice "Ya no caben más letras".
 ### Villa
 
 Elige tu villa de la lista. La actual tiene una marca `*`. Presiona **A**
-para guardar. Villas disponibles: Hardware, RF, Rookie, OT, Payments,
-BugBounty, WoSec, APT, Nación Hacker y Live Hacking.
+para guardar. Villas disponibles: La villa del Hardware, RF Village MX,
+Rookie Village, OT Village CDMX, PaySec LATAM, BugBounty, WoSEC México, APT,
+Nación Hacker y Live Hacking Villa. Al final de la lista está **Ninguna**.
 
 ### Posición
 
@@ -305,19 +315,22 @@ deben estar muy cerca.
 1. Acércate a otra persona con Badge.
 2. **Junten las puntas de arriba** de los dos Badges, una frente a la otra.
 3. Los dos presionan **A + B al mismo tiempo** en su gafete.
-   (También pueden ir a **Menú › Infrarrojo › Enviar mi estampa**).
+   (También pueden ir a **Menú › Infrarrojo › Enviar mi estampa**, o uno
+   elige **Enviar mi estampa** y el otro **Recibir**).
 4. La pantalla dice **"Buscando..."** y las luces hacen un punto que va y
    viene.
 5. Cuando se encuentran, dice **"Intercambiando..."**. **No muevan los
-   Badges.** Tarda un par de segundos; si los dos tienen avatar, la pantalla
-   dice **"Pasando avatares..."** y tarda unos 12 segundos más: sigan sin
-   separarlos.
-6. Las luces festejan y aparece la estampa que recibiste, con el apodo de la
-   otra persona.
+   Badges.** Tarda un par de segundos. Si alguno tiene un avatar que el otro
+   aún no tiene, la pantalla dice **"Pasando avatares..."**: tarda unos 8
+   segundos si va en un solo sentido y unos 12 si va en los dos (nunca más de
+   30). Sigan sin separarlos; las luces se van llenando.
+6. Las luces festejan y aparece la estampa que recibiste, con el apodo y el
+   avatar de la otra persona.
 
-> **Recordatorio:** si aún no cambias tu apodo, antes del primer intercambio
-> el Badge pregunta "¿Ponerle tu nombre?". **A** abre el editor y **B**
-> sigue con el intercambio.
+> **Primero tu nombre:** si aún no cambias tu apodo, en lugar de intercambiar
+> el Badge dice **"Primero ponle tu nombre"**. **A (Editar)** abre el editor
+> y **B (Atrás)** regresa. No se puede intercambiar con el apodo
+> "Jugador XXXX".
 
 ### Qué significa cada resultado
 
@@ -325,13 +338,26 @@ deben estar muy cerca.
 |---|---|---|
 | **¡Nueva! 25/400** | Estampa nueva. El número es tu avance en el álbum. | ¡Sigue juntando! |
 | **Ya la tenías** | Ya tenías a esa persona. Si cambió algo, se actualiza. | Busca a alguien más. |
+| **Avatar incompleto** | La estampa sí se guardó, pero su avatar no terminó de llegar. | Junten las puntas e intercambien otra vez. |
 | **No se encontró otro badge** | Nadie respondió. | Pídele a la otra persona que presione A+B. Junten más las puntas. |
 | **Se perdió la conexión** | Se movieron o se separaron. | Junten más las puntas y presionen **A (Reintentar)**. |
 | **Álbum lleno** | Ya no caben más estampas. | — |
 | **No se guardó** | La estampa llegó con un problema. | Intenten de nuevo. |
+| **Estampa rechazada** | Uno de los dos Badges no aceptó la estampa del otro. | Intenten de nuevo; si se repite, acérquense a la mesa de soporte. |
 
 Si nadie aparece en unos 20 segundos, el Badge deja de buscar. **B** cancela
 la búsqueda en cualquier momento.
+
+### Visitar las villas
+
+Cada una de las 10 villas tiene un **Badge maestro**. Para visitar una villa,
+intercambia con su Badge maestro como con cualquier persona:
+
+- La pantalla dice **"¡Nueva! 3/10"** (las villas que llevas) o **"Ya tenías
+  esta villa"**, y muestra el nombre y el logo de la villa.
+- La visita queda en **Álbum › Villas**.
+- Al visitar las 10 ganas la estampa especial **"Gira de villas"** y se abre
+  el **Reto de villas** en [Retos](#retos-y-secretos).
 
 ### Recibir sin presionar nada
 
@@ -359,11 +385,12 @@ Es una lista con secciones:
 
 - **Última:** la estampa más reciente que recibiste.
 - **Todas:** un lugar para cada uno de los 400 Badges del evento.
-- **Una sección por villa**, con cuántas tienes de cada una.
+- **Una sección por villa**, con cuántas tienes de cada una. Si alguien no
+  eligió villa, su estampa va en **Sin villa**.
 - **Especiales:** las estampas que ganas por logros.
-- **Villas:** las 10 villas del evento y cuáles ya visitaste ("Sí"). En una
-  visitada, **A (Ver)** muestra el pedazo que te dio su villa: lo vas a
-  necesitar.
+- **Villas:** las 10 villas del evento y cuáles ya
+  [visitaste](#visitar-las-villas) ("Sí"). En una visitada, **A (Ver)**
+  muestra el pedazo que te dio su villa: lo vas a necesitar.
 
 ### Las páginas
 
@@ -390,6 +417,7 @@ Presiona **A** para cerrarla. Algunos ejemplos:
 | Titular | Juntar 50 estampas. |
 | Capitán | Juntar 100 estampas. |
 | Guante de Oro | Atajar 3 penales en una misma tanda. |
+| Gira de villas | [Visitar las 10 villas](#visitar-las-villas). |
 
 Hay más estampas escondidas. ¡Explora tu Badge para encontrarlas!
 
@@ -469,7 +497,7 @@ presiona **arriba** en la pantalla "Pon el badge sobre la mesa".
 
 ## Luces
 
-Desde el gafete, presiona **cualquier flecha** para abrir las Luces.
+Desde el gafete, presiona **arriba o abajo** para abrir las Luces.
 
 | Acción | Qué pasa |
 |---|---|
@@ -580,6 +608,10 @@ computadora: consulta
   etapa que superes te da una estampa de reto. Para entregar la respuesta (la
   **flag**, una clave secreta) se necesita una computadora: consulta
   [Entregar la flag de un reto](tools/README.md#entregar-la-flag-de-un-reto).
+- **Reto de villas:** aparte de las etapas, se abre al
+  [visitar las 10 villas](#visitar-las-villas). Mientras tanto, la sección
+  dice cuántas llevas. Guarda los pedazos que te dan las villas
+  (**Álbum › Villas**): los vas a necesitar.
 - **Secretos:** el Badge esconde algunas sorpresas que dan estampas
   especiales. Una pista: prueba combinaciones de botones famosas y observa qué
   hace el Badge en posiciones poco comunes.
@@ -592,10 +624,10 @@ computadora: consulta
 |---|---|
 | **Pilas nuevas** | Úsala cada vez que cambies las pilas. Pone el indicador de pilas en lleno. No borra nada. |
 | **Brillo de LEDs** | Cambia qué tan fuerte brillan las luces, con **izquierda / derecha** (5 niveles). Las luces se encienden en blanco para que veas cómo queda. **B (Listo)** guarda. |
-| **Pantalla de inicio** | Elige qué ves en reposo: tu **Gafete** o una de las imágenes que cargaste con el [configurador web](#configurador-web). La actual dice "activa". |
+| **Pantalla de inicio** | Elige qué ves en reposo: la **Plantilla** (tu gafete) o uno de los slots que llenaste con el [configurador web](#configurador-web) ("Slot n"). La actual dice "activa". |
 | **Cómo usar** | Una ayuda rápida de 3 pantallas. |
-| **Borrar progreso** | Borra tus récords de juegos y todas las estampas de tu álbum. Tu estampa se conserva. |
-| **Borrar datos** | Borra todo lo anterior y también tu estampa, tu apodo, tus marcas del control remoto y las imágenes de los 4 slots. La pantalla de inicio vuelve a ser tu gafete. El Badge queda como nuevo. |
+| **Borrar progreso** | Borra tus récords de juegos, todas las estampas de tu álbum (también las especiales y las de retos), los tiros de los retos que recibiste y tu estampa de campeón. Tu estampa se conserva. |
+| **Borrar datos** | Borra todo lo anterior y también tu estampa, tu apodo, tu avatar, tus marcas y botones del control remoto, los tutoriales vistos, el aviso de TV-Gone, el brillo de las luces y las imágenes de los 4 slots. La pantalla de inicio vuelve a ser tu gafete. El Badge queda como nuevo. |
 
 ### Para borrar con seguridad
 
@@ -608,7 +640,8 @@ Borrar **no se puede deshacer**, así que el Badge pide confirmación:
 
 ## Al cierre del evento: tu estampa de campeón
 
-Al terminar BugCON 2026, tu gafete se convierte en tu **estampa de campeón**.
+Al terminar BugCON 2026 (viernes 27 de noviembre, 18:00), tu gafete se
+convierte en tu **estampa de campeón**.
 Muestra una copa, la palabra "Campeón", tu apodo y tu resumen del evento:
 
 - **Álbum:** cuántas estampas juntaste.
@@ -818,8 +851,8 @@ Para regresar a tu plantilla tienes dos formas:
 
 - En la página, el botón **Volver a la plantilla** (aparece cuando hay un
   inicio activo, en las dos pestañas).
-- En el Badge, **Menú › Ajustes › Pantalla de inicio › Gafete** (así se llama
-  ahí la plantilla), sin computadora.
+- En el Badge, **izquierda / derecha** en el gafete, o **Menú › Ajustes ›
+  Pantalla de inicio › Plantilla**, sin computadora.
 
 La estampa de campeón del cierre del evento siempre tiene prioridad sobre la
 imagen de inicio. Si la casilla **Usar como inicio** no aparece, tu Badge
